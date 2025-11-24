@@ -77,14 +77,16 @@ const BottomNav = () => {
   const isActive = (path) => location.pathname === path
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30 safe-area-bottom">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-30 safe-area-bottom transition-colors duration-200">
       <div className="grid grid-cols-5 h-16">
         {navItems.map((item) => (
           <Link
             key={item.path}
             to={item.path}
             className={`flex flex-col items-center justify-center space-y-1 transition-colors ${
-              isActive(item.path) ? 'text-primary-600' : 'text-gray-600'
+              isActive(item.path) 
+                ? 'text-primary-600 dark:text-primary-400' 
+                : 'text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400'
             }`}
           >
             {item.icon}
