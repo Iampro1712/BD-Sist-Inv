@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#grad)"/>
+  
+  <!-- Box/Package icon -->
+  <g transform="translate(50, 50)">
+    <!-- Top of box -->
+    <path d="M -20,-15 L 0,-25 L 20,-15 L 0,-5 Z" fill="#60A5FA" stroke="#DBEAFE" stroke-width="1.5"/>
+    
+    <!-- Left side of box -->
+    <path d="M -20,-15 L -20,15 L 0,25 L 0,-5 Z" fill="#3B82F6" stroke="#DBEAFE" stroke-width="1.5"/>
+    
+    <!-- Right side of box -->
+    <path d="M 20,-15 L 20,15 L 0,25 L 0,-5 Z" fill="#2563EB" stroke="#DBEAFE" stroke-width="1.5"/>
+    
+    <!-- Checkmark on box -->
+    <path d="M -8,0 L -3,5 L 8,-6" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans antialiased bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200;
+  }
+
+  /* Mejorar accesibilidad del focus */
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary-500;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Mejorar legibilidad */
+  p, li, td {
+    @apply leading-relaxed;
+  }
+}
+
+@layer components {
+  /* Dark mode global styles */
+  .dark {
+    color-scheme: dark;
+  }
+  
+  /* Estilos para safe area en móviles */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Scrollbar personalizado */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-gray-100 dark:bg-gray-800 rounded;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-600 rounded hover:bg-gray-400 dark:hover:bg-gray-500;
+  }
+  
+
+
+  /* Animación de skeleton */
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite linear;
+    background: linear-gradient(
+      to right,
+      #f3f4f6 0%,
+      #e5e7eb 20%,
+      #f3f4f6 40%,
+      #f3f4f6 100%
+    );
+    background-size: 1000px 100%;
+  }
+}
+
+@layer utilities {
+  /* Truncate text con tooltip */
+  .truncate-tooltip {
+    @apply truncate;
+    cursor: help;
+  }
+
+  /* Transiciones suaves */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Sombras personalizadas */
+  .shadow-soft {
+    box-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07),
+      0 10px 20px -2px rgba(0, 0, 0, 0.04);
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    @apply text-black bg-white;
+  }
+}
