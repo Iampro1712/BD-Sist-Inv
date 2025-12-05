@@ -261,14 +261,53 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
             return float(result[0]) if result and result[0] else 0.0
 
 
-class OrdenCompraCreateSerializer(serializers.ModelSerializer):
+class OrdenCompraCreateSerializer(serializers.Serializer):
     """Serializer para crear órdenes de compra"""
+    proveedor = serializers.IntegerField(required=True, source='id_proveedor')
+    fecha = serializers.DateField(required=True, source='fecha_creacion')
+    notas = serializers.CharField(required=False, allow_blank=True)
+    detalles = serializers.ListField(child=serializers.DictField(), required=True, write_only=True)
     
-    class Meta:
-        model = OrdenCompra
-        fields = [
-            'id_proveedor', 'id_estado', 'fecha_creacion'
-        ]
+    # Campos de solo lectura para la respuesta
+    id_orden = serializers.IntegerField(read_only=True)
+    id_proveedor = serializers.IntegerField(read_only=True)
+    id_estado = serializers.IntegerField(read_only=True)
+    fecha_creacion = serializers.DateField(read_only=True)
+    
+    def create(self, validated_data):
+        from django.db import connection
+        
+        detalles_data = validated_data.pop('detalles')
+        
+        # Insertar en la tabla orden_compra con estado pendiente (2)
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO orden_compra (id_proveedor, id_estado, fecha_creacion)
+                VALUES (%s, %s, %s)
+                RETURNING id_orden
+            """, [
+                validated_data['id_proveedor'],
+                2,  # Estado pendiente
+                validated_data['fecha_creacion']
+            ])
+            id_orden = cursor.fetchone()[0]
+            
+            # Insertar productos en orden_producto
+            for detalle in detalles_data:
+                cursor.execute("""
+                    INSERT INTO orden_producto (id_orden, id_producto)
+                    VALUES (%s, %s)
+                """, [
+                    id_orden,
+                    detalle['producto']
+                ])
+        
+        # Retornar la orden creada
+        return OrdenCompra.objects.get(id_orden=id_orden)
+    
+    def to_representation(self, instance):
+        """Usar el serializer de detalle para la respuesta"""
+        return OrdenCompraDetailSerializer(instance).data
 
 
 # ============================================================================
@@ -338,7 +377,7 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
         return 'Completado'
     
     def get_total(self, obj):
-        """Calcula el total sumando los subtotales de producto_venta"""
+        """Calcula el total sumando los subtotales de producto_venta o usando el total de la venta"""
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute("""
@@ -347,7 +386,13 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
                 WHERE pv.id_venta = %s
             """, [obj.id_venta])
             result = cursor.fetchone()
-            return float(result[0]) if result and result[0] else 0.0
+            total_productos = float(result[0]) if result and result[0] else 0.0
+            
+            # Si no hay productos, usar el total de la venta (puede ser un servicio)
+            if total_productos == 0.0:
+                return float(obj.total) if obj.total else 0.0
+            
+            return total_productos
     
     def get_productos(self, obj):
         from django.db import connection
@@ -375,6 +420,40 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
                     'cantidad': int(row[4]) if row[4] else 0,
                     'subtotal': float(row[5]) if row[5] else 0.0
                 })
+            
+            # Si no hay productos, verificar si es un servicio de moto
+            if not productos:
+                cursor.execute("""
+                    SELECT 
+                        sm.id_servicio,
+                        sm.tipo_servicio,
+                        sm.descripcion,
+                        sm.costo,
+                        m.marca,
+                        m.modelo,
+                        m.placa
+                    FROM ventas v
+                    INNER JOIN servicio_motos sm ON sm.fecha_servicio = v.fecha
+                    INNER JOIN motos m ON m.id_moto = sm.id_moto
+                    WHERE v.id_venta = %s
+                    AND m.id_cliente = v.id_cliente
+                    AND sm.costo = v.total
+                    LIMIT 1
+                """, [obj.id_venta])
+                servicio = cursor.fetchone()
+                if servicio:
+                    productos.append({
+                        'id_producto': None,
+                        'nombre': f"Servicio: {servicio[1]}",
+                        'sku': f"SERVICIO-{servicio[0]}",
+                        'precio_unitario': float(servicio[3]) if servicio[3] else 0.0,
+                        'cantidad': 1,
+                        'subtotal': float(servicio[3]) if servicio[3] else 0.0,
+                        'es_servicio': True,
+                        'descripcion': servicio[2],
+                        'moto': f"{servicio[4]} {servicio[5]} ({servicio[6]})"
+                    })
+            
             return productos
 
 

@@ -346,6 +346,37 @@ class ServicioMotoViewSet(viewsets.ModelViewSet):
         if moto_id:
             queryset = queryset.filter(id_moto=moto_id)
         return queryset
+    
+    def perform_create(self, serializer):
+        """Crear servicio y registrar venta automáticamente"""
+        from django.db import connection, transaction
+        
+        # Usar transacción para asegurar que ambas operaciones se completen
+        with transaction.atomic():
+            # Guardar el servicio
+            servicio = serializer.save()
+            
+            # Obtener el cliente de la moto
+            moto = servicio.id_moto
+            cliente_id = moto.id_cliente.id_cliente
+            
+            # Crear una venta asociada al servicio
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO ventas (id_cliente, fecha, total)
+                    VALUES (%s, %s, %s)
+                    RETURNING id_venta
+                """, [
+                    cliente_id,
+                    servicio.fecha_servicio,
+                    servicio.costo
+                ])
+                id_venta = cursor.fetchone()[0]
+                
+                # Log para debugging
+                print(f"✅ Venta creada automáticamente: ID {id_venta} para servicio {servicio.id_servicio}")
+        
+        return servicio
 
 
 
