@@ -279,3 +279,11 @@ if not LOGS_DIR.exists():
 
 # Custom Exception Handler para DRF
 REST_FRAMEWORK['EXCEPTION_HANDLER'] = 'api.exception_handler.custom_exception_handler'
+
+# Cloudflare R2 Configuration
+R2_ACCESS_KEY_ID = os.getenv('R2_ACCESS_KEY_ID')
+R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY')
+R2_BUCKET_NAME = os.getenv('R2_BUCKET_NAME')
+R2_PUBLIC_URL = os.getenv('R2_PUBLIC_URL')
+R2_ACCESS_URI = os.getenv('R2_ACCESS_URI')
+

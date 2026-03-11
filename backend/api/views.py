@@ -4,11 +4,13 @@ ViewSets para la API de Inventrix
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db import models
 from django.db.models import Q, Sum, F
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
-    OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio
+    OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio,
+    BitacoraServicio
 )
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
@@ -18,7 +20,9 @@ from .serializers import (
     OrdenCompraListSerializer, OrdenCompraDetailSerializer, OrdenCompraCreateSerializer,
     OrdenVentaListSerializer, OrdenVentaDetailSerializer, OrdenVentaCreateSerializer,
     MovimientoInventarioSerializer, MovimientoInventarioCreateSerializer,
-    MotoSerializer, ServicioMotoSerializer, ClienteConMotosSerializer, ServicioSerializer
+    MotoSerializer, ServicioMotoSerializer, ClienteConMotosSerializer, ServicioSerializer,
+    BitacoraServicioSerializer, BitacoraServicioCreateSerializer,
+    ServicioMotoConBitacoraSerializer
 )
 from .services import (
     InventoryService, OrdenCompraService, OrdenVentaService,
@@ -369,3 +373,128 @@ class ServicioViewSet(viewsets.ReadOnlyModelViewSet):
         ).order_by('nombre')
         
         return Response(list(servicios_unicos))
+
+
+# ============================================================================
+# BITÁCORA VIEWSETS
+# ============================================================================
+
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from inventory.models import BitacoraServicio
+from .serializers import (
+    BitacoraServicioSerializer, BitacoraServicioCreateSerializer,
+    ServicioMotoConBitacoraSerializer
+)
+
+
+class BitacoraServicioViewSet(viewsets.ModelViewSet):
+    """ViewSet para gestión de bitácoras de servicios con imágenes en R2"""
+    queryset = BitacoraServicio.objects.all()
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['modulo', 'notas', 'tecnico_responsable']
+    ordering_fields = ['fecha_registro', 'modulo']
+    ordering = ['-fecha_registro']
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return BitacoraServicioCreateSerializer
+        return BitacoraServicioSerializer
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filtrar por servicio
+        id_servicio = self.request.query_params.get('id_servicio', None)
+        if id_servicio:
+            queryset = queryset.filter(id_servicio=id_servicio)
+        
+        # Filtrar por moto
+        id_moto = self.request.query_params.get('id_moto', None)
+        if id_moto:
+            queryset = queryset.filter(id_moto=id_moto)
+        
+        # Filtrar por módulo
+        modulo = self.request.query_params.get('modulo', None)
+        if modulo:
+            queryset = queryset.filter(modulo=modulo)
+        
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def por_servicio(self, request):
+        """Obtiene todas las bitácoras de un servicio organizadas por módulo"""
+        id_servicio = request.query_params.get('id_servicio')
+        if not id_servicio:
+            return Response(
+                {'error': 'Se requiere el parámetro id_servicio'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            servicio = ServicioMoto.objects.get(id_servicio=id_servicio)
+            serializer = ServicioMotoConBitacoraSerializer(servicio)
+            return Response(serializer.data)
+        except ServicioMoto.DoesNotExist:
+            return Response(
+                {'error': 'Servicio no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    @action(detail=True, methods=['delete'])
+    def eliminar_imagen(self, request, pk=None):
+        """Elimina una imagen específica de la bitácora"""
+        from api.storage import r2_storage
+        
+        bitacora = self.get_object()
+        imagen_url = request.data.get('imagen_url')
+        
+        if not imagen_url:
+            return Response(
+                {'error': 'Se requiere imagen_url'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if imagen_url in bitacora.imagenes:
+            try:
+                # Eliminar de R2
+                r2_storage.delete_file(imagen_url)
+                
+                # Eliminar de la lista
+                bitacora.imagenes.remove(imagen_url)
+                bitacora.save()
+                
+                return Response({'message': 'Imagen eliminada correctamente'})
+            except Exception as e:
+                return Response(
+                    {'error': f'Error al eliminar imagen: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        else:
+            return Response(
+                {'error': 'Imagen no encontrada en la bitácora'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class ServicioMotoConBitacoraViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet de solo lectura para servicios con bitácora completa"""
+    queryset = ServicioMoto.objects.all()
+    serializer_class = ServicioMotoConBitacoraSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['tipo_servicio', 'descripcion']
+    ordering_fields = ['fecha_servicio']
+    ordering = ['-fecha_servicio']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filtrar por moto
+        id_moto = self.request.query_params.get('id_moto', None)
+        if id_moto:
+            queryset = queryset.filter(id_moto=id_moto)
+        
+        # Prefetch bitácoras para optimizar consultas
+        queryset = queryset.prefetch_related('bitacoras')
+        
+        return queryset

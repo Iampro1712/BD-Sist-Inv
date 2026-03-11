@@ -1,6 +1,27 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  /* Colores personalizados (migrado desde tailwind.config.js) */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+
+  --color-secondary-500: #8b5cf6;
+  --color-secondary-600: #7c3aed;
+
+  /* Tipografía */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* Dark mode via class selector (equivalente a darkMode: 'class') */
+@variant dark (&:where(.dark, .dark *));
 
 @layer base {
   body {
@@ -18,7 +39,9 @@
   }
 
   /* Mejorar legibilidad */
-  p, li, td {
+  p,
+  li,
+  td {
     @apply leading-relaxed;
   }
 }
@@ -28,7 +51,7 @@
   .dark {
     color-scheme: dark;
   }
-  
+
   /* Estilos para safe area en móviles */
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom);
@@ -47,8 +70,6 @@
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-gray-300 dark:bg-gray-600 rounded hover:bg-gray-400 dark:hover:bg-gray-500;
   }
-  
-
 
   /* Animación de skeleton */
   @keyframes shimmer {
@@ -87,7 +108,8 @@
 
   /* Sombras personalizadas */
   .shadow-soft {
-    box-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07),
+    box-shadow:
+      0 2px 15px -3px rgba(0, 0, 0, 0.07),
       0 10px 20px -2px rgba(0, 0, 0, 0.04);
   }
 }

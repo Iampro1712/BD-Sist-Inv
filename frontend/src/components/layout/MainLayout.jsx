@@ -3,6 +3,7 @@ import Navbar from './Navbar'
 import BottomNav from './BottomNav'
 import { ToastContainer } from '../ui/Toast'
 import useToastStore from '../../hooks/useToast'
+import ScrollToTop from '../ScrollToTop'
 
 const MainLayout = () => {
   const toasts = useToastStore((state) => state.toasts)
@@ -10,6 +11,9 @@ const MainLayout = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+      {/* Scroll to top on route change */}
+      <ScrollToTop />
+      
       {/* Navbar */}
       <Navbar />
 

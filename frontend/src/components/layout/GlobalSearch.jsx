@@ -179,7 +179,7 @@ const GlobalSearch = () => {
                         {results.productos.map((producto) => (
                           <button
                             key={producto.id_producto}
-                            onClick={() => handleNavigate('/productos')}
+                            onClick={() => handleNavigate(`/productos?id=${producto.id_producto}`)}
                             className="w-full px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
                           >
                             <div className="flex items-center justify-between">
@@ -207,7 +207,7 @@ const GlobalSearch = () => {
                         {results.clientes.map((cliente) => (
                           <button
                             key={cliente.id_cliente}
-                            onClick={() => handleNavigate('/clientes')}
+                            onClick={() => handleNavigate(`/clientes?id=${cliente.id_cliente}`)}
                             className="w-full px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
                           >
                             <p className="text-sm font-medium text-gray-900 dark:text-white">{cliente.nombre}</p>
@@ -228,7 +228,7 @@ const GlobalSearch = () => {
                         {results.proveedores.map((proveedor) => (
                           <button
                             key={proveedor.id_proveedor}
-                            onClick={() => handleNavigate('/proveedores')}
+                            onClick={() => handleNavigate(`/proveedores?id=${proveedor.id_proveedor}`)}
                             className="w-full px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
                           >
                             <p className="text-sm font-medium text-gray-900 dark:text-white">{proveedor.nombre_empresa}</p>

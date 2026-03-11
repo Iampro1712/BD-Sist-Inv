@@ -5,7 +5,7 @@ from rest_framework import serializers
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
-    MovimientoInventario, Moto, ServicioMoto, Servicio
+    MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio
 )
 
 
@@ -520,3 +520,106 @@ class ServicioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Servicio
         fields = ['id_servicio', 'nombre', 'tipo', 'precio_mano_obra']
+
+
+# ============================================================================
+# BITÁCORA SERIALIZERS
+# ============================================================================
+
+class BitacoraServicioSerializer(serializers.ModelSerializer):
+    """Serializer para bitácora de servicios"""
+    modulo_display = serializers.CharField(source='get_modulo_display', read_only=True)
+    moto_info = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = BitacoraServicio
+        fields = [
+            'id_bitacora', 'id_servicio', 'id_moto', 'modulo', 'modulo_display',
+            'fecha_registro', 'notas', 'nivel_gasolina', 'rayones_previos',
+            'fallas_encontradas', 'trabajo_realizado', 'tecnico_responsable',
+            'checklist_salida', 'firma_cliente', 'imagenes', 'creado_por',
+            'actualizado_en', 'moto_info'
+        ]
+        read_only_fields = ['fecha_registro', 'actualizado_en']
+    
+    def get_moto_info(self, obj):
+        """Retorna información básica de la moto"""
+        return {
+            'marca': obj.id_moto.marca,
+            'modelo': obj.id_moto.modelo,
+            'placa': obj.id_moto.placa
+        }
+
+
+class BitacoraServicioCreateSerializer(serializers.ModelSerializer):
+    """Serializer para crear registros de bitácora con imágenes"""
+    imagenes_files = serializers.ListField(
+        child=serializers.ImageField(),
+        write_only=True,
+        required=False
+    )
+    
+    class Meta:
+        model = BitacoraServicio
+        fields = [
+            'id_servicio', 'id_moto', 'modulo', 'notas',
+            'nivel_gasolina', 'rayones_previos', 'fallas_encontradas',
+            'trabajo_realizado', 'tecnico_responsable', 'checklist_salida',
+            'firma_cliente', 'creado_por', 'imagenes_files'
+        ]
+    
+    def create(self, validated_data):
+        from api.storage import r2_storage
+        
+        # Extraer archivos de imágenes
+        imagenes_files = validated_data.pop('imagenes_files', [])
+        
+        # Crear el registro de bitácora
+        bitacora = BitacoraServicio.objects.create(**validated_data)
+        
+        # Subir imágenes a R2 si existen (opcional)
+        if imagenes_files and r2_storage.enabled:
+            folder = validated_data.get('modulo', 'bitacora')
+            urls = r2_storage.upload_multiple_files(imagenes_files, folder)
+            if urls:  # Solo guardar si se subieron correctamente
+                bitacora.imagenes = urls
+                bitacora.save()
+        
+        return bitacora
+    
+    def to_representation(self, instance):
+        """Usar el serializer de detalle para la respuesta"""
+        return BitacoraServicioSerializer(instance).data
+
+
+class ServicioMotoConBitacoraSerializer(serializers.ModelSerializer):
+    """Serializer para servicios de motos con bitácora completa"""
+    bitacoras = BitacoraServicioSerializer(many=True, read_only=True)
+    bitacoras_por_modulo = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ServicioMoto
+        fields = [
+            'id_servicio', 'id_moto', 'fecha_servicio',
+            'tipo_servicio', 'descripcion', 'costo',
+            'bitacoras', 'bitacoras_por_modulo'
+        ]
+    
+    def get_bitacoras_por_modulo(self, obj):
+        """Organiza las bitácoras por módulo"""
+        bitacoras = obj.bitacoras.all()
+        return {
+            'recepcion': BitacoraServicioSerializer(
+                bitacoras.filter(modulo='recepcion'), many=True
+            ).data,
+            'diagnostico': BitacoraServicioSerializer(
+                bitacoras.filter(modulo='diagnostico'), many=True
+            ).data,
+            'reparacion': BitacoraServicioSerializer(
+                bitacoras.filter(modulo='reparacion'), many=True
+            ).data,
+            'entrega': BitacoraServicioSerializer(
+                bitacoras.filter(modulo='entrega'), many=True
+            ).data,
+        }
+

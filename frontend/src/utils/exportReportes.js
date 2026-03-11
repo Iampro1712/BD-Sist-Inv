@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 /**
  * Utilidades para exportar reportes a diferentes formatos
@@ -22,6 +22,67 @@ const formatDate = () => {
     day: 'numeric',
   })
 }
+
+/**
+ * Helper interno: Aplica estilos al encabezado de una hoja ExcelJS.
+ * @param {ExcelJS.Row} headerRow - Fila de encabezado
+ * @param {string} hexColor - Color de fondo (sin '#'), e.g. '3B82F6'
+ */
+const _estilarEncabezado = (headerRow, hexColor) => {
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: `FF${hexColor}` },
+    }
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    cell.alignment = { vertical: 'middle', horizontal: 'center' }
+    cell.border = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' },
+    }
+  })
+}
+
+/**
+ * Helper interno: Aplica bordes a una fila de datos ExcelJS.
+ * @param {ExcelJS.Row} row
+ */
+const _estilarFila = (row) => {
+  row.eachCell({ includeEmpty: true }, (cell) => {
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+      left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+      bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+      right: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+    }
+    cell.alignment = { vertical: 'middle' }
+  })
+}
+
+/**
+ * Helper interno: Descarga un Workbook de ExcelJS como archivo .xlsx en el navegador.
+ * @param {ExcelJS.Workbook} wb
+ * @param {string} filename
+ */
+const _descargarWorkbook = async (wb, filename) => {
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORTACIONES A PDF
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Exportar reporte de inventario a PDF
@@ -190,126 +251,136 @@ export const exportarProductosPDF = (productos, filtros) => {
   doc.save(`reporte-productos-mas-vendidos-${Date.now()}.pdf`)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORTACIONES A EXCEL  (usando ExcelJS — reemplaza xlsx)
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Exportar reporte de inventario a Excel
  */
-export const exportarInventarioCSV = (reporte) => {
-  const data = reporte.productos?.map((p) => ({
-    Código: p.codigo,
-    Producto: p.nombre,
-    Stock: p.stock_actual,
-    'Stock Mínimo': p.stock_minimo,
-    'Precio Venta': formatCurrency(p.precio_venta),
-    'Valor Stock': formatCurrency(p.valor_stock),
-  }))
+export const exportarInventarioCSV = async (reporte) => {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Inventario')
 
-  // Crear libro de trabajo
-  const ws = XLSX.utils.json_to_sheet(data)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Inventario')
-
-  // Ajustar ancho de columnas
-  const colWidths = [
-    { wch: 12 }, // Código
-    { wch: 30 }, // Producto
-    { wch: 10 }, // Stock
-    { wch: 15 }, // Stock Mínimo
-    { wch: 15 }, // Precio Venta
-    { wch: 15 }, // Valor Stock
+  // Definir columnas con anchos
+  ws.columns = [
+    { header: 'Código',        key: 'Código',        width: 14 },
+    { header: 'Producto',      key: 'Producto',      width: 32 },
+    { header: 'Stock',         key: 'Stock',         width: 12 },
+    { header: 'Stock Mínimo',  key: 'Stock Mínimo',  width: 16 },
+    { header: 'Precio Venta',  key: 'Precio Venta',  width: 18 },
+    { header: 'Valor Stock',   key: 'Valor Stock',   width: 18 },
   ]
-  ws['!cols'] = colWidths
 
-  // Descargar archivo
-  XLSX.writeFile(wb, `reporte-inventario-${Date.now()}.xlsx`)
+  // Estilo del encabezado (azul primario)
+  _estilarEncabezado(ws.getRow(1), '3B82F6')
+
+  // Agregar filas de datos
+  reporte.productos?.forEach((p) => {
+    const row = ws.addRow({
+      'Código':       p.codigo,
+      'Producto':     p.nombre,
+      'Stock':        p.stock_actual,
+      'Stock Mínimo': p.stock_minimo,
+      'Precio Venta': formatCurrency(p.precio_venta),
+      'Valor Stock':  formatCurrency(p.valor_stock),
+    })
+    _estilarFila(row)
+  })
+
+  await _descargarWorkbook(wb, `reporte-inventario-${Date.now()}.xlsx`)
 }
 
 /**
  * Exportar reporte de ventas a Excel
  */
-export const exportarVentasCSV = (reporte) => {
-  const data = reporte.ordenes?.map((o) => ({
-    Orden: o.numero_orden,
-    Cliente: o.cliente,
-    Fecha: o.fecha,
-    Total: formatCurrency(o.total),
-    Estado: o.estado,
-  }))
+export const exportarVentasCSV = async (reporte) => {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Ventas')
 
-  // Crear libro de trabajo
-  const ws = XLSX.utils.json_to_sheet(data)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Ventas')
-
-  // Ajustar ancho de columnas
-  const colWidths = [
-    { wch: 15 }, // Orden
-    { wch: 30 }, // Cliente
-    { wch: 12 }, // Fecha
-    { wch: 15 }, // Total
-    { wch: 12 }, // Estado
+  ws.columns = [
+    { header: 'Orden',   key: 'Orden',   width: 16 },
+    { header: 'Cliente', key: 'Cliente', width: 32 },
+    { header: 'Fecha',   key: 'Fecha',   width: 14 },
+    { header: 'Total',   key: 'Total',   width: 18 },
+    { header: 'Estado',  key: 'Estado',  width: 14 },
   ]
-  ws['!cols'] = colWidths
 
-  // Descargar archivo
-  XLSX.writeFile(wb, `reporte-ventas-${Date.now()}.xlsx`)
+  // Estilo del encabezado (verde)
+  _estilarEncabezado(ws.getRow(1), '10B981')
+
+  reporte.ordenes?.forEach((o) => {
+    const row = ws.addRow({
+      'Orden':   o.numero_orden,
+      'Cliente': o.cliente,
+      'Fecha':   o.fecha,
+      'Total':   formatCurrency(o.total),
+      'Estado':  o.estado,
+    })
+    _estilarFila(row)
+  })
+
+  await _descargarWorkbook(wb, `reporte-ventas-${Date.now()}.xlsx`)
 }
 
 /**
  * Exportar reporte de compras a Excel
  */
-export const exportarComprasCSV = (reporte) => {
-  const data = reporte.ordenes?.map((o) => ({
-    Orden: o.numero_orden,
-    Proveedor: o.proveedor,
-    Fecha: o.fecha,
-    Total: formatCurrency(o.total),
-    Estado: o.estado,
-  }))
+export const exportarComprasCSV = async (reporte) => {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Compras')
 
-  // Crear libro de trabajo
-  const ws = XLSX.utils.json_to_sheet(data)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Compras')
-
-  // Ajustar ancho de columnas
-  const colWidths = [
-    { wch: 15 }, // Orden
-    { wch: 30 }, // Proveedor
-    { wch: 12 }, // Fecha
-    { wch: 15 }, // Total
-    { wch: 12 }, // Estado
+  ws.columns = [
+    { header: 'Orden',     key: 'Orden',     width: 16 },
+    { header: 'Proveedor', key: 'Proveedor', width: 32 },
+    { header: 'Fecha',     key: 'Fecha',     width: 14 },
+    { header: 'Total',     key: 'Total',     width: 18 },
+    { header: 'Estado',    key: 'Estado',    width: 14 },
   ]
-  ws['!cols'] = colWidths
 
-  // Descargar archivo
-  XLSX.writeFile(wb, `reporte-compras-${Date.now()}.xlsx`)
+  // Estilo del encabezado (azul primario)
+  _estilarEncabezado(ws.getRow(1), '3B82F6')
+
+  reporte.ordenes?.forEach((o) => {
+    const row = ws.addRow({
+      'Orden':     o.numero_orden,
+      'Proveedor': o.proveedor,
+      'Fecha':     o.fecha,
+      'Total':     formatCurrency(o.total),
+      'Estado':    o.estado,
+    })
+    _estilarFila(row)
+  })
+
+  await _descargarWorkbook(wb, `reporte-compras-${Date.now()}.xlsx`)
 }
 
 /**
  * Exportar productos más vendidos a Excel
  */
-export const exportarProductosCSV = (productos) => {
-  const data = productos?.map((p, index) => ({
-    Posición: `#${index + 1}`,
-    Producto: p.producto,
-    'Cantidad Vendida': p.cantidad_vendida,
-    'Total Ventas': formatCurrency(p.total_ventas),
-  }))
+export const exportarProductosCSV = async (productos) => {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Productos Más Vendidos')
 
-  // Crear libro de trabajo
-  const ws = XLSX.utils.json_to_sheet(data)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Productos Más Vendidos')
-
-  // Ajustar ancho de columnas
-  const colWidths = [
-    { wch: 12 }, // Posición
-    { wch: 35 }, // Producto
-    { wch: 18 }, // Cantidad Vendida
-    { wch: 18 }, // Total Ventas
+  ws.columns = [
+    { header: 'Posición',        key: 'Posición',        width: 14 },
+    { header: 'Producto',        key: 'Producto',        width: 38 },
+    { header: 'Cantidad Vendida',key: 'Cantidad Vendida',width: 20 },
+    { header: 'Total Ventas',    key: 'Total Ventas',    width: 20 },
   ]
-  ws['!cols'] = colWidths
 
-  // Descargar archivo
-  XLSX.writeFile(wb, `reporte-productos-mas-vendidos-${Date.now()}.xlsx`)
+  // Estilo del encabezado (violeta secundario)
+  _estilarEncabezado(ws.getRow(1), '8B5CF6')
+
+  productos?.forEach((p, index) => {
+    const row = ws.addRow({
+      'Posición':         `#${index + 1}`,
+      'Producto':         p.producto,
+      'Cantidad Vendida': p.cantidad_vendida,
+      'Total Ventas':     formatCurrency(p.total_ventas),
+    })
+    _estilarFila(row)
+  })
+
+  await _descargarWorkbook(wb, `reporte-productos-mas-vendidos-${Date.now()}.xlsx`)
 }
