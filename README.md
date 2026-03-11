@@ -929,7 +929,7 @@ Si Inventrix te ha sido útil, considera:
 
 ---
 
-### 📈 Hecho con ❤️ para la comunidad
+### 📈 Hecho con ❤️
 
 **Inventrix** - Sistema Profesional de Gestión de Inventario
 
