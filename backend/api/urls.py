@@ -7,7 +7,8 @@ from .views import (
     ProveedorViewSet, MarcaViewSet, CategoriaViewSet,
     ProductoViewSet, ClienteViewSet,
     OrdenCompraViewSet, OrdenVentaViewSet,
-    MovimientoInventarioViewSet, MotoViewSet, ServicioMotoViewSet, ServicioViewSet
+    MovimientoInventarioViewSet, MotoViewSet, ServicioMotoViewSet, ServicioViewSet,
+    BitacoraServicioViewSet, ServicioMotoConBitacoraViewSet
 )
 from .reportes_views import (
     reporte_inventario,
@@ -31,6 +32,8 @@ router.register(r'movimientos', MovimientoInventarioViewSet, basename='movimient
 router.register(r'motos', MotoViewSet, basename='moto')
 router.register(r'servicios-motos', ServicioMotoViewSet, basename='servicio-moto')
 router.register(r'servicios', ServicioViewSet, basename='servicio')
+router.register(r'bitacora', BitacoraServicioViewSet, basename='bitacora')
+router.register(r'servicios-con-bitacora', ServicioMotoConBitacoraViewSet, basename='servicio-con-bitacora')
 
 urlpatterns = [
     path('', include(router.urls)),

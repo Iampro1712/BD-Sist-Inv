@@ -6,7 +6,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 segundos timeout
+  timeout: 120000, // 120 segundos timeout para subida de imágenes
 })
 
 // Request interceptor

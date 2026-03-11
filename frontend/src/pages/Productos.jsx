@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useProductos, useCreateProducto, useUpdateProducto, useDeleteProducto, useProducto, useProductoMovimientos } from '../hooks/useProductos'
 import { useDebounce } from '../hooks/useDebounce'
@@ -23,6 +24,7 @@ const Productos = () => {
   const [selectedProductoId, setSelectedProductoId] = useState(null)
   const [productoToDelete, setProductoToDelete] = useState(null)
 
+  const [searchParams, setSearchParams] = useSearchParams()
   const toast = useToast()
   const debouncedSearch = useDebounce(search, 500)
 
@@ -41,6 +43,17 @@ const Productos = () => {
 
   const productos = data?.results || []
   const totalPages = data?.count ? Math.ceil(data.count / 20) : 1
+
+  // Detectar parámetro 'id' en la URL y abrir modal automáticamente
+  useEffect(() => {
+    const productoId = searchParams.get('id')
+    if (productoId && !isDetalleModalOpen) {
+      setSelectedProductoId(parseInt(productoId))
+      setIsDetalleModalOpen(true)
+      // Limpiar el parámetro de la URL
+      setSearchParams({})
+    }
+  }, [searchParams, isDetalleModalOpen, setSearchParams])
 
   const handleOpenModal = (producto = null) => {
     setSelectedProducto(producto)

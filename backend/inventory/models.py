@@ -300,3 +300,68 @@ class MovimientoInventario(models.Model):
 
     def __str__(self):
         return f"{self.tipo} - {self.producto.nombre} - {self.cantidad}"
+
+
+class BitacoraServicio(models.Model):
+    """Modelo para bitácora de servicios de motos con imágenes en R2"""
+    MODULO_CHOICES = [
+        ('recepcion', 'Recepción'),
+        ('diagnostico', 'Diagnóstico'),
+        ('reparacion', 'Reparación'),
+        ('entrega', 'Entrega'),
+    ]
+    
+    id_bitacora = models.AutoField(primary_key=True)
+    id_servicio = models.ForeignKey(
+        ServicioMoto,
+        on_delete=models.CASCADE,
+        related_name='bitacoras',
+        db_column='id_servicio'
+    )
+    id_moto = models.ForeignKey(
+        Moto,
+        on_delete=models.CASCADE,
+        related_name='bitacoras',
+        db_column='id_moto'
+    )
+    
+    # Módulo de la bitácora
+    modulo = models.CharField(max_length=50, choices=MODULO_CHOICES)
+    
+    # Información del registro
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+    notas = models.TextField(blank=True, null=True)
+    
+    # Campos específicos por módulo
+    # Recepción
+    nivel_gasolina = models.CharField(max_length=50, blank=True, null=True)
+    rayones_previos = models.TextField(blank=True, null=True)
+    
+    # Diagnóstico
+    fallas_encontradas = models.TextField(blank=True, null=True)
+    
+    # Reparación
+    trabajo_realizado = models.TextField(blank=True, null=True)
+    tecnico_responsable = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Entrega
+    checklist_salida = models.TextField(blank=True, null=True)
+    firma_cliente = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Imágenes almacenadas en R2 (JSONB)
+    imagenes = models.JSONField(default=list, blank=True)
+    
+    # Metadata
+    creado_por = models.CharField(max_length=255, blank=True, null=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False  # No modificar tabla existente
+        db_table = 'bitacora_servicio'
+        verbose_name = 'Bitácora de Servicio'
+        verbose_name_plural = 'Bitácoras de Servicios'
+        ordering = ['-fecha_registro']
+
+    def __str__(self):
+        return f"Bitácora {self.modulo} - Servicio #{self.id_servicio.id_servicio}"
+
