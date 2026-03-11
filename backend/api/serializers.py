@@ -61,7 +61,7 @@ class ProveedorDetailSerializer(serializers.ModelSerializer):
             'direccion'
         ]
 
-
+# MasterDev
 # ============================================================================
 # PRODUCTO SERIALIZERS
 # ============================================================================
