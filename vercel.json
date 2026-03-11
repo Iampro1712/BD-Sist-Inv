@@ -11,6 +11,6 @@
     }
   ],
   "env": {
-    "VITE_API_URL": "https://backend.inventrix.site/api"
+    "VITE_API_URL": "https://api-inventrix.eclipze.dev/api"
   }
 }
