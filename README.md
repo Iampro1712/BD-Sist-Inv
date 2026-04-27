@@ -933,7 +933,7 @@ Si Inventrix te ha sido útil, considera:
 
 **Inventrix** - Sistema Profesional de Gestión de Inventario
 
-*Última actualización: Marzo 2026*
+*Última actualización: Abril 2026*
 
 [![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red?style=for-the-badge)](https://github.com/Iampro1712/BD-Sist-Inv)
 [![Built with Django](https://img.shields.io/badge/Built%20with-Django-092E20?style=for-the-badge&logo=django)](https://www.djangoproject.com/)
