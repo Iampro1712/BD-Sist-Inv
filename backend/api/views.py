@@ -237,7 +237,23 @@ class OrdenVentaViewSet(viewsets.ModelViewSet):
         
         cliente = self.request.query_params.get('cliente', None)
         if cliente:
-            queryset = queryset.filter(id_cliente=cliente)
+            # Intentar filtrar por ID primero, si falla buscar por nombre
+            try:
+                cliente_id = int(cliente)
+                queryset = queryset.filter(id_cliente=cliente_id)
+            except (ValueError, TypeError):
+                # Si no es un número, buscar por nombre de cliente
+                from django.db import connection
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT id_cliente FROM cliente WHERE nombre = %s
+                    """, [cliente])
+                    result = cursor.fetchone()
+                    if result:
+                        queryset = queryset.filter(id_cliente=result[0])
+                    else:
+                        # Si no se encuentra el cliente, retornar queryset vacío
+                        queryset = queryset.none()
         
         fecha_inicio = self.request.query_params.get('fecha_inicio', None)
         if fecha_inicio:
