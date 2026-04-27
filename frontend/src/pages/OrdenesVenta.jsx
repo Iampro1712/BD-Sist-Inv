@@ -20,7 +20,6 @@ import { fadeIn, staggerContainer } from '../utils/animations'
 const OrdenesVenta = () => {
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState({
-    estado: '',
     cliente: '',
     fecha_inicio: '',
     fecha_fin: '',
@@ -151,27 +150,13 @@ const OrdenesVenta = () => {
 
       {/* Filters */}
       <Card className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-2">
             <SearchBar
               value={search}
               onChange={setSearch}
               placeholder="Buscar por número de orden..."
             />
-          </div>
-          
-          <div>
-            <select
-              value={filters.estado}
-              onChange={(e) => setFilters({ ...filters, estado: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="">Todos los estados</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="confirmada">Confirmada</option>
-              <option value="entregada">Entregada</option>
-              <option value="cancelada">Cancelada</option>
-            </select>
           </div>
 
           <div>
@@ -191,7 +176,7 @@ const OrdenesVenta = () => {
 
           <Button variant="secondary" onClick={() => {
             setSearch('')
-            setFilters({ estado: '', cliente: '', fecha_inicio: '', fecha_fin: '' })
+            setFilters({ cliente: '', fecha_inicio: '', fecha_fin: '' })
           }}>
             Limpiar
           </Button>
@@ -251,7 +236,7 @@ const OrdenesVenta = () => {
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No hay órdenes</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {search || filters.estado || filters.cliente
+            {search || filters.cliente
               ? 'No se encontraron órdenes con los filtros aplicados'
               : 'Comienza creando una nueva orden de venta'}
           </p>
