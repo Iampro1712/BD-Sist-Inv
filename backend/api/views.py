@@ -10,7 +10,7 @@ from django.db.models import Q, Sum, F
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio,
-    BitacoraServicio
+    BitacoraServicio, AuditoriaProducto
 )
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
@@ -22,7 +22,7 @@ from .serializers import (
     MovimientoInventarioSerializer, MovimientoInventarioCreateSerializer,
     MotoSerializer, ServicioMotoSerializer, ClienteConMotosSerializer, ServicioSerializer,
     BitacoraServicioSerializer, BitacoraServicioCreateSerializer,
-    ServicioMotoConBitacoraSerializer
+    ServicioMotoConBitacoraSerializer, AuditoriaProductoSerializer
 )
 from .services import (
     InventoryService, OrdenCompraService, OrdenVentaService,
@@ -545,3 +545,87 @@ class ServicioMotoConBitacoraViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = queryset.prefetch_related('bitacoras')
         
         return queryset
+
+
+
+# ============================================================================
+# AUDITORÍA VIEWSETS
+# ============================================================================
+
+class AuditoriaProductoViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet de solo lectura para auditoría de productos"""
+    queryset = AuditoriaProducto.objects.all()
+    serializer_class = AuditoriaProductoSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['sku_producto', 'nombre_producto', 'usuario']
+    ordering_fields = ['fecha_cambio', 'operacion']
+    ordering = ['-fecha_cambio']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filtrar por producto
+        id_producto = self.request.query_params.get('id_producto', None)
+        if id_producto:
+            queryset = queryset.filter(id_producto=id_producto)
+        
+        # Filtrar por operación
+        operacion = self.request.query_params.get('operacion', None)
+        if operacion:
+            queryset = queryset.filter(operacion=operacion.upper())
+        
+        # Filtrar por rango de fechas
+        fecha_inicio = self.request.query_params.get('fecha_inicio', None)
+        if fecha_inicio:
+            queryset = queryset.filter(fecha_cambio__gte=fecha_inicio)
+        
+        fecha_fin = self.request.query_params.get('fecha_fin', None)
+        if fecha_fin:
+            queryset = queryset.filter(fecha_cambio__lte=fecha_fin)
+        
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def estadisticas(self, request):
+        """Obtiene estadísticas generales de auditoría"""
+        from django.db import connection
+        
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM fn_estadisticas_auditoria();")
+            row = cursor.fetchone()
+            
+            if row:
+                return Response({
+                    'total_registros': row[0],
+                    'total_inserts': row[1],
+                    'total_updates': row[2],
+                    'total_deletes': row[3],
+                    'productos_modificados': row[4],
+                    'fecha_primer_registro': row[5],
+                    'fecha_ultimo_registro': row[6]
+                })
+        
+        return Response({})
+    
+    @action(detail=False, methods=['get'])
+    def por_producto(self, request):
+        """Obtiene historial de auditoría de un producto específico"""
+        id_producto = request.query_params.get('id_producto')
+        
+        if not id_producto:
+            return Response(
+                {'error': 'Se requiere el parámetro id_producto'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.db import connection
+        
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM fn_historial_producto(%s);",
+                [id_producto]
+            )
+            columns = [col[0] for col in cursor.description]
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        return Response(results)

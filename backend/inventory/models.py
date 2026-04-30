@@ -365,3 +365,49 @@ class BitacoraServicio(models.Model):
     def __str__(self):
         return f"Bitácora {self.modulo} - Servicio #{self.id_servicio.id_servicio}"
 
+
+class AuditoriaProducto(models.Model):
+    """Modelo para auditoría de cambios en productos"""
+    id_auditoria = models.AutoField(primary_key=True)
+    id_producto = models.IntegerField()
+    sku_producto = models.CharField(max_length=100, blank=True, null=True)
+    nombre_producto = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Operación realizada
+    operacion = models.CharField(max_length=10)  # INSERT, UPDATE, DELETE
+    
+    # Datos anteriores
+    cantidad_anterior = models.IntegerField(blank=True, null=True)
+    precio_compra_anterior = models.IntegerField(blank=True, null=True)
+    precio_final_anterior = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    
+    # Datos nuevos
+    cantidad_nueva = models.IntegerField(blank=True, null=True)
+    precio_compra_nuevo = models.IntegerField(blank=True, null=True)
+    precio_final_nuevo = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    
+    # Cambios calculados
+    diferencia_cantidad = models.IntegerField(blank=True, null=True)
+    diferencia_precio_compra = models.IntegerField(blank=True, null=True)
+    diferencia_precio_final = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    
+    # Metadata
+    fecha_cambio = models.DateTimeField(auto_now_add=True)
+    usuario = models.CharField(max_length=255, blank=True, null=True)
+    ip_address = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Datos completos en JSON
+    datos_anteriores = models.JSONField(blank=True, null=True)
+    datos_nuevos = models.JSONField(blank=True, null=True)
+
+    class Meta:
+        managed = False  # No modificar tabla (manejada por trigger)
+        db_table = 'auditoria_productos'
+        verbose_name = 'Auditoría de Producto'
+        verbose_name_plural = 'Auditorías de Productos'
+        ordering = ['-fecha_cambio']
+
+    def __str__(self):
+        return f"{self.operacion} - {self.nombre_producto} ({self.fecha_cambio})"
+
+

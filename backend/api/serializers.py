@@ -5,7 +5,8 @@ from rest_framework import serializers
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
-    MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio
+    MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio,
+    AuditoriaProducto
 )
 
 
@@ -702,3 +703,59 @@ class ServicioMotoConBitacoraSerializer(serializers.ModelSerializer):
             ).data,
         }
 
+
+
+# ============================================================================
+# AUDITORÍA SERIALIZERS
+# ============================================================================
+
+class AuditoriaProductoSerializer(serializers.ModelSerializer):
+    """Serializer para auditoría de productos"""
+    operacion_display = serializers.SerializerMethodField()
+    tipo_cambio = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AuditoriaProducto
+        fields = [
+            'id_auditoria', 'id_producto', 'sku_producto', 'nombre_producto',
+            'operacion', 'operacion_display', 'tipo_cambio',
+            'cantidad_anterior', 'cantidad_nueva', 'diferencia_cantidad',
+            'precio_compra_anterior', 'precio_compra_nuevo', 'diferencia_precio_compra',
+            'precio_final_anterior', 'precio_final_nuevo', 'diferencia_precio_final',
+            'fecha_cambio', 'usuario', 'ip_address',
+            'datos_anteriores', 'datos_nuevos'
+        ]
+    
+    def get_operacion_display(self, obj):
+        """Retorna el nombre legible de la operación"""
+        operaciones = {
+            'INSERT': 'Creación',
+            'UPDATE': 'Modificación',
+            'DELETE': 'Eliminación'
+        }
+        return operaciones.get(obj.operacion, obj.operacion)
+    
+    def get_tipo_cambio(self, obj):
+        """Determina qué tipo de cambio se realizó"""
+        cambios = []
+        
+        if obj.diferencia_cantidad and obj.diferencia_cantidad != 0:
+            if obj.diferencia_cantidad > 0:
+                cambios.append(f'Stock +{obj.diferencia_cantidad}')
+            else:
+                cambios.append(f'Stock {obj.diferencia_cantidad}')
+        
+        if obj.diferencia_precio_final and obj.diferencia_precio_final != 0:
+            if obj.diferencia_precio_final > 0:
+                cambios.append(f'Precio +C${obj.diferencia_precio_final}')
+            else:
+                cambios.append(f'Precio C${obj.diferencia_precio_final}')
+        
+        if obj.operacion == 'INSERT':
+            return 'Producto creado'
+        elif obj.operacion == 'DELETE':
+            return 'Producto eliminado'
+        elif cambios:
+            return ', '.join(cambios)
+        else:
+            return 'Otros cambios'
