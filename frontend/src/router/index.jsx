@@ -15,6 +15,7 @@ const OrdenesVenta = lazy(() => import('../pages/OrdenesVenta'))
 const Movimientos = lazy(() => import('../pages/Movimientos'))
 const Reportes = lazy(() => import('../pages/Reportes'))
 const Categorias = lazy(() => import('../pages/Categorias'))
+const LogsAuditoria = lazy(() => import('../pages/LogsAuditoria'))
 const NotFound = lazy(() => import('../pages/NotFound'))
 
 const router = createBrowserRouter([
@@ -91,6 +92,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageLoader />}>
             <Categorias />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'logs-auditoria',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <LogsAuditoria />
           </Suspense>
         ),
       },
