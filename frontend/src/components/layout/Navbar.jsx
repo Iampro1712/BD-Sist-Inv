@@ -43,18 +43,18 @@ const Navbar = () => {
               <span className="text-xl font-bold text-gray-900 dark:text-white hidden sm:block">Inventrix</span>
             </Link>
 
-            {/* Search - Hidden on mobile */}
-            <div className="hidden md:flex flex-1 max-w-3xl mx-8">
+            {/* Search - Centered, hidden on mobile */}
+            <div className="hidden md:flex flex-1 max-w-2xl mx-auto">
               <GlobalSearch />
             </div>
 
-            {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center space-x-1">
+            {/* Desktop Navigation - Only on XL screens */}
+            <div className="hidden xl:flex items-center space-x-1">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
                     isActive(item.path)
                       ? 'text-primary-600 bg-primary-50 dark:bg-primary-900 dark:text-primary-300'
                       : 'text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -65,7 +65,7 @@ const Navbar = () => {
               ))}
             </div>
 
-            {/* Dark Mode Toggle & Mobile menu button */}
+            {/* Dark Mode Toggle & Mobile/Tablet menu button */}
             <div className="flex items-center space-x-2">
               <button
                 onClick={toggleDarkMode}
@@ -85,7 +85,7 @@ const Navbar = () => {
 
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                className="xl:hidden p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 {isMobileMenuOpen ? (
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +101,7 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* Mobile Search */}
+        {/* Mobile Search - Only on small screens */}
         <div className="md:hidden px-4 pb-4">
           <GlobalSearch />
         </div>
@@ -117,7 +117,7 @@ const Navbar = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+              className="fixed inset-0 bg-black bg-opacity-50 z-40 xl:hidden"
             />
 
             {/* Sidebar */}
@@ -126,7 +126,7 @@ const Navbar = () => {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'tween', duration: 0.3 }}
-              className="fixed top-0 left-0 bottom-0 w-64 bg-white dark:bg-gray-800 shadow-xl z-50 lg:hidden overflow-y-auto"
+              className="fixed top-0 left-0 bottom-0 w-64 bg-white dark:bg-gray-800 shadow-xl z-50 xl:hidden overflow-y-auto"
             >
               {/* Header */}
               <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">

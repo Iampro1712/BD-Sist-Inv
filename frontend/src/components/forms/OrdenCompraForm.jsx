@@ -35,6 +35,16 @@ const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }
 
   const handleChange = (e) => {
     const { name, value } = e.target
+    
+    // Validar fecha si es el campo de fecha
+    if (name === 'fecha') {
+      const today = new Date().toISOString().split('T')[0]
+      if (value > today) {
+        setErrors(prev => ({ ...prev, fecha: 'No se pueden crear órdenes con fechas futuras' }))
+        return
+      }
+    }
+    
     setFormData(prev => ({ ...prev, [name]: value }))
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
@@ -93,7 +103,14 @@ const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }
     const newErrors = {}
 
     if (!formData.proveedor) newErrors.proveedor = 'El proveedor es requerido'
-    if (!formData.fecha) newErrors.fecha = 'La fecha es requerida'
+    if (!formData.fecha) {
+      newErrors.fecha = 'La fecha es requerida'
+    } else {
+      const today = new Date().toISOString().split('T')[0]
+      if (formData.fecha > today) {
+        newErrors.fecha = 'No se pueden crear órdenes con fechas futuras'
+      }
+    }
     if (formData.detalles.length === 0) {
       newErrors.detalles = 'Debes agregar al menos un producto'
     }
@@ -156,6 +173,7 @@ const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }
           value={formData.fecha}
           onChange={handleChange}
           error={errors.fecha}
+          max={new Date().toISOString().split('T')[0]}
         />
       </div>
 

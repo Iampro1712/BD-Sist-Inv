@@ -138,6 +138,7 @@ Inventrix nació observando las dificultades que enfrentan los negocios locales 
 - 🏆 **Top Productos**: Más vendidos por cantidad e ingresos
 - 📉 **Stock Bajo**: Alertas de productos que requieren reorden
 - 📄 **Exportación**: PDF profesional y Excel para análisis
+- ✅ **Validación de Fechas**: Previene reportes con fechas futuras o rangos inválidos
 
 ### 🔍 Búsqueda Global Inteligente
 
@@ -160,6 +161,8 @@ Inventrix nació observando las dificultades que enfrentan los negocios locales 
 - 🔔 **Notificaciones toast** para feedback inmediato
 - ⚡ **Carga optimizada** con lazy loading y code splitting
 - 🎨 **Interfaz moderna** con gradientes y efectos visuales
+- ✅ **Validación robusta** en formularios con mensajes claros
+- 🔐 **Validación de datos** en múltiples capas (HTML5, onChange, Submit)
 
 ---
 
@@ -435,6 +438,9 @@ python manage.py loaddata fixtures/demo_data.json
 | [🚀 Deployment Guide](./DEPLOYMENT.md) | Guía detallada de despliegue en producción |
 | [🤝 Contributing Guide](./CONTRIBUTING.md) | Cómo contribuir al proyecto |
 | [📝 Bitácora README](./BITACORA_README.md) | Documentación del sistema de bitácora de servicios |
+| [📅 Validación de Fechas en Órdenes](./VALIDACION_FECHAS_ORDENES.md) | Validación de fechas futuras en órdenes de compra y venta |
+| [📅 Validación de Fechas en Reportes](./VALIDACION_FECHAS_REPORTES.md) | Validación de fechas futuras y rangos en reportes |
+| [📱 Validación de Teléfono](./VALIDACION_TELEFONO_CLIENTES.md) | Validación y formateo automático de números telefónicos |
 
 ### 🎓 Guías Rápidas
 
@@ -468,7 +474,8 @@ python manage.py loaddata fixtures/demo_data.json
 3. Selecciona el cliente
 4. Agrega productos con sus cantidades
 5. Revisa el total calculado automáticamente
-6. Haz clic en **Guardar**
+6. ✅ Verifica que la fecha no sea futura (validación automática)
+7. Haz clic en **Guardar**
 
 </details>
 
@@ -478,8 +485,27 @@ python manage.py loaddata fixtures/demo_data.json
 1. Ve a **Reportes** en el menú
 2. Selecciona el tipo de reporte que necesitas
 3. Configura el rango de fechas (si aplica)
-4. Haz clic en **Exportar a PDF** o **Exportar a Excel**
-5. El archivo se descargará automáticamente
+4. ✅ Verifica que:
+   - Ambas fechas no sean futuras
+   - La fecha de inicio sea menor o igual a la fecha fin
+5. Haz clic en **Generar Reporte**
+6. Haz clic en **Exportar a PDF** o **Exportar a Excel**
+7. El archivo se descargará automáticamente
+
+</details>
+
+<details>
+<summary>📱 Validación de Números Telefónicos</summary>
+
+Al crear un cliente:
+
+1. Ve a **Clientes** → **Nuevo Cliente**
+2. En el campo de teléfono:
+   - ✅ Ingresa 8 dígitos: `87549685`
+   - ✅ O con código de país: `+505 87549685`
+   - ✅ Se formatea automáticamente a: `8754-9685`
+   - ❌ Menos de 8 dígitos: muestra error
+3. Haz clic en **Guardar**
 
 </details>
 
@@ -612,6 +638,9 @@ python manage.py loaddata fixtures/demo_data.json
 ✅ Búsqueda global inteligente  
 ✅ Modo oscuro completo  
 ✅ Diseño responsive  
+✅ Validación robusta de fechas en órdenes y reportes  
+✅ Validación y formateo automático de teléfonos  
+✅ Validación de rangos de fechas en reportes  
 
 ### 🚀 Versión 2.1 (Q2 2026)
 
@@ -634,6 +663,11 @@ python manage.py loaddata fixtures/demo_data.json
   - Widgets personalizables
   - Gráficos interactivos
   - Predicciones con IA
+
+- [ ] 🔔 **Notificaciones Avanzadas**
+  - Alertas de stock bajo
+  - Recordatorios de órdenes pendientes
+  - Notificaciones por email
 
 ### 🎨 Versión 2.5 (Q4 2026)
 
@@ -787,6 +821,47 @@ Ver el archivo [LICENSE](LICENSE) para más detalles.
 
 ---
 
+## 🔒 Validaciones y Seguridad
+
+### ✅ Validaciones Implementadas
+
+#### 📅 Validación de Fechas
+
+**En Órdenes de Compra y Venta:**
+- ✅ Previene creación de órdenes con fechas futuras
+- ✅ Triple validación: HTML5 + onChange + Submit
+- ✅ Mensaje de error claro: "No se pueden crear órdenes con fechas futuras"
+- 📖 [Ver documentación completa](./VALIDACION_FECHAS_ORDENES.md)
+
+**En Reportes:**
+- ✅ Previene generación de reportes con fechas futuras
+- ✅ Valida que fecha_inicio ≤ fecha_fin
+- ✅ Cuádruple validación: HTML5 + onChange + Submit + Rango
+- ✅ Mensajes específicos para cada tipo de error
+- 📖 [Ver documentación completa](./VALIDACION_FECHAS_REPORTES.md)
+
+#### 📱 Validación de Teléfono
+
+**En Formulario de Clientes:**
+- ✅ Mínimo 8 dígitos requeridos
+- ✅ Detecta y elimina código de país (+505)
+- ✅ Formateo automático en tiempo real: `8754-9685`
+- ✅ Soporta entrada con o sin código de país
+- 📖 [Ver documentación completa](./VALIDACION_TELEFONO_CLIENTES.md)
+
+### 🔐 Seguridad General
+
+- ✅ Validación en múltiples capas (Frontend + Backend)
+- ✅ Sanitización de inputs
+- ✅ CORS configurado correctamente
+- ✅ Autenticación y autorización robusta
+- ✅ Manejo centralizado de excepciones
+- ✅ Logging de acciones importantes
+- ✅ Protección contra inyección SQL (ORM)
+- ✅ Almacenamiento seguro en la nube (Cloudflare R2)
+
+---
+
 ## 👥 Autores y Reconocimientos
 
 ### 👨‍💻 Desarrollador Principal
@@ -802,15 +877,6 @@ Ver el archivo [LICENSE](LICENSE) para más detalles.
 </td>
 </tr>
 </table>
-
-### 🙏 Agradecimientos Especiales
-
-- 🎨 **Comunidad de Django** - Por el excelente framework
-- ⚛️ **Comunidad de React** - Por las herramientas modernas
-- 🎨 **TailwindCSS** - Por el sistema de diseño
-- ☁️ **Cloudflare** - Por el almacenamiento R2
-- 💙 **Todos los contribuidores** - Por hacer posible este proyecto
-- 🏢 **Empresas que confían en Inventrix** - Por su feedback valioso
 
 ### 🌟 Contribuidores
 
@@ -900,6 +966,21 @@ Las imágenes se almacenan en Cloudflare R2, un servicio de almacenamiento en la
 </details>
 
 <details>
+<summary><b>¿Qué validaciones tiene el sistema?</b></summary>
+
+Inventrix incluye validaciones robustas:
+
+- **Fechas**: Previene órdenes y reportes con fechas futuras
+- **Rangos de fechas**: Valida que inicio ≤ fin en reportes
+- **Teléfono**: Valida mínimo 8 dígitos y formatea automáticamente
+- **Inventario**: Previene ventas sin stock disponible
+- **Datos**: Validación en múltiples capas (HTML5, Frontend, Backend)
+
+Ver [Validaciones y Seguridad](#-validaciones-y-seguridad) para más detalles.
+
+</details>
+
+<details>
 <summary><b>¿Puedo contribuir al proyecto?</b></summary>
 
 ¡Sí! Las contribuciones son bienvenidas. Lee nuestra [Guía de Contribución](./CONTRIBUTING.md) para comenzar.
@@ -933,7 +1014,7 @@ Si Inventrix te ha sido útil, considera:
 
 **Inventrix** - Sistema Profesional de Gestión de Inventario
 
-*Última actualización: Abril 2026*
+*Última actualización: Mayo 2026*
 
 [![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red?style=for-the-badge)](https://github.com/Iampro1712/BD-Sist-Inv)
 [![Built with Django](https://img.shields.io/badge/Built%20with-Django-092E20?style=for-the-badge&logo=django)](https://www.djangoproject.com/)

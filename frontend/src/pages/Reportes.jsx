@@ -69,6 +69,14 @@ const Reportes = () => {
     fecha_fin: '',
     limite: 10,
   })
+  const [dateErrors, setDateErrors] = useState({
+    ventas_inicio: '',
+    ventas_fin: '',
+    compras_inicio: '',
+    compras_fin: '',
+    productos_inicio: '',
+    productos_fin: '',
+  })
 
   // Queries
   const { data: reporteInventario, isLoading: loadingInventario } = useReporteInventario()
@@ -102,6 +110,20 @@ const Reportes = () => {
       alert('Debe seleccionar un rango de fechas')
       return
     }
+    
+    // Validar fechas futuras
+    const today = new Date().toISOString().split('T')[0]
+    if (filtrosVentas.fecha_inicio > today || filtrosVentas.fecha_fin > today) {
+      alert('No se pueden generar reportes con fechas futuras')
+      return
+    }
+    
+    // Validar que fecha inicio no sea mayor que fecha fin
+    if (filtrosVentas.fecha_inicio > filtrosVentas.fecha_fin) {
+      alert('La fecha de inicio no puede ser mayor que la fecha fin')
+      return
+    }
+    
     setTipoReporte('ventas')
   }
 
@@ -110,6 +132,20 @@ const Reportes = () => {
       alert('Debe seleccionar un rango de fechas')
       return
     }
+    
+    // Validar fechas futuras
+    const today = new Date().toISOString().split('T')[0]
+    if (filtrosCompras.fecha_inicio > today || filtrosCompras.fecha_fin > today) {
+      alert('No se pueden generar reportes con fechas futuras')
+      return
+    }
+    
+    // Validar que fecha inicio no sea mayor que fecha fin
+    if (filtrosCompras.fecha_inicio > filtrosCompras.fecha_fin) {
+      alert('La fecha de inicio no puede ser mayor que la fecha fin')
+      return
+    }
+    
     setTipoReporte('compras')
   }
 
@@ -118,6 +154,20 @@ const Reportes = () => {
       alert('Debe seleccionar un rango de fechas')
       return
     }
+    
+    // Validar fechas futuras
+    const today = new Date().toISOString().split('T')[0]
+    if (filtrosProductos.fecha_inicio > today || filtrosProductos.fecha_fin > today) {
+      alert('No se pueden generar reportes con fechas futuras')
+      return
+    }
+    
+    // Validar que fecha inicio no sea mayor que fecha fin
+    if (filtrosProductos.fecha_inicio > filtrosProductos.fecha_fin) {
+      alert('La fecha de inicio no puede ser mayor que la fecha fin')
+      return
+    }
+    
     setTipoReporte('productos')
   }
 
@@ -215,9 +265,24 @@ const Reportes = () => {
               <input
                 type="date"
                 value={filtrosVentas.fecha_inicio}
-                onChange={(e) => setFiltrosVentas({ ...filtrosVentas, fecha_inicio: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const today = new Date().toISOString().split('T')[0]
+                  
+                  if (value > today) {
+                    setDateErrors(prev => ({ ...prev, ventas_inicio: 'No se pueden seleccionar fechas futuras' }))
+                    return
+                  }
+                  
+                  setDateErrors(prev => ({ ...prev, ventas_inicio: '' }))
+                  setFiltrosVentas({ ...filtrosVentas, fecha_inicio: value })
+                }}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
+              {dateErrors.ventas_inicio && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{dateErrors.ventas_inicio}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -226,9 +291,24 @@ const Reportes = () => {
               <input
                 type="date"
                 value={filtrosVentas.fecha_fin}
-                onChange={(e) => setFiltrosVentas({ ...filtrosVentas, fecha_fin: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const today = new Date().toISOString().split('T')[0]
+                  
+                  if (value > today) {
+                    setDateErrors(prev => ({ ...prev, ventas_fin: 'No se pueden seleccionar fechas futuras' }))
+                    return
+                  }
+                  
+                  setDateErrors(prev => ({ ...prev, ventas_fin: '' }))
+                  setFiltrosVentas({ ...filtrosVentas, fecha_fin: value })
+                }}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
+              {dateErrors.ventas_fin && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{dateErrors.ventas_fin}</p>
+              )}
             </div>
             <div className="flex items-end">
               <Button onClick={handleGenerarVentas} className="w-full">
@@ -250,9 +330,24 @@ const Reportes = () => {
               <input
                 type="date"
                 value={filtrosCompras.fecha_inicio}
-                onChange={(e) => setFiltrosCompras({ ...filtrosCompras, fecha_inicio: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const today = new Date().toISOString().split('T')[0]
+                  
+                  if (value > today) {
+                    setDateErrors(prev => ({ ...prev, compras_inicio: 'No se pueden seleccionar fechas futuras' }))
+                    return
+                  }
+                  
+                  setDateErrors(prev => ({ ...prev, compras_inicio: '' }))
+                  setFiltrosCompras({ ...filtrosCompras, fecha_inicio: value })
+                }}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
+              {dateErrors.compras_inicio && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{dateErrors.compras_inicio}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -261,9 +356,24 @@ const Reportes = () => {
               <input
                 type="date"
                 value={filtrosCompras.fecha_fin}
-                onChange={(e) => setFiltrosCompras({ ...filtrosCompras, fecha_fin: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const today = new Date().toISOString().split('T')[0]
+                  
+                  if (value > today) {
+                    setDateErrors(prev => ({ ...prev, compras_fin: 'No se pueden seleccionar fechas futuras' }))
+                    return
+                  }
+                  
+                  setDateErrors(prev => ({ ...prev, compras_fin: '' }))
+                  setFiltrosCompras({ ...filtrosCompras, fecha_fin: value })
+                }}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
+              {dateErrors.compras_fin && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{dateErrors.compras_fin}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proveedor</label>
@@ -300,9 +410,24 @@ const Reportes = () => {
               <input
                 type="date"
                 value={filtrosProductos.fecha_inicio}
-                onChange={(e) => setFiltrosProductos({ ...filtrosProductos, fecha_inicio: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const today = new Date().toISOString().split('T')[0]
+                  
+                  if (value > today) {
+                    setDateErrors(prev => ({ ...prev, productos_inicio: 'No se pueden seleccionar fechas futuras' }))
+                    return
+                  }
+                  
+                  setDateErrors(prev => ({ ...prev, productos_inicio: '' }))
+                  setFiltrosProductos({ ...filtrosProductos, fecha_inicio: value })
+                }}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
+              {dateErrors.productos_inicio && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{dateErrors.productos_inicio}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -311,9 +436,24 @@ const Reportes = () => {
               <input
                 type="date"
                 value={filtrosProductos.fecha_fin}
-                onChange={(e) => setFiltrosProductos({ ...filtrosProductos, fecha_fin: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value
+                  const today = new Date().toISOString().split('T')[0]
+                  
+                  if (value > today) {
+                    setDateErrors(prev => ({ ...prev, productos_fin: 'No se pueden seleccionar fechas futuras' }))
+                    return
+                  }
+                  
+                  setDateErrors(prev => ({ ...prev, productos_fin: '' }))
+                  setFiltrosProductos({ ...filtrosProductos, fecha_fin: value })
+                }}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
+              {dateErrors.productos_fin && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{dateErrors.productos_fin}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Límite</label>
