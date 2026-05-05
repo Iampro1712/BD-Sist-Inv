@@ -1,0 +1,16 @@
+{
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist",
+  "devCommand": "pnpm run dev",
+  "installCommand": "pnpm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "env": {
+    "VITE_API_URL": "https://api-inventrix.eclipze.dev/api"
+  }
+}
