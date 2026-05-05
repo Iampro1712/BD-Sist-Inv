@@ -31,5 +31,8 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 1000,
+    // Copiar archivos públicos adicionales
+    copyPublicDir: true,
   },
+  publicDir: 'public',
 })
