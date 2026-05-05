@@ -323,6 +323,79 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    @action(detail=False, methods=['post'])
+    def ajuste(self, request):
+        """Crear un ajuste manual de inventario"""
+        try:
+            producto_id = request.data.get('producto_id')
+            cantidad = request.data.get('cantidad')
+            notas = request.data.get('notas', '')
+
+            if not producto_id or cantidad is None:
+                return Response(
+                    {'error': 'Se requieren producto_id y cantidad'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Convertir cantidad a entero
+            try:
+                cantidad = int(cantidad)
+            except (ValueError, TypeError):
+                return Response(
+                    {'error': 'La cantidad debe ser un número entero'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Verificar que el producto existe
+            try:
+                producto = Producto.objects.get(id_producto=producto_id)
+            except Producto.DoesNotExist:
+                return Response(
+                    {'error': 'Producto no encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Verificar que el ajuste no deje stock negativo
+            nuevo_stock = producto.cantidad_actual + cantidad
+            if nuevo_stock < 0:
+                return Response(
+                    {'error': f'El ajuste dejaría el stock en {nuevo_stock}. No se puede tener stock negativo.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Crear el movimiento de ajuste
+            movimiento_data = {
+                'producto': producto_id,
+                'tipo': 'AJUSTE',
+                'cantidad': cantidad,
+                'referencia': 'AJUSTE_MANUAL',
+                'notas': notas
+            }
+
+            serializer = MovimientoInventarioCreateSerializer(data=movimiento_data)
+            if serializer.is_valid():
+                movimiento = serializer.save()
+                
+                # Actualizar el stock del producto
+                producto.cantidad_actual = nuevo_stock
+                producto.save()
+
+                return Response(
+                    MovimientoInventarioSerializer(movimiento).data,
+                    status=status.HTTP_201_CREATED
+                )
+            else:
+                return Response(
+                    serializer.errors,
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        except Exception as e:
+            return Response(
+                {'error': f'Error al crear ajuste: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 # Dashboard y reportes removidos temporalmente
 # Se implementarán cuando se necesiten

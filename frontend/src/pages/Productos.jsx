@@ -134,21 +134,11 @@ const Productos = () => {
 
       {/* Filters */}
       <Card className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              placeholder="Buscar por código o nombre..."
-            />
-          </div>
-          <Button variant="secondary" onClick={() => {
-            setSearch('')
-            setFilters({ bajo_stock: '' })
-          }}>
-            Limpiar Filtros
-          </Button>
-        </div>
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Buscar por código o nombre..."
+        />
       </Card>
 
       {/* Products List */}
