@@ -1,4 +1,5 @@
 import { Badge, Button } from '../ui'
+import ProveedorLogo from '../ui/ProveedorLogo'
 
 const OrdenCompraDetalle = ({ 
   orden, 
@@ -66,10 +67,13 @@ const OrdenCompraDetalle = ({
 
         <div>
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Proveedor</h3>
-          <div className="space-y-2">
-            <div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Nombre:</span>
-              <p className="text-base font-semibold text-gray-900 dark:text-white">{orden.proveedor_nombre}</p>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <ProveedorLogo nombreEmpresa={orden.proveedor_nombre} size="small" />
+              <div>
+                <span className="text-sm text-gray-600 dark:text-gray-400 block">Nombre:</span>
+                <p className="text-base font-semibold text-gray-900 dark:text-white">{orden.proveedor_nombre}</p>
+              </div>
             </div>
             {orden.proveedor_contacto && (
               <div>

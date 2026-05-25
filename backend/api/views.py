@@ -98,6 +98,11 @@ class ProductoViewSet(viewsets.ModelViewSet):
         if bajo_stock and bajo_stock.lower() == 'true':
             queryset = queryset.filter(cantidad_actual__lte=F('cantidad_minima'))
         
+        # Filtro por proveedor
+        proveedor_id = self.request.query_params.get('proveedor', None)
+        if proveedor_id:
+            queryset = queryset.filter(id_proveedor_id=proveedor_id)
+        
         return queryset
 
     def perform_destroy(self, instance):

@@ -69,21 +69,27 @@ class ProveedorDetailSerializer(serializers.ModelSerializer):
 
 class ProductoListSerializer(serializers.ModelSerializer):
     """Serializer para listado de productos"""
+    proveedor_nombre = serializers.CharField(source='id_proveedor.nombre_empresa', read_only=True)
+    
     class Meta:
         model = Producto
         fields = [
             'id_producto', 'sku_producto', 'nombre', 'cantidad_actual',
-            'cantidad_minima', 'cantidad_total', 'precio_compra_unitario', 'precio_final'
+            'cantidad_minima', 'cantidad_total', 'precio_compra_unitario', 'precio_final',
+            'id_proveedor', 'proveedor_nombre'
         ]
 
 
 class ProductoDetailSerializer(serializers.ModelSerializer):
     """Serializer detallado para producto"""
+    proveedor_nombre = serializers.CharField(source='id_proveedor.nombre_empresa', read_only=True)
+    
     class Meta:
         model = Producto
         fields = [
             'id_producto', 'sku_producto', 'nombre', 'cantidad_actual',
-            'cantidad_minima', 'cantidad_total', 'precio_compra_unitario', 'precio_final'
+            'cantidad_minima', 'cantidad_total', 'precio_compra_unitario', 'precio_final',
+            'id_proveedor', 'proveedor_nombre'
         ]
 
 
@@ -93,7 +99,7 @@ class ProductoCreateSerializer(serializers.ModelSerializer):
         model = Producto
         fields = [
             'sku_producto', 'nombre', 'cantidad_actual', 'cantidad_minima',
-            'cantidad_total', 'precio_compra_unitario', 'precio_final'
+            'cantidad_total', 'precio_compra_unitario', 'precio_final', 'id_proveedor'
         ]
 
 

@@ -1,0 +1,171 @@
+====================================================================
+EXPLICACIÓN DE MIGRACIÓN: sp_MedirRendimientoNorthwind
+De SQL Server a PostgreSQL
+====================================================================
+
+DESCRIPCIÓN GENERAL
+
+Al ser un procedimiento diseñado para SQL Server, tuvimos que migrarlo a PostgreSQL, 
+convirtiendo el procedimiento en una FUNCIÓN (FUNCTION) ya que PostgreSQL maneja la lógica
+procedural con funciones de tipo VOID escritas en PL/pgSQL. El procedimiento consulta estado
+general, espacio, procesos activos, bloqueos, rendimiento de índices y consultas costosas.
+
+
+
+====================================================================
+CÓMO SE EJECUTA EL CÓDIGO PASO A PASO
+====================================================================
+
+BLOQUE INICIAL - Declaración de variables
+--------------------------------------------------------------------
+Se declaran tres variables locales:
+  - v_db_name  : almacena el nombre de la base de datos actual.
+  - v_db_size  : almacena el tamaño formateado de la base de datos.
+  - v_now      : almacena la fecha y hora actual como texto.
+
+Estas variables se inicializan con funciones nativas de PostgreSQL
+antes de comenzar el reporte.
+
+--------------------------------------------------------------------
+SECCIÓN 1 - Estado general de la base de datos
+--------------------------------------------------------------------
+Se consulta la vista pg_database para obtener el nombre, codificación,
+collation y tamaño de la base de datos actual. El resultado se imprime
+como un único mensaje con RAISE NOTICE usando la función format().
+
+--------------------------------------------------------------------
+SECCIÓN 2 - Uso de espacio por tabla
+--------------------------------------------------------------------
+Se consulta pg_class filtrando solo tablas del esquema 'public'
+(relkind = 'r'). Para cada tabla se calcula:
+  - Tamaño total (tabla + índices + TOAST)    → pg_total_relation_size()
+  - Tamaño de la tabla sola                   → pg_relation_size()
+  - Tamaño de los índices                     → pg_indexes_size()
+
+Se muestran las 10 tablas más grandes ordenadas por tamaño total.
+
+--------------------------------------------------------------------
+SECCIÓN 3 - Procesos activos
+--------------------------------------------------------------------
+Se consulta pg_stat_activity, que muestra todas las sesiones abiertas
+en el servidor. Se filtran las sesiones de la base de datos actual,
+excluyendo la sesión propia (pg_backend_pid()). Por cada proceso se
+muestra: PID, estado, duración de la consulta, tipo de espera y
+el texto de la consulta (truncado a 60 caracteres).
+
+--------------------------------------------------------------------
+SECCIÓN 4 - Bloqueos detectados
+--------------------------------------------------------------------
+Se realiza un JOIN entre pg_locks y pg_stat_activity para identificar
+situaciones de bloqueo entre sesiones. La lógica es:
+  1. Se toma un registro de pg_locks donde el bloqueo NO fue otorgado
+     (NOT granted) → ese es el proceso bloqueado.
+  2. Se busca otro registro de pg_locks con los mismos recursos pero
+     con granted = true → ese es el proceso bloqueador.
+  3. Se une con pg_class para obtener el nombre de la relación (tabla).
+
+Si no hay bloqueos, se muestra el mensaje "Sin bloqueos detectados".
+
+--------------------------------------------------------------------
+SECCIÓN 5 - Rendimiento de índices
+--------------------------------------------------------------------
+Se consulta pg_stat_user_indexes junto con pg_stat_user_tables.
+Por cada índice se muestra:
+  - idx_scan      : veces que se usó el índice para búsquedas.
+  - idx_tup_read  : filas leídas a través del índice (escaneos).
+  - idx_tup_fetch : filas recuperadas por acceso al heap (lookups).
+  - Escrituras    : suma de inserciones + actualizaciones + eliminaciones
+                    de la tabla correspondiente.
+
+Se muestran los 20 índices más utilizados.
+
+--------------------------------------------------------------------
+SECCIÓN 6 - Consultas más costosas
+--------------------------------------------------------------------
+Se consulta la extensión pg_stat_statements, que registra estadísticas
+acumuladas de todas las consultas ejecutadas en el servidor. Se ordenan
+por tiempo promedio de ejecución (mean_exec_time) descendente y se
+muestran las 5 más costosas con: tiempo promedio, cantidad de
+ejecuciones y texto de la consulta.
+
+IMPORTANTE: Esta sección requiere que la extensión esté habilitada:
+  CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+Si no está disponible, se muestra un mensaje informativo y la función
+continúa sin interrumpirse.
+
+
+====================================================================
+CAMBIOS REALIZADOS PARA EJECUTAR EN POSTGRESQL
+====================================================================
+
++---------------------------+----------------------------------------+
+| Elemento SQL Server       | Equivalente en PostgreSQL              |
++---------------------------+----------------------------------------+
+| CREATE PROCEDURE          | CREATE OR REPLACE FUNCTION ... VOID    |
+| SET NOCOUNT ON            | No existe / no es necesario            |
+| PRINT '...'               | RAISE NOTICE '...'                     |
+| GETDATE()                 | now() / current_timestamp              |
+| CONVERT(VARCHAR, fecha)   | to_char(fecha, 'YYYY-MM-DD HH24:MI:SS')|
+| DB_NAME()                 | current_database()                     |
+| DB_ID('nombre')           | oid en pg_database                     |
+| sys.databases             | pg_database                            |
+| state_desc / recovery_... | encoding, datcollate (pg_database)     |
+| EXEC sp_spaceused         | pg_size_pretty() + pg_class            |
+| sys.dm_exec_requests      | pg_stat_activity                       |
+| sys.dm_tran_locks         | pg_locks JOIN pg_stat_activity         |
+| sys.dm_db_index_usage_... | pg_stat_user_indexes                   |
+| sys.dm_exec_query_stats   | pg_stat_statements (extensión)         |
+| OBJECT_NAME(id)           | relname desde pg_class                 |
+| SELECT TOP N              | SELECT ... LIMIT N                     |
++---------------------------+----------------------------------------+
+
+DIFERENCIAS CONCEPTUALES IMPORTANTES
+--------------------------------------------------------------------
+1. PROCEDURE vs FUNCTION:
+   SQL Server usa CREATE PROCEDURE sin valor de retorno explícito.
+   PostgreSQL usa CREATE FUNCTION con RETURNS VOID para el mismo efecto.
+   La llamada cambia de EXEC sp_nombre a SELECT sp_nombre().
+
+2. RAISE NOTICE vs PRINT:
+   PRINT en SQL Server envía texto directamente al cliente.
+   RAISE NOTICE en PostgreSQL envía mensajes al log del servidor y al
+   cliente (visible en psql). El nivel NOTICE no interrumpe la ejecución.
+
+3. Vistas de sistema vs DMVs:
+   SQL Server expone el estado interno mediante Dynamic Management Views
+   (DMV) con prefijo sys.dm_*. PostgreSQL usa vistas del catálogo con
+   prefijo pg_stat_* que son equivalentes funcionales pero con diferente
+   estructura y nombres de columnas.
+
+4. pg_stat_statements (extensión):
+   La sección de consultas costosas en SQL Server usa una DMV nativa.
+   En PostgreSQL esta funcionalidad es una extensión opcional que debe
+   activarse explícitamente en postgresql.conf y con CREATE EXTENSION.
+
+5. Modelo de recuperación:
+   SQL Server tiene modos SIMPLE / FULL / BULK_LOGGED.
+   PostgreSQL no tiene este concepto de la misma forma; el WAL (Write
+   Ahead Log) siempre está activo. Por eso esa columna fue reemplazada
+   por información de codificación y collation.
+
+====================================================================
+CÓMO EJECUTAR LA FUNCIÓN
+====================================================================
+
+-- Paso 1: Habilitar la extensión (requiere superusuario, solo una vez)
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+-- Paso 2: Crear la función
+-- (ejecutar el script de creación de la función)
+
+-- Paso 3: Llamar a la función
+SELECT sp_medir_rendimiento_northwind();
+
+-- Paso 4: Ver los mensajes NOTICE en psql
+-- Los mensajes aparecen automáticamente en psql.
+-- En otras herramientas (DBeaver, pgAdmin) revisar la pestaña
+-- de mensajes o log del servidor.
+
+====================================================================
+Fin del documento
+====================================================================
