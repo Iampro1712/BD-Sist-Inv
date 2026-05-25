@@ -14,6 +14,7 @@ import SearchBar from '../components/forms/SearchBar'
 import OrdenCompraForm from '../components/forms/OrdenCompraForm'
 import OrdenCompraDetalle from '../components/ordenes/OrdenCompraDetalle'
 import Modal from '../components/ui/Modal'
+import ProveedorLogo from '../components/ui/ProveedorLogo'
 import { Button, Badge, Loader, Card } from '../components/ui'
 import { fadeIn, staggerContainer } from '../utils/animations'
 
@@ -300,7 +301,10 @@ const OrdenesCompra = () => {
                       {orden.id_orden}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                      {orden.proveedor_nombre}
+                      <div className="flex items-center gap-3">
+                        <ProveedorLogo nombreEmpresa={orden.proveedor_nombre} size="small" />
+                        <span>{orden.proveedor_nombre}</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {formatDate(orden.fecha_creacion)}

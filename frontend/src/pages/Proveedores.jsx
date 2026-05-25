@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useProveedores, useCreateProveedor, useUpdateProveedor, useDeleteProveedor, useProveedor, useProveedorProductos, useProveedorOrdenes } from '../hooks/useProveedores'
 import { useDebounce } from '../hooks/useDebounce'
@@ -9,6 +8,7 @@ import ProveedorForm from '../components/forms/ProveedorForm'
 import ProveedorDetalle from '../components/proveedores/ProveedorDetalle'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import ProveedorLogo from '../components/ui/ProveedorLogo'
 import { Button, Loader, Card } from '../components/ui'
 import { fadeIn, staggerContainer } from '../utils/animations'
 
@@ -177,17 +177,22 @@ const Proveedores = () => {
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                      {proveedor.nombre_empresa}
-                    </h3>
-                    {proveedor.persona_contacto && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        <svg className="inline w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        {proveedor.persona_contacto}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-3 mb-2">
+                      <ProveedorLogo nombreEmpresa={proveedor.nombre_empresa} />
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                          {proveedor.nombre_empresa}
+                        </h3>
+                        {proveedor.persona_contacto && (
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <svg className="inline w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {proveedor.persona_contacto}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

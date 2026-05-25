@@ -6,6 +6,12 @@ import ExcelJS from 'exceljs'
  * Utilidades para exportar reportes a diferentes formatos
  */
 
+// Datos del negocio
+const NEGOCIO = {
+  nombre: 'JC Motoshop',
+  ruc: '0814198500023-4',
+}
+
 // Formatear moneda
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('es-NI', {
@@ -80,6 +86,24 @@ const _descargarWorkbook = async (wb, filename) => {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * Helper interno: Escribe encabezado del negocio (nombre + RUC) en un doc jsPDF.
+ * Retorna la coordenada Y donde termina el encabezado para continuar debajo.
+ * @param {jsPDF} doc
+ * @returns {number} Y de inicio del contenido posterior
+ */
+const _encabezadoPDF = (doc) => {
+  doc.setFontSize(14)
+  doc.setFont(undefined, 'bold')
+  doc.text(NEGOCIO.nombre, 14, 14)
+  doc.setFont(undefined, 'normal')
+  doc.setFontSize(9)
+  doc.text(`RUC: ${NEGOCIO.ruc}`, 14, 20)
+  doc.setLineWidth(0.3)
+  doc.line(14, 23, 196, 23)
+  return 28
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORTACIONES A PDF
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,25 +113,24 @@ const _descargarWorkbook = async (wb, filename) => {
  */
 export const exportarInventarioPDF = (reporte) => {
   const doc = new jsPDF()
+  let y = _encabezadoPDF(doc)
 
-  // Título
-  doc.setFontSize(18)
-  doc.text('Reporte de Inventario', 14, 20)
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Reporte de Inventario', 14, y + 6)
+  doc.setFont(undefined, 'normal')
 
-  // Fecha
   doc.setFontSize(10)
-  doc.text(`Fecha: ${formatDate()}`, 14, 28)
+  doc.text(`Fecha: ${formatDate()}`, 14, y + 14)
 
-  // Resumen
   doc.setFontSize(12)
-  doc.text('Resumen', 14, 38)
+  doc.text('Resumen', 14, y + 24)
   doc.setFontSize(10)
-  doc.text(`Total Productos: ${reporte.total_productos}`, 14, 45)
-  doc.text(`Valor Total: ${formatCurrency(reporte.valor_total)}`, 14, 52)
-  doc.text(`Productos con Stock Bajo: ${reporte.productos_stock_bajo}`, 14, 59)
-  doc.text(`Productos Sin Stock: ${reporte.productos_sin_stock}`, 14, 66)
+  doc.text(`Total Productos: ${reporte.total_productos}`, 14, y + 31)
+  doc.text(`Valor Total: ${formatCurrency(reporte.valor_total)}`, 14, y + 38)
+  doc.text(`Productos con Stock Bajo: ${reporte.productos_stock_bajo}`, 14, y + 45)
+  doc.text(`Productos Sin Stock: ${reporte.productos_sin_stock}`, 14, y + 52)
 
-  // Tabla de productos
   const tableData = reporte.productos?.map((p) => [
     p.codigo,
     p.nombre,
@@ -117,7 +140,7 @@ export const exportarInventarioPDF = (reporte) => {
   ])
 
   autoTable(doc, {
-    startY: 75,
+    startY: y + 60,
     head: [['Código', 'Producto', 'Stock', 'Precio', 'Valor']],
     body: tableData,
     theme: 'grid',
@@ -133,25 +156,24 @@ export const exportarInventarioPDF = (reporte) => {
  */
 export const exportarVentasPDF = (reporte, filtros) => {
   const doc = new jsPDF()
+  let y = _encabezadoPDF(doc)
 
-  // Título
-  doc.setFontSize(18)
-  doc.text('Reporte de Ventas', 14, 20)
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Reporte de Ventas', 14, y + 6)
+  doc.setFont(undefined, 'normal')
 
-  // Fecha y filtros
   doc.setFontSize(10)
-  doc.text(`Fecha: ${formatDate()}`, 14, 28)
-  doc.text(`Período: ${filtros.fecha_inicio} a ${filtros.fecha_fin}`, 14, 35)
+  doc.text(`Fecha: ${formatDate()}`, 14, y + 14)
+  doc.text(`Período: ${filtros.fecha_inicio} a ${filtros.fecha_fin}`, 14, y + 21)
 
-  // Resumen
   doc.setFontSize(12)
-  doc.text('Resumen', 14, 45)
+  doc.text('Resumen', 14, y + 31)
   doc.setFontSize(10)
-  doc.text(`Total Ventas: ${formatCurrency(reporte.total_ventas)}`, 14, 52)
-  doc.text(`Número de Órdenes: ${reporte.numero_ordenes}`, 14, 59)
-  doc.text(`Ticket Promedio: ${formatCurrency(reporte.ticket_promedio)}`, 14, 66)
+  doc.text(`Total Ventas: ${formatCurrency(reporte.total_ventas)}`, 14, y + 38)
+  doc.text(`Número de Órdenes: ${reporte.numero_ordenes}`, 14, y + 45)
+  doc.text(`Ticket Promedio: ${formatCurrency(reporte.ticket_promedio)}`, 14, y + 52)
 
-  // Tabla de órdenes
   const tableData = reporte.ordenes?.map((o) => [
     o.numero_orden,
     o.cliente,
@@ -161,7 +183,7 @@ export const exportarVentasPDF = (reporte, filtros) => {
   ])
 
   autoTable(doc, {
-    startY: 75,
+    startY: y + 60,
     head: [['Orden', 'Cliente', 'Fecha', 'Total', 'Estado']],
     body: tableData,
     theme: 'grid',
@@ -177,25 +199,24 @@ export const exportarVentasPDF = (reporte, filtros) => {
  */
 export const exportarComprasPDF = (reporte, filtros) => {
   const doc = new jsPDF()
+  let y = _encabezadoPDF(doc)
 
-  // Título
-  doc.setFontSize(18)
-  doc.text('Reporte de Compras', 14, 20)
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Reporte de Compras', 14, y + 6)
+  doc.setFont(undefined, 'normal')
 
-  // Fecha y filtros
   doc.setFontSize(10)
-  doc.text(`Fecha: ${formatDate()}`, 14, 28)
-  doc.text(`Período: ${filtros.fecha_inicio} a ${filtros.fecha_fin}`, 14, 35)
+  doc.text(`Fecha: ${formatDate()}`, 14, y + 14)
+  doc.text(`Período: ${filtros.fecha_inicio} a ${filtros.fecha_fin}`, 14, y + 21)
 
-  // Resumen
   doc.setFontSize(12)
-  doc.text('Resumen', 14, 45)
+  doc.text('Resumen', 14, y + 31)
   doc.setFontSize(10)
-  doc.text(`Total Compras: ${formatCurrency(reporte.total_compras)}`, 14, 52)
-  doc.text(`Número de Órdenes: ${reporte.numero_ordenes}`, 14, 59)
-  doc.text(`Compra Promedio: ${formatCurrency(reporte.compra_promedio)}`, 14, 66)
+  doc.text(`Total Compras: ${formatCurrency(reporte.total_compras)}`, 14, y + 38)
+  doc.text(`Número de Órdenes: ${reporte.numero_ordenes}`, 14, y + 45)
+  doc.text(`Compra Promedio: ${formatCurrency(reporte.compra_promedio)}`, 14, y + 52)
 
-  // Tabla de órdenes
   const tableData = reporte.ordenes?.map((o) => [
     o.numero_orden,
     o.proveedor,
@@ -205,7 +226,7 @@ export const exportarComprasPDF = (reporte, filtros) => {
   ])
 
   autoTable(doc, {
-    startY: 75,
+    startY: y + 60,
     head: [['Orden', 'Proveedor', 'Fecha', 'Total', 'Estado']],
     body: tableData,
     theme: 'grid',
@@ -221,17 +242,17 @@ export const exportarComprasPDF = (reporte, filtros) => {
  */
 export const exportarProductosPDF = (productos, filtros) => {
   const doc = new jsPDF()
+  let y = _encabezadoPDF(doc)
 
-  // Título
-  doc.setFontSize(18)
-  doc.text('Productos Más Vendidos', 14, 20)
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Productos Más Vendidos', 14, y + 6)
+  doc.setFont(undefined, 'normal')
 
-  // Fecha y filtros
   doc.setFontSize(10)
-  doc.text(`Fecha: ${formatDate()}`, 14, 28)
-  doc.text(`Período: ${filtros.fecha_inicio} a ${filtros.fecha_fin}`, 14, 35)
+  doc.text(`Fecha: ${formatDate()}`, 14, y + 14)
+  doc.text(`Período: ${filtros.fecha_inicio} a ${filtros.fecha_fin}`, 14, y + 21)
 
-  // Tabla de productos
   const tableData = productos?.map((p, index) => [
     `#${index + 1}`,
     p.producto,
@@ -240,7 +261,7 @@ export const exportarProductosPDF = (productos, filtros) => {
   ])
 
   autoTable(doc, {
-    startY: 45,
+    startY: y + 30,
     head: [['Posición', 'Producto', 'Cantidad Vendida', 'Total Ventas']],
     body: tableData,
     theme: 'grid',
@@ -256,13 +277,37 @@ export const exportarProductosPDF = (productos, filtros) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Helper interno: Inserta dos filas de encabezado del negocio en una hoja ExcelJS
+ * y retorna el número de fila donde deben comenzar los datos (después del encabezado).
+ * @param {ExcelJS.Worksheet} ws
+ * @param {number} numCols - Cantidad de columnas para hacer merge
+ * @returns {number} Índice de fila de inicio de datos
+ */
+const _encabezadoExcel = (ws, numCols) => {
+  const lastCol = String.fromCharCode(64 + numCols)
+
+  const rowNombre = ws.insertRow(1, [NEGOCIO.nombre])
+  ws.mergeCells(`A1:${lastCol}1`)
+  rowNombre.getCell(1).font = { bold: true, size: 14 }
+  rowNombre.getCell(1).alignment = { horizontal: 'left' }
+
+  const rowRuc = ws.insertRow(2, [`RUC: ${NEGOCIO.ruc}`])
+  ws.mergeCells(`A2:${lastCol}2`)
+  rowRuc.getCell(1).font = { size: 10 }
+  rowRuc.getCell(1).alignment = { horizontal: 'left' }
+
+  ws.insertRow(3, [])
+
+  return 4
+}
+
+/**
  * Exportar reporte de inventario a Excel
  */
 export const exportarInventarioCSV = async (reporte) => {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Inventario')
 
-  // Definir columnas con anchos
   ws.columns = [
     { header: 'Código',        key: 'Código',        width: 14 },
     { header: 'Producto',      key: 'Producto',      width: 32 },
@@ -272,10 +317,9 @@ export const exportarInventarioCSV = async (reporte) => {
     { header: 'Valor Stock',   key: 'Valor Stock',   width: 18 },
   ]
 
-  // Estilo del encabezado (azul primario)
-  _estilarEncabezado(ws.getRow(1), '3B82F6')
+  _encabezadoExcel(ws, 6)
+  _estilarEncabezado(ws.getRow(4), '3B82F6')
 
-  // Agregar filas de datos
   reporte.productos?.forEach((p) => {
     const row = ws.addRow({
       'Código':       p.codigo,
@@ -306,8 +350,8 @@ export const exportarVentasCSV = async (reporte) => {
     { header: 'Estado',  key: 'Estado',  width: 14 },
   ]
 
-  // Estilo del encabezado (verde)
-  _estilarEncabezado(ws.getRow(1), '10B981')
+  _encabezadoExcel(ws, 5)
+  _estilarEncabezado(ws.getRow(4), '10B981')
 
   reporte.ordenes?.forEach((o) => {
     const row = ws.addRow({
@@ -338,8 +382,8 @@ export const exportarComprasCSV = async (reporte) => {
     { header: 'Estado',    key: 'Estado',    width: 14 },
   ]
 
-  // Estilo del encabezado (azul primario)
-  _estilarEncabezado(ws.getRow(1), '3B82F6')
+  _encabezadoExcel(ws, 5)
+  _estilarEncabezado(ws.getRow(4), '3B82F6')
 
   reporte.ordenes?.forEach((o) => {
     const row = ws.addRow({
@@ -369,8 +413,8 @@ export const exportarProductosCSV = async (productos) => {
     { header: 'Total Ventas',    key: 'Total Ventas',    width: 20 },
   ]
 
-  // Estilo del encabezado (violeta secundario)
-  _estilarEncabezado(ws.getRow(1), '8B5CF6')
+  _encabezadoExcel(ws, 4)
+  _estilarEncabezado(ws.getRow(4), '8B5CF6')
 
   productos?.forEach((p, index) => {
     const row = ws.addRow({

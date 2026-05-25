@@ -67,6 +67,14 @@ class Producto(models.Model):
     cantidad_minima = models.IntegerField(default=0)
     precio_compra_unitario = models.IntegerField()
     precio_final = models.DecimalField(max_digits=10, decimal_places=2)
+    id_proveedor = models.ForeignKey(
+        Proveedor,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='productos',
+        db_column='id_proveedor'
+    )
 
     class Meta:
         managed = False  # No modificar la tabla existente

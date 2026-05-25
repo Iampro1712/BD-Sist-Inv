@@ -1,0 +1,501 @@
+================================================================================
+         INVENTRIX - DOCUMENTO DE REQUERIMIENTOS DEL SISTEMA
+         Sistema de Gestión de Inventario, Ventas y Servicios
+================================================================================
+Versión: 1.0
+Fecha: 2026-05-18
+Proyecto: Inventrix
+Repositorio: inventrix-db
+================================================================================
+
+
+================================================================================
+1. DESCRIPCIÓN GENERAL DEL SISTEMA
+================================================================================
+
+Inventrix es un sistema web de gestión empresarial orientado a pequeñas y
+medianas empresas, con enfoque especial en talleres de motos y negocios de
+venta minorista en América Latina (Nicaragua). El sistema integra control de
+inventario, gestión de ventas y compras, relaciones con clientes y proveedores,
+y un sistema especializado de bitácora de servicios para motos con soporte
+fotográfico en la nube.
+
+Tecnologías principales:
+  - Backend:  Django 6.0 + Django REST Framework + PostgreSQL 16
+  - Frontend: React 19 + Vite 7 + TailwindCSS 4 + React Query + Zustand
+  - Storage:  Cloudflare R2 (compatible con S3) para almacenamiento de imágenes
+  - Deploy:   Docker / Vercel (frontend) / Gunicorn (backend)
+
+
+================================================================================
+2. REQUERIMIENTOS FUNCIONALES
+================================================================================
+
+------------------------------------------------------------------------
+RF-01: GESTIÓN DE PRODUCTOS
+------------------------------------------------------------------------
+RF-01.1  El sistema debe permitir crear, editar, visualizar y eliminar productos.
+RF-01.2  Cada producto debe tener: SKU único, nombre, descripción, precio de
+         costo, precio de venta, stock actual, stock mínimo, stock total,
+         categoría, marca, proveedor e imagen.
+RF-01.3  El sistema debe generar alertas visuales cuando el stock de un producto
+         caiga por debajo del stock mínimo definido.
+RF-01.4  El sistema debe permitir buscar productos por SKU, nombre u otros campos.
+RF-01.5  El sistema debe permitir filtrar productos por categoría, marca,
+         proveedor y estado de stock.
+RF-01.6  El sistema debe calcular y mostrar el margen de ganancia de cada producto.
+RF-01.7  El sistema debe permitir exportar el listado de productos en formato
+         PDF y Excel.
+RF-01.8  El sistema debe registrar automáticamente todos los cambios realizados
+         a un producto en un log de auditoría mediante triggers de base de datos.
+RF-01.9  El sistema debe soportar carga y almacenamiento de imágenes de productos
+         en Cloudflare R2.
+RF-01.10 El sistema debe exponer un filtro de productos con bajo stock en la API.
+
+------------------------------------------------------------------------
+RF-02: GESTIÓN DE CATEGORÍAS
+------------------------------------------------------------------------
+RF-02.1  El sistema debe permitir crear, editar y eliminar categorías de productos.
+RF-02.2  Cada producto debe poder pertenecer a una categoría.
+RF-02.3  El sistema debe mostrar el listado completo de categorías disponibles.
+
+------------------------------------------------------------------------
+RF-03: GESTIÓN DE MARCAS
+------------------------------------------------------------------------
+RF-03.1  El sistema debe permitir crear, editar y eliminar marcas.
+RF-03.2  Cada producto debe poder estar asociado a una marca.
+
+------------------------------------------------------------------------
+RF-04: GESTIÓN DE PROVEEDORES
+------------------------------------------------------------------------
+RF-04.1  El sistema debe permitir crear, editar, visualizar y eliminar proveedores.
+RF-04.2  Cada proveedor debe tener: nombre de empresa, persona de contacto,
+         teléfono, correo electrónico y dirección.
+RF-04.3  El sistema debe mostrar el historial de órdenes de compra asociadas
+         a cada proveedor.
+RF-04.4  El sistema debe mostrar análisis de costos y evaluación de desempeño
+         por proveedor.
+RF-04.5  El sistema debe permitir asociar múltiples productos a un proveedor.
+
+------------------------------------------------------------------------
+RF-05: GESTIÓN DE CLIENTES
+------------------------------------------------------------------------
+RF-05.1  El sistema debe permitir crear, editar, visualizar y eliminar clientes.
+RF-05.2  Cada cliente debe tener: nombre, teléfono, correo electrónico y dirección.
+RF-05.3  El sistema debe mostrar el historial de órdenes de venta por cliente.
+RF-05.4  El sistema debe permitir registrar motos asociadas a cada cliente.
+RF-05.5  El sistema debe mostrar el historial de servicios realizados a las
+         motos de cada cliente.
+RF-05.6  El teléfono debe validarse con un mínimo de 8 dígitos y formatearse
+         automáticamente en formato XXXX-XXXX, detectando y eliminando el
+         prefijo de país (+505).
+
+------------------------------------------------------------------------
+RF-06: GESTIÓN DE MOTOS
+------------------------------------------------------------------------
+RF-06.1  El sistema debe permitir registrar motos con: marca, modelo, año y
+         placa de circulación.
+RF-06.2  Cada moto debe estar asociada a un cliente propietario.
+RF-06.3  El sistema debe mostrar el historial completo de servicios por moto.
+RF-06.4  El sistema debe permitir filtrar motos por cliente.
+
+------------------------------------------------------------------------
+RF-07: GESTIÓN DE SERVICIOS (CATÁLOGO)
+------------------------------------------------------------------------
+RF-07.1  El sistema debe mantener un catálogo de servicios estándar con nombre
+         y precio de mano de obra predefinido.
+RF-07.2  El catálogo debe estar disponible como referencia al crear servicios
+         para motos.
+
+------------------------------------------------------------------------
+RF-08: SERVICIOS DE MOTO
+------------------------------------------------------------------------
+RF-08.1  El sistema debe permitir registrar servicios realizados a una moto,
+         incluyendo: tipo de servicio, costo, descripción y fecha.
+RF-08.2  Cada servicio debe estar asociado a una moto y a un cliente.
+RF-08.3  El sistema debe permitir filtrar servicios por moto.
+
+------------------------------------------------------------------------
+RF-09: BITÁCORA DE SERVICIOS (4 MÓDULOS)
+------------------------------------------------------------------------
+RF-09.1  El sistema debe gestionar una bitácora de servicio con 4 etapas
+         secuenciales: Recepción, Diagnóstico, Reparación y Entrega.
+RF-09.2  Cada etapa debe permitir: notas detalladas, nombre del técnico
+         responsable y carga de múltiples fotografías.
+RF-09.3  Las fotografías deben almacenarse en Cloudflare R2 y referenciarse
+         mediante URLs en un array JSONB en la base de datos.
+RF-09.4  La etapa de Recepción debe documentar: estado inicial, nivel de
+         combustible y daños preexistentes.
+RF-09.5  La etapa de Diagnóstico debe documentar: problemas identificados
+         con evidencia fotográfica.
+RF-09.6  La etapa de Reparación debe documentar: trabajos realizados,
+         técnico responsable y fotos de progreso.
+RF-09.7  La etapa de Entrega debe incluir: checklist de finalización y
+         confirmación de entrega al cliente.
+RF-09.8  El sistema debe exponer una vista combinada de servicio + bitácora.
+
+------------------------------------------------------------------------
+RF-10: ÓRDENES DE COMPRA
+------------------------------------------------------------------------
+RF-10.1  El sistema debe permitir crear órdenes de compra con múltiples
+         productos, asociadas a un proveedor.
+RF-10.2  Cada orden debe gestionar su estado: Pendiente, Recibida o Cancelada.
+RF-10.3  Al marcar una orden como Recibida, el sistema debe incrementar
+         automáticamente el stock de los productos involucrados.
+RF-10.4  El sistema debe calcular automáticamente subtotales, impuestos y
+         totales de cada orden.
+RF-10.5  El sistema debe permitir exportar órdenes de compra en PDF y Excel.
+RF-10.6  El sistema debe permitir agregar múltiples ítems (líneas de detalle)
+         a cada orden, con cantidad y precio unitario por ítem.
+
+------------------------------------------------------------------------
+RF-11: ÓRDENES DE VENTA
+------------------------------------------------------------------------
+RF-11.1  El sistema debe permitir crear órdenes de venta con múltiples
+         productos, asociadas a un cliente.
+RF-11.2  Al registrar una venta, el sistema debe decrementar automáticamente
+         el stock de los productos vendidos.
+RF-11.3  El sistema debe calcular automáticamente subtotales y totales,
+         soportando descuentos.
+RF-11.4  El sistema debe validar que la fecha de venta no sea una fecha futura.
+RF-11.5  El sistema debe mantener el historial de ventas por cliente.
+RF-11.6  El sistema debe prevenir ventas cuando el stock disponible sea
+         insuficiente para cubrir la cantidad solicitada.
+
+------------------------------------------------------------------------
+RF-12: MOVIMIENTOS DE INVENTARIO
+------------------------------------------------------------------------
+RF-12.1  El sistema debe registrar automáticamente un movimiento de inventario
+         ante cada cambio de stock: entrada, salida o ajuste.
+RF-12.2  Cada movimiento debe registrar: producto, tipo, cantidad, referencia
+         (orden de compra, orden de venta, ajuste manual) y notas.
+RF-12.3  El sistema debe permitir realizar ajustes manuales de inventario
+         mediante un endpoint dedicado.
+RF-12.4  El sistema debe permitir búsqueda y filtrado de movimientos por
+         producto, tipo y rango de fecha.
+RF-12.5  El historial de movimientos debe ser de solo consulta (no editable
+         una vez registrado).
+
+------------------------------------------------------------------------
+RF-13: REPORTES
+------------------------------------------------------------------------
+RF-13.1  El sistema debe generar un reporte de inventario con: estado actual,
+         valorización total, distribución por categoría y alertas de bajo stock.
+RF-13.2  El sistema debe generar un reporte de ventas filtrable por rango de
+         fechas, incluyendo: ventas por cliente, ticket promedio y tendencias.
+RF-13.3  El sistema debe generar un reporte de compras filtrable por rango de
+         fechas, incluyendo: compras por proveedor y análisis de costos.
+RF-13.4  El sistema debe generar un reporte de productos más vendidos
+         (top products) filtrable por período.
+RF-13.5  El sistema debe validar rangos de fechas en reportes: la fecha de
+         inicio debe ser menor o igual a la fecha de fin, y ninguna fecha
+         puede ser futura.
+RF-13.6  El sistema debe permitir exportar todos los reportes en PDF y Excel
+         con formato profesional.
+
+------------------------------------------------------------------------
+RF-14: AUDITORÍA DE PRODUCTOS
+------------------------------------------------------------------------
+RF-14.1  El sistema debe registrar automáticamente, mediante triggers de base
+         de datos, cada modificación realizada a un producto.
+RF-14.2  Cada registro de auditoría debe capturar: campo modificado, valor
+         anterior (JSON), valor nuevo (JSON), usuario responsable y timestamp.
+RF-14.3  El sistema debe exponer una página de "Logs de Auditoría" donde se
+         pueda visualizar el historial completo de cambios a productos.
+
+------------------------------------------------------------------------
+RF-15: BÚSQUEDA GLOBAL
+------------------------------------------------------------------------
+RF-15.1  El sistema debe ofrecer un buscador global que permita encontrar
+         productos, clientes y proveedores en tiempo real desde cualquier
+         página de la aplicación.
+RF-15.2  La búsqueda global debe activarse con el atajo de teclado Ctrl+/ o
+         Cmd+/ y debe permitir navegar directamente a la página del resultado.
+RF-15.3  La búsqueda debe implementar debounce para optimizar las solicitudes
+         al servidor.
+
+------------------------------------------------------------------------
+RF-16: DASHBOARD
+------------------------------------------------------------------------
+RF-16.1  El dashboard debe mostrar métricas en tiempo real: total de productos,
+         clientes, proveedores y órdenes activas.
+RF-16.2  El dashboard debe listar los productos con stock bajo.
+RF-16.3  El dashboard debe incluir accesos rápidos a las operaciones más
+         frecuentes del sistema.
+RF-16.4  El dashboard debe mostrar un saludo personalizado con fecha y hora
+         actuales.
+
+------------------------------------------------------------------------
+RF-17: PAGINACIÓN, FILTRADO Y ORDENAMIENTO
+------------------------------------------------------------------------
+RF-17.1  Todos los listados de recursos deben soportar paginación configurable
+         (por defecto 20 ítems por página).
+RF-17.2  Los listados deben soportar filtrado por los campos relevantes de cada
+         entidad (categoría, marca, proveedor, estado, etc.).
+RF-17.3  Los listados deben soportar ordenamiento por nombre, fecha, precio y
+         cantidad mediante parámetros en la API.
+
+
+================================================================================
+3. REQUERIMIENTOS NO FUNCIONALES
+================================================================================
+
+------------------------------------------------------------------------
+RNF-01: RENDIMIENTO
+------------------------------------------------------------------------
+RNF-01.1 El tiempo de respuesta de la API para operaciones CRUD estándar no
+         debe superar los 500 ms bajo carga normal.
+RNF-01.2 El frontend debe implementar code splitting y lazy loading para que
+         el tiempo de carga inicial no supere los 3 segundos en conexión estándar.
+RNF-01.3 Las consultas de reportes con grandes volúmenes de datos deben completarse
+         en menos de 5 segundos.
+RNF-01.4 Se debe implementar debounce en la búsqueda global para evitar solicitudes
+         innecesarias al servidor.
+RNF-01.5 El sistema debe usar React Query para cachear respuestas del servidor y
+         reducir llamadas redundantes a la API.
+RNF-01.6 Las imágenes subidas deben optimizarse antes del almacenamiento y
+         servirse desde CDN (Cloudflare R2).
+
+------------------------------------------------------------------------
+RNF-02: SEGURIDAD
+------------------------------------------------------------------------
+RNF-02.1 Todos los secretos del sistema (claves de base de datos, credenciales
+         de R2, tokens) deben gestionarse mediante variables de entorno y no
+         deben estar en el código fuente.
+RNF-02.2 El sistema debe configurar CORS restringido a los dominios autorizados
+         en producción.
+RNF-02.3 Todos los datos de entrada del usuario deben ser validados y sanitizados
+         mediante los serializers de Django REST Framework para prevenir
+         inyección SQL y otros ataques.
+RNF-02.4 El modo DEBUG de Django debe estar deshabilitado en producción.
+RNF-02.5 Las contraseñas y datos sensibles nunca deben loguearse ni exponerse
+         en respuestas de la API.
+RNF-02.6 El sistema debe proteger contra XSS mediante el manejo seguro de
+         contenido dinámico en React.
+RNF-02.7 Los endpoints de la API deben requerir autenticación para operaciones
+         de escritura (cuando se implemente autenticación).
+
+------------------------------------------------------------------------
+RNF-03: DISPONIBILIDAD Y CONFIABILIDAD
+------------------------------------------------------------------------
+RNF-03.1 El sistema debe garantizar consistencia transaccional: las operaciones
+         que afectan múltiples tablas (e.g., recibir una orden actualiza stock
+         y crea movimiento) deben ejecutarse dentro de una transacción atómica.
+RNF-03.2 Las operaciones de eliminación deben gestionar correctamente las
+         restricciones de clave foránea y notificar al usuario cuando no sea
+         posible eliminar un registro con dependencias activas.
+RNF-03.3 El sistema debe implementar manejo centralizado de errores mediante
+         middleware en el backend y manejo de excepciones en el frontend.
+RNF-03.4 El sistema debe mostrar notificaciones toast al usuario ante éxitos
+         y errores en operaciones críticas.
+
+------------------------------------------------------------------------
+RNF-04: ESCALABILIDAD
+------------------------------------------------------------------------
+RNF-04.1 La arquitectura debe soportar la adición de nuevos módulos sin
+         refactorización mayor de los existentes.
+RNF-04.2 El backend debe estar preparado para escalar horizontalmente mediante
+         el uso de Gunicorn con múltiples workers.
+RNF-04.3 El sistema de almacenamiento de imágenes debe ser independiente del
+         servidor de aplicación, utilizando Cloudflare R2.
+RNF-04.4 La base de datos debe ser PostgreSQL en producción para soportar
+         funcionalidades avanzadas (JSONB, triggers, índices compuestos).
+
+------------------------------------------------------------------------
+RNF-05: MANTENIBILIDAD
+------------------------------------------------------------------------
+RNF-05.1 El backend debe seguir el patrón de capas: Views → Serializers →
+         Services → Models, separando responsabilidades claramente.
+RNF-05.2 El frontend debe organizar el código en: pages, components (ui /
+         forms / domain), hooks, services y utils.
+RNF-05.3 Los hooks de React deben encapsular la lógica de estado y llamadas
+         a la API, evitando código duplicado entre páginas.
+RNF-05.4 El sistema de base de datos debe versionarse mediante migraciones
+         de Django para garantizar reproducibilidad del esquema.
+RNF-05.5 Los cambios en la base de datos (triggers de auditoría, scripts SQL)
+         deben documentarse y versionarse junto con el código.
+
+------------------------------------------------------------------------
+RNF-06: USABILIDAD
+------------------------------------------------------------------------
+RNF-06.1 La interfaz debe ser completamente responsiva y funcional en
+         dispositivos móviles, tablets y escritorio (diseño mobile-first).
+RNF-06.2 El sistema debe ofrecer un modo oscuro completo (dark mode) que
+         persista la preferencia del usuario.
+RNF-06.3 El sistema debe proporcionar feedback visual inmediato mediante
+         skeleton loaders durante la carga de datos y animaciones de
+         transición entre vistas.
+RNF-06.4 Los formularios deben implementar validación en tiempo real con
+         mensajes de error claros y específicos por campo.
+RNF-06.5 Los diálogos de confirmación deben presentarse antes de ejecutar
+         operaciones destructivas (eliminaciones).
+RNF-06.6 El sistema debe mostrar indicadores de estado visual para registros
+         con datos críticos (e.g., productos con bajo stock resaltados).
+RNF-06.7 La navegación debe ser intuitiva con accesos directos desde el
+         dashboard a las secciones más utilizadas.
+
+------------------------------------------------------------------------
+RNF-07: COMPATIBILIDAD
+------------------------------------------------------------------------
+RNF-07.1 El frontend debe ser compatible con las versiones actuales de los
+         principales navegadores web: Chrome, Firefox, Safari y Edge.
+RNF-07.2 La API REST debe seguir las convenciones estándar HTTP (códigos de
+         estado, verbos, headers) para facilitar integraciones futuras.
+RNF-07.3 El sistema de almacenamiento de archivos debe ser compatible con la
+         API S3 para facilitar la migración a otros proveedores cloud.
+RNF-07.4 El sistema debe funcionar correctamente en entornos de desarrollo
+         (Docker Compose), staging y producción sin cambios de código,
+         solo mediante variables de entorno.
+
+------------------------------------------------------------------------
+RNF-08: PORTABILIDAD Y DESPLIEGUE
+------------------------------------------------------------------------
+RNF-08.1 El sistema debe poder desplegarse completamente mediante Docker
+         Compose con un solo comando en desarrollo.
+RNF-08.2 El frontend debe poder desplegarse en Vercel con configuración
+         mínima (vercel.json incluido).
+RNF-08.3 El backend debe servirse mediante Gunicorn como servidor WSGI
+         en producción.
+RNF-08.4 La colección de archivos estáticos de Django debe ejecutarse
+         automáticamente en el proceso de despliegue.
+RNF-08.5 Las migraciones de base de datos deben poder ejecutarse de forma
+         automatizada como parte del proceso de despliegue.
+
+------------------------------------------------------------------------
+RNF-09: VALIDACIÓN DE DATOS
+------------------------------------------------------------------------
+RNF-09.1 El sistema debe aplicar validación en tres capas: HTML5 nativo en
+         el navegador, JavaScript en el frontend (onChange y onSubmit) y
+         validación de negocio en los serializers del backend.
+RNF-09.2 El sistema debe impedir el registro de órdenes de venta con fecha
+         futura mediante validación en frontend y backend.
+RNF-09.3 Los rangos de fechas en reportes deben validarse: fecha inicio ≤
+         fecha fin, y ambas fechas ≤ fecha actual.
+RNF-09.4 El sistema debe validar que el stock no quede negativo al procesar
+         una venta o ajuste de inventario.
+RNF-09.5 Los campos únicos (SKU, códigos) deben validarse contra duplicados
+         antes de confirmar la creación o edición.
+
+------------------------------------------------------------------------
+RNF-10: EXPORTACIÓN Y FORMATOS
+------------------------------------------------------------------------
+RNF-10.1 Las exportaciones a PDF deben usar jsPDF con formato profesional,
+         incluyendo encabezados, paginación y logotipo cuando corresponda.
+RNF-10.2 Las exportaciones a Excel deben usar ExcelJS para generar archivos
+         .xlsx con formato estructurado y columnas correctamente tipadas.
+RNF-10.3 Las exportaciones deben incluir los mismos filtros aplicados en la
+         vista actual del listado.
+
+------------------------------------------------------------------------
+RNF-11: INTERNACIONALIZACIÓN Y LOCALIZACIÓN
+------------------------------------------------------------------------
+RNF-11.1 La interfaz debe estar completamente en español latinoamericano.
+RNF-11.2 Los formatos de fecha deben ser DD/MM/YYYY o adaptados a la
+         convención local.
+RNF-11.3 La validación de teléfono debe reconocer y manejar el prefijo de
+         país de Nicaragua (+505).
+RNF-11.4 Los valores monetarios deben mostrarse con el símbolo de moneda
+         local y separadores de miles apropiados.
+
+------------------------------------------------------------------------
+RNF-12: TRAZABILIDAD Y AUDITORÍA
+------------------------------------------------------------------------
+RNF-12.1 El sistema debe mantener un registro inmutable de todos los cambios
+         realizados a los productos mediante triggers de base de datos
+         (PostgreSQL).
+RNF-12.2 Cada movimiento de inventario debe tener una referencia que identifique
+         el origen del cambio (orden de compra, orden de venta, ajuste manual).
+RNF-12.3 Los registros de auditoría deben almacenar snapshots completos en
+         formato JSON del estado anterior y posterior del registro modificado.
+RNF-12.4 El sistema debe registrar opcionalmente la dirección IP del usuario
+         en los logs de auditoría.
+
+
+================================================================================
+4. RESTRICCIONES TÉCNICAS
+================================================================================
+
+RT-01  Se requiere PostgreSQL 16+ en producción. No se soporta SQLite en
+       producción debido al uso de JSONB, triggers y funciones específicas
+       de PostgreSQL.
+
+RT-02  El almacenamiento de imágenes requiere acceso a Cloudflare R2 o un
+       servicio compatible con la API de Amazon S3 (bucket_name, access_key,
+       secret_key, endpoint_url).
+
+RT-03  El backend requiere Python 3.12 o superior.
+
+RT-04  El frontend requiere Node.js 18+ para construcción con Vite 7.
+
+RT-05  El despliegue en producción requiere HTTPS para garantizar la seguridad
+       de los datos en tránsito.
+
+RT-06  Las migraciones de base de datos deben ejecutarse en orden estricto para
+       mantener la integridad referencial del esquema.
+
+
+================================================================================
+5. ENTIDADES Y RELACIONES PRINCIPALES
+================================================================================
+
+  Producto         --> Categoria (N:1)
+  Producto         --> Marca (N:1)
+  Producto         --> Proveedor (N:1, opcional)
+  Proveedor        --> OrdenCompra (1:N)
+  OrdenCompra      --> DetalleOrdenCompra (1:N) --> Producto (N:1)
+  Cliente          --> OrdenVenta (1:N)
+  OrdenVenta       --> DetalleOrdenVenta (1:N) --> Producto (N:1)
+  Cliente          --> Moto (1:N)
+  Moto             --> ServicioMoto (1:N)
+  ServicioMoto     --> BitacoraServicio (1:1)
+  Producto         --> MovimientoInventario (1:N)
+  Producto         --> AuditoriaProducto (1:N) [via trigger]
+
+
+================================================================================
+6. MÓDULOS Y PÁGINAS DEL SISTEMA
+================================================================================
+
+  Módulo                 Ruta               Descripción
+  ──────────────────────────────────────────────────────────────────────
+  Dashboard              /                  Métricas, alertas, accesos rápidos
+  Productos              /productos         Catálogo e inventario
+  Proveedores            /proveedores       Gestión de proveedores
+  Clientes               /clientes          CRM básico con motos y servicios
+  Órdenes de Compra      /ordenes-compra    Compras y recepción de mercadería
+  Órdenes de Venta       /ventas            Registro de ventas
+  Movimientos            /movimientos       Historial de stock
+  Reportes               /reportes          Análisis y exportaciones
+  Categorías             /categorias        Clasificación de productos
+  Logs de Auditoría      /logs-auditoria    Trazabilidad de cambios
+
+
+================================================================================
+7. HISTORIAS DE USUARIO DE ALTO NIVEL
+================================================================================
+
+HU-01  Como administrador, quiero ver el estado del inventario en tiempo real
+       para tomar decisiones de reabastecimiento oportunas.
+
+HU-02  Como vendedor, quiero registrar una venta rápidamente seleccionando
+       cliente y productos, para que el stock se actualice automáticamente.
+
+HU-03  Como comprador, quiero crear una orden de compra a un proveedor y
+       registrar su recepción para actualizar el inventario sin errores manuales.
+
+HU-04  Como técnico, quiero documentar cada etapa del servicio a una moto con
+       fotos y notas, para mantener un registro profesional del trabajo realizado.
+
+HU-05  Como gerente, quiero generar reportes de ventas por período en Excel o
+       PDF para presentar resultados a la dirección.
+
+HU-06  Como auditor, quiero ver el historial completo de cambios en el inventario
+       con usuario y fecha para garantizar la trazabilidad de los datos.
+
+HU-07  Como usuario, quiero buscar cualquier producto, cliente o proveedor
+       desde cualquier pantalla con un atajo de teclado para trabajar más rápido.
+
+
+================================================================================
+                          FIN DEL DOCUMENTO
+================================================================================

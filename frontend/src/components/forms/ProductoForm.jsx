@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useProveedores } from '../../hooks/useProveedores'
 import { Input, Button } from '../ui'
 
 const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }) => {
@@ -10,9 +11,12 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
     cantidad_total: '',
     precio_compra_unitario: '',
     precio_final: '',
+    id_proveedor: '',
   })
 
   const [errors, setErrors] = useState({})
+  const { data: proveedoresData } = useProveedores()
+  const proveedores = proveedoresData?.results || []
 
   useEffect(() => {
     if (producto) {
@@ -24,6 +28,7 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
         cantidad_total: producto.cantidad_total || '',
         precio_compra_unitario: producto.precio_compra_unitario || '',
         precio_final: producto.precio_final || '',
+        id_proveedor: producto.id_proveedor || '',
       })
     }
   }, [producto])
@@ -100,6 +105,33 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
           error={errors.nombre}
           placeholder="Nombre del producto"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Proveedor
+        </label>
+        <select
+          name="id_proveedor"
+          value={formData.id_proveedor}
+          onChange={handleChange}
+          className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+            errors.id_proveedor ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
+          }`}
+        >
+          <option value="">Sin proveedor asignado</option>
+          {proveedores.map(proveedor => (
+            <option key={proveedor.id_proveedor} value={proveedor.id_proveedor}>
+              {proveedor.nombre_empresa}
+            </option>
+          ))}
+        </select>
+        {errors.id_proveedor && (
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.id_proveedor}</p>
+        )}
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Selecciona el proveedor principal de este producto
+        </p>
       </div>
 
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
