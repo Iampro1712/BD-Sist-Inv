@@ -19,7 +19,7 @@ const ESTADO_LABEL = {
   reclamada: 'Reclamada',
 }
 
-const formatDate = (d) => d ? new Date(d).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'
+const formatDate = (d) => d ? new Date(d).toLocaleDateString('es-MX', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }) : '-'
 
 const Garantias = () => {
   const [estadoFilter, setEstadoFilter] = useState('')
