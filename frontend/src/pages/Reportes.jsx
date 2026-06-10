@@ -110,20 +110,20 @@ const Reportes = () => {
       alert('Debe seleccionar un rango de fechas')
       return
     }
-    
+
     // Validar fechas futuras
     const today = new Date().toISOString().split('T')[0]
     if (filtrosVentas.fecha_inicio > today || filtrosVentas.fecha_fin > today) {
       alert('No se pueden generar reportes con fechas futuras')
       return
     }
-    
+
     // Validar que fecha inicio no sea mayor que fecha fin
     if (filtrosVentas.fecha_inicio > filtrosVentas.fecha_fin) {
       alert('La fecha de inicio no puede ser mayor que la fecha fin')
       return
     }
-    
+
     setTipoReporte('ventas')
   }
 
@@ -132,20 +132,20 @@ const Reportes = () => {
       alert('Debe seleccionar un rango de fechas')
       return
     }
-    
+
     // Validar fechas futuras
     const today = new Date().toISOString().split('T')[0]
     if (filtrosCompras.fecha_inicio > today || filtrosCompras.fecha_fin > today) {
       alert('No se pueden generar reportes con fechas futuras')
       return
     }
-    
+
     // Validar que fecha inicio no sea mayor que fecha fin
     if (filtrosCompras.fecha_inicio > filtrosCompras.fecha_fin) {
       alert('La fecha de inicio no puede ser mayor que la fecha fin')
       return
     }
-    
+
     setTipoReporte('compras')
   }
 
@@ -154,20 +154,20 @@ const Reportes = () => {
       alert('Debe seleccionar un rango de fechas')
       return
     }
-    
+
     // Validar fechas futuras
     const today = new Date().toISOString().split('T')[0]
     if (filtrosProductos.fecha_inicio > today || filtrosProductos.fecha_fin > today) {
       alert('No se pueden generar reportes con fechas futuras')
       return
     }
-    
+
     // Validar que fecha inicio no sea mayor que fecha fin
     if (filtrosProductos.fecha_inicio > filtrosProductos.fecha_fin) {
       alert('La fecha de inicio no puede ser mayor que la fecha fin')
       return
     }
-    
+
     setTipoReporte('productos')
   }
 
@@ -268,12 +268,12 @@ const Reportes = () => {
                 onChange={(e) => {
                   const value = e.target.value
                   const today = new Date().toISOString().split('T')[0]
-                  
+
                   if (value > today) {
                     setDateErrors(prev => ({ ...prev, ventas_inicio: 'No se pueden seleccionar fechas futuras' }))
                     return
                   }
-                  
+
                   setDateErrors(prev => ({ ...prev, ventas_inicio: '' }))
                   setFiltrosVentas({ ...filtrosVentas, fecha_inicio: value })
                 }}
@@ -294,12 +294,12 @@ const Reportes = () => {
                 onChange={(e) => {
                   const value = e.target.value
                   const today = new Date().toISOString().split('T')[0]
-                  
+
                   if (value > today) {
                     setDateErrors(prev => ({ ...prev, ventas_fin: 'No se pueden seleccionar fechas futuras' }))
                     return
                   }
-                  
+
                   setDateErrors(prev => ({ ...prev, ventas_fin: '' }))
                   setFiltrosVentas({ ...filtrosVentas, fecha_fin: value })
                 }}
@@ -333,12 +333,12 @@ const Reportes = () => {
                 onChange={(e) => {
                   const value = e.target.value
                   const today = new Date().toISOString().split('T')[0]
-                  
+
                   if (value > today) {
                     setDateErrors(prev => ({ ...prev, compras_inicio: 'No se pueden seleccionar fechas futuras' }))
                     return
                   }
-                  
+
                   setDateErrors(prev => ({ ...prev, compras_inicio: '' }))
                   setFiltrosCompras({ ...filtrosCompras, fecha_inicio: value })
                 }}
@@ -359,12 +359,12 @@ const Reportes = () => {
                 onChange={(e) => {
                   const value = e.target.value
                   const today = new Date().toISOString().split('T')[0]
-                  
+
                   if (value > today) {
                     setDateErrors(prev => ({ ...prev, compras_fin: 'No se pueden seleccionar fechas futuras' }))
                     return
                   }
-                  
+
                   setDateErrors(prev => ({ ...prev, compras_fin: '' }))
                   setFiltrosCompras({ ...filtrosCompras, fecha_fin: value })
                 }}
@@ -413,12 +413,12 @@ const Reportes = () => {
                 onChange={(e) => {
                   const value = e.target.value
                   const today = new Date().toISOString().split('T')[0]
-                  
+
                   if (value > today) {
                     setDateErrors(prev => ({ ...prev, productos_inicio: 'No se pueden seleccionar fechas futuras' }))
                     return
                   }
-                  
+
                   setDateErrors(prev => ({ ...prev, productos_inicio: '' }))
                   setFiltrosProductos({ ...filtrosProductos, fecha_inicio: value })
                 }}
@@ -439,12 +439,12 @@ const Reportes = () => {
                 onChange={(e) => {
                   const value = e.target.value
                   const today = new Date().toISOString().split('T')[0]
-                  
+
                   if (value > today) {
                     setDateErrors(prev => ({ ...prev, productos_fin: 'No se pueden seleccionar fechas futuras' }))
                     return
                   }
-                  
+
                   setDateErrors(prev => ({ ...prev, productos_fin: '' }))
                   setFiltrosProductos({ ...filtrosProductos, fecha_fin: value })
                 }}
@@ -636,7 +636,7 @@ const Reportes = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={async () => await exportarVentasCSV(reporteVentas)}
+                      onClick={async () => await exportarVentasCSV(reporteVentas, filtrosVentas)}
                     >
                       <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -745,7 +745,7 @@ const Reportes = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={async () => await exportarComprasCSV(reporteCompras)}
+                      onClick={async () => await exportarComprasCSV(reporteCompras, filtrosCompras)}
                     >
                       <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -856,7 +856,7 @@ const Reportes = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={async () => await exportarProductosCSV(productosVendidos)}
+                      onClick={async () => await exportarProductosCSV(productosVendidos, filtrosProductos)}
                     >
                       <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

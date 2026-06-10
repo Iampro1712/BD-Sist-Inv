@@ -33,11 +33,6 @@ export const productosService = {
 
   // Get productos with low stock
   getStockBajo: () => {
-    return api.get('/productos/stock-bajo/')
-  },
-
-  // Get movimientos of producto
-  getMovimientos: (id) => {
-    return api.get(`/productos/${id}/movimientos/`)
+    return api.get('/productos/bajo_stock/')
   },
 }
