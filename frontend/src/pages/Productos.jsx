@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useProductos, useCreateProducto, useUpdateProducto, useDeleteProducto, useProducto, useProductosStockBajo } from '../hooks/useProductos'
+import { useProveedores } from '../hooks/useProveedores'
 import { useDebounce } from '../hooks/useDebounce'
 import { useToast } from '../hooks/useToast'
 import SearchBar from '../components/forms/SearchBar'
@@ -13,7 +14,7 @@ import { fadeIn, staggerContainer } from '../utils/animations'
 
 const Productos = () => {
   const [search, setSearch] = useState('')
-  const [filters, setFilters] = useState({ bajo_stock: '' })
+  const [filters, setFilters] = useState({ bajo_stock: '', proveedor: '', ordering: '' })
   const [page, setPage] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDetalleModalOpen, setIsDetalleModalOpen] = useState(false)
@@ -38,6 +39,8 @@ const Productos = () => {
 
   const { data: productoDetalle } = useProducto(selectedProductoId)
   const { data: stockBajoData } = useProductosStockBajo()
+  const { data: proveedoresData } = useProveedores({ page_size: 200 })
+  const proveedores = proveedoresData?.results || proveedoresData || []
 
   const productos = data?.results || []
   const totalCount = data?.count || 0
@@ -123,8 +126,26 @@ const Productos = () => {
 
   const toggleBajoStock = () => {
     setPage(1)
-    setFilters(prev => ({ bajo_stock: prev.bajo_stock === 'true' ? '' : 'true' }))
+    setFilters(prev => ({ ...prev, bajo_stock: prev.bajo_stock === 'true' ? '' : 'true' }))
   }
+
+  const handleFilterChange = (key, value) => {
+    setPage(1)
+    setFilters(prev => ({ ...prev, [key]: value }))
+  }
+
+  const clearAllFilters = () => {
+    setPage(1)
+    setSearch('')
+    setFilters({ bajo_stock: '', proveedor: '', ordering: '' })
+  }
+
+  const activeFiltersCount = [
+    filters.bajo_stock === 'true',
+    filters.proveedor !== '',
+    filters.ordering !== '',
+    search !== '',
+  ].filter(Boolean).length
 
   return (
     <div className="space-y-6">
@@ -184,37 +205,85 @@ const Productos = () => {
 
       {/* Búsqueda y filtros */}
       <Card className="p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1">
-            <SearchBar
-              value={search}
-              onChange={(val) => { setSearch(val); setPage(1) }}
-              placeholder="Buscar por código SKU o nombre del producto..."
-            />
-          </div>
-          <button
-            onClick={toggleBajoStock}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all shrink-0 ${
-              filters.bajo_stock === 'true'
-                ? 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300'
-                : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            Solo stock bajo
-            {filters.bajo_stock === 'true' && (
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+        <div className="flex flex-col gap-3">
+          {/* Fila 1: búsqueda */}
+          <SearchBar
+            value={search}
+            onChange={(val) => { setSearch(val); setPage(1) }}
+            placeholder="Buscar por código SKU o nombre del producto..."
+          />
+
+          {/* Fila 2: filtros */}
+          <div className="flex flex-wrap gap-2">
+            {/* Filtro proveedor */}
+            <select
+              value={filters.proveedor}
+              onChange={(e) => handleFilterChange('proveedor', e.target.value)}
+              className="flex-1 min-w-[160px] px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
+            >
+              <option value="">Todos los proveedores</option>
+              {proveedores.map((p) => (
+                <option key={p.id_proveedor} value={p.id_proveedor}>
+                  {p.nombre_empresa}
+                </option>
+              ))}
+            </select>
+
+            {/* Ordenar por */}
+            <select
+              value={filters.ordering}
+              onChange={(e) => handleFilterChange('ordering', e.target.value)}
+              className="flex-1 min-w-[160px] px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
+            >
+              <option value="">Ordenar por defecto</option>
+              <option value="nombre">Nombre A→Z</option>
+              <option value="-nombre">Nombre Z→A</option>
+              <option value="precio_final">Precio menor→mayor</option>
+              <option value="-precio_final">Precio mayor→menor</option>
+              <option value="cantidad_actual">Stock menor→mayor</option>
+              <option value="-cantidad_actual">Stock mayor→menor</option>
+            </select>
+
+            {/* Toggle stock bajo */}
+            <button
+              onClick={toggleBajoStock}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all shrink-0 ${
+                filters.bajo_stock === 'true'
+                  ? 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300'
+                  : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
+              Stock bajo
+              {filters.bajo_stock === 'true' && (
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
+
+            {/* Limpiar filtros */}
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={clearAllFilters}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors shrink-0"
+              >
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+                Limpiar ({activeFiltersCount})
+              </button>
             )}
-          </button>
+          </div>
         </div>
-        {(search || filters.bajo_stock === 'true') && !isLoading && (
+
+        {activeFiltersCount > 0 && !isLoading && (
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
             {totalCount} resultado{totalCount !== 1 ? 's' : ''} encontrado{totalCount !== 1 ? 's' : ''}
-            {filters.bajo_stock === 'true' && ' · Solo stock bajo'}
+            {filters.bajo_stock === 'true' && ' · Stock bajo'}
+            {filters.proveedor && ' · Proveedor filtrado'}
           </p>
         )}
       </Card>
