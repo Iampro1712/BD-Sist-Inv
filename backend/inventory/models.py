@@ -59,6 +59,12 @@ class Categoria(models.Model):
 
 class Producto(models.Model):
     """Modelo para productos del inventario - Mapea tabla existente"""
+    TIPO_GARANTIA_CHOICES = [
+        ('fabricante', 'Fabricante'),
+        ('proveedor', 'Proveedor'),
+        ('tienda', 'Tienda'),
+    ]
+
     id_producto = models.AutoField(primary_key=True)
     sku_producto = models.CharField(max_length=100)
     nombre = models.CharField(max_length=255)
@@ -74,6 +80,14 @@ class Producto(models.Model):
         blank=True,
         related_name='productos',
         db_column='id_proveedor'
+    )
+    meses_garantia = models.IntegerField(default=0)
+    descripcion_garantia = models.TextField(null=True, blank=True)
+    tipo_garantia = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        choices=TIPO_GARANTIA_CHOICES,
     )
 
     class Meta:
@@ -418,4 +432,68 @@ class AuditoriaProducto(models.Model):
     def __str__(self):
         return f"{self.operacion} - {self.nombre_producto} ({self.fecha_cambio})"
 
+
+class Garantia(models.Model):
+    """Garantía generada automáticamente al registrar una venta"""
+    ESTADO_CHOICES = [
+        ('activa', 'Activa'),
+        ('vencida', 'Vencida'),
+        ('reclamada', 'Reclamada'),
+    ]
+
+    id_garantia = models.AutoField(primary_key=True)
+    id_producto = models.ForeignKey(
+        Producto,
+        on_delete=models.PROTECT,
+        related_name='garantias',
+        db_column='id_producto',
+        db_constraint=False,
+    )
+    id_venta = models.IntegerField()
+    id_cliente = models.IntegerField()
+    cantidad = models.IntegerField(default=1)
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='activa')
+    notas = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'garantias'
+        verbose_name = 'Garantía'
+        verbose_name_plural = 'Garantías'
+        ordering = ['-fecha_inicio']
+
+    def __str__(self):
+        return f"Garantía #{self.id_garantia} - {self.id_producto.nombre}"
+
+
+class ReclamacionGarantia(models.Model):
+    """Reclamación asociada a una garantía activa"""
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('en_proceso', 'En proceso'),
+        ('resuelto', 'Resuelto'),
+        ('rechazado', 'Rechazado'),
+    ]
+
+    id_reclamacion = models.AutoField(primary_key=True)
+    garantia = models.ForeignKey(
+        Garantia,
+        on_delete=models.CASCADE,
+        related_name='reclamaciones',
+    )
+    descripcion_problema = models.TextField()
+    fecha_reclamacion = models.DateField(auto_now_add=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    resolucion = models.TextField(null=True, blank=True)
+    fecha_resolucion = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'reclamaciones_garantia'
+        verbose_name = 'Reclamación de Garantía'
+        verbose_name_plural = 'Reclamaciones de Garantía'
+        ordering = ['-fecha_reclamacion']
+
+    def __str__(self):
+        return f"Reclamación #{self.id_reclamacion} - Garantía #{self.garantia_id}"
 

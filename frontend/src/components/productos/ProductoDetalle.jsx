@@ -78,6 +78,36 @@ const ProductoDetalle = ({ producto, onEdit }) => {
         </div>
       </motion.div>
 
+      {/* Garantía */}
+      {producto.meses_garantia > 0 && (
+        <motion.div variants={fadeIn} className="bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800 px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide">Garantía</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <p className="text-xl font-bold text-purple-900 dark:text-purple-200">{producto.meses_garantia} meses</p>
+            </div>
+            {producto.tipo_garantia && (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                producto.tipo_garantia === 'fabricante' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' :
+                producto.tipo_garantia === 'proveedor' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' :
+                'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+              }`}>
+                {producto.tipo_garantia === 'fabricante' ? 'Fabricante' :
+                 producto.tipo_garantia === 'proveedor' ? 'Proveedor' : 'Tienda'}
+              </span>
+            )}
+          </div>
+          {producto.descripcion_garantia && (
+            <p className="mt-2 text-xs text-purple-700 dark:text-purple-300 leading-relaxed">{producto.descripcion_garantia}</p>
+          )}
+        </motion.div>
+      )}
+
       {/* Precios e inventario */}
       <motion.div variants={fadeIn} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
