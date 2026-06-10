@@ -127,7 +127,7 @@ const OrdenesCompra = () => {
     new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 
   const formatDate = (d) =>
-    new Date(d).toLocaleDateString('es-NI', { day: 'numeric', month: 'short', year: 'numeric' })
+    new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
 
   const isActionLoading = confirmarMutation.isPending || recibirMutation.isPending || cancelarMutation.isPending
 

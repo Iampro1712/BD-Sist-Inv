@@ -6,7 +6,7 @@ from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
     MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio,
-    AuditoriaProducto
+    AuditoriaProducto, Garantia, ReclamacionGarantia
 )
 
 
@@ -70,26 +70,28 @@ class ProveedorDetailSerializer(serializers.ModelSerializer):
 class ProductoListSerializer(serializers.ModelSerializer):
     """Serializer para listado de productos"""
     proveedor_nombre = serializers.CharField(source='id_proveedor.nombre_empresa', read_only=True)
-    
+
     class Meta:
         model = Producto
         fields = [
             'id_producto', 'sku_producto', 'nombre', 'cantidad_actual',
             'cantidad_minima', 'cantidad_total', 'precio_compra_unitario', 'precio_final',
-            'id_proveedor', 'proveedor_nombre'
+            'id_proveedor', 'proveedor_nombre',
+            'meses_garantia', 'tipo_garantia', 'descripcion_garantia',
         ]
 
 
 class ProductoDetailSerializer(serializers.ModelSerializer):
     """Serializer detallado para producto"""
     proveedor_nombre = serializers.CharField(source='id_proveedor.nombre_empresa', read_only=True)
-    
+
     class Meta:
         model = Producto
         fields = [
             'id_producto', 'sku_producto', 'nombre', 'cantidad_actual',
             'cantidad_minima', 'cantidad_total', 'precio_compra_unitario', 'precio_final',
-            'id_proveedor', 'proveedor_nombre'
+            'id_proveedor', 'proveedor_nombre',
+            'meses_garantia', 'tipo_garantia', 'descripcion_garantia',
         ]
 
 
@@ -99,7 +101,8 @@ class ProductoCreateSerializer(serializers.ModelSerializer):
         model = Producto
         fields = [
             'sku_producto', 'nombre', 'cantidad_actual', 'cantidad_minima',
-            'cantidad_total', 'precio_compra_unitario', 'precio_final', 'id_proveedor'
+            'cantidad_total', 'precio_compra_unitario', 'precio_final', 'id_proveedor',
+            'meses_garantia', 'tipo_garantia', 'descripcion_garantia',
         ]
 
 
@@ -503,10 +506,18 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         from django.db import connection
-        
+        from datetime import date
+        from calendar import monthrange
+
+        def sumar_meses(d, meses):
+            month = d.month - 1 + meses
+            year = d.year + month // 12
+            month = month % 12 + 1
+            day = min(d.day, monthrange(year, month)[1])
+            return d.replace(year=year, month=month, day=day)
+
         detalles_data = validated_data.pop('detalles')
-        
-        # Insertar en la tabla ventas
+
         with connection.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO ventas (id_cliente, fecha, total)
@@ -518,8 +529,7 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                 validated_data['total']
             ])
             id_venta = cursor.fetchone()[0]
-            
-            # Insertar productos en producto_venta
+
             for detalle in detalles_data:
                 cursor.execute("""
                     INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
@@ -530,8 +540,26 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                     detalle['cantidad'],
                     detalle['precio_unitario']
                 ])
-        
-        # Retornar la orden creada
+
+        # Auto-crear garantías para productos que las tengan
+        fecha_venta = validated_data['fecha']
+        id_cliente = validated_data['id_cliente']
+        for detalle in detalles_data:
+            try:
+                producto = Producto.objects.get(pk=detalle['producto'])
+                if producto.meses_garantia and producto.meses_garantia > 0:
+                    Garantia.objects.create(
+                        id_producto=producto,
+                        id_venta=id_venta,
+                        id_cliente=id_cliente,
+                        cantidad=detalle.get('cantidad', 1),
+                        fecha_inicio=fecha_venta,
+                        fecha_fin=sumar_meses(fecha_venta, producto.meses_garantia),
+                        estado='activa',
+                    )
+            except Producto.DoesNotExist:
+                pass
+
         return OrdenVenta.objects.get(id_venta=id_venta)
     
     def to_representation(self, instance):
@@ -767,19 +795,19 @@ class AuditoriaProductoSerializer(serializers.ModelSerializer):
     def get_tipo_cambio(self, obj):
         """Determina qué tipo de cambio se realizó"""
         cambios = []
-        
+
         if obj.diferencia_cantidad and obj.diferencia_cantidad != 0:
             if obj.diferencia_cantidad > 0:
                 cambios.append(f'Stock +{obj.diferencia_cantidad}')
             else:
                 cambios.append(f'Stock {obj.diferencia_cantidad}')
-        
+
         if obj.diferencia_precio_final and obj.diferencia_precio_final != 0:
             if obj.diferencia_precio_final > 0:
                 cambios.append(f'Precio +C${obj.diferencia_precio_final}')
             else:
                 cambios.append(f'Precio C${obj.diferencia_precio_final}')
-        
+
         if obj.operacion == 'INSERT':
             return 'Producto creado'
         elif obj.operacion == 'DELETE':
@@ -788,3 +816,96 @@ class AuditoriaProductoSerializer(serializers.ModelSerializer):
             return ', '.join(cambios)
         else:
             return 'Otros cambios'
+
+
+# ============================================================================
+# GARANTÍA SERIALIZERS
+# ============================================================================
+
+class ReclamacionListSerializer(serializers.ModelSerializer):
+    """Serializer ligero para reclamaciones (usado anidado en garantías)"""
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    class Meta:
+        model = ReclamacionGarantia
+        fields = [
+            'id_reclamacion', 'descripcion_problema', 'fecha_reclamacion',
+            'estado', 'estado_display', 'resolucion', 'fecha_resolucion',
+        ]
+
+
+class GarantiaListSerializer(serializers.ModelSerializer):
+    """Serializer para listado de garantías"""
+    producto_nombre = serializers.CharField(source='id_producto.nombre', read_only=True)
+    producto_sku = serializers.CharField(source='id_producto.sku_producto', read_only=True)
+    meses_garantia = serializers.IntegerField(source='id_producto.meses_garantia', read_only=True)
+    tipo_garantia = serializers.CharField(source='id_producto.tipo_garantia', read_only=True)
+    cliente_nombre = serializers.SerializerMethodField()
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    dias_restantes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Garantia
+        fields = [
+            'id_garantia', 'id_producto_id', 'producto_nombre', 'producto_sku',
+            'meses_garantia', 'tipo_garantia',
+            'id_venta', 'id_cliente', 'cliente_nombre', 'cantidad',
+            'fecha_inicio', 'fecha_fin', 'estado', 'estado_display', 'dias_restantes',
+        ]
+
+    def get_cliente_nombre(self, obj):
+        try:
+            cliente = Cliente.objects.get(id_cliente=obj.id_cliente)
+            return cliente.nombre
+        except Cliente.DoesNotExist:
+            return None
+
+    def get_dias_restantes(self, obj):
+        from datetime import date
+        if obj.estado != 'activa':
+            return None
+        delta = obj.fecha_fin - date.today()
+        return max(delta.days, 0)
+
+
+class GarantiaDetailSerializer(GarantiaListSerializer):
+    """Serializer detallado para garantía, incluye reclamaciones"""
+    reclamaciones = ReclamacionListSerializer(many=True, read_only=True)
+
+    class Meta(GarantiaListSerializer.Meta):
+        fields = GarantiaListSerializer.Meta.fields + ['notas', 'reclamaciones']
+
+
+class ReclamacionCreateSerializer(serializers.ModelSerializer):
+    """Serializer para crear una reclamación"""
+    class Meta:
+        model = ReclamacionGarantia
+        fields = ['garantia', 'descripcion_problema']
+
+    def validate_garantia(self, garantia):
+        if garantia.estado != 'activa':
+            raise serializers.ValidationError(
+                'Solo se pueden reclamar garantías con estado activo.'
+            )
+        return garantia
+
+
+class ReclamacionDetailSerializer(serializers.ModelSerializer):
+    """Serializer detallado para reclamación"""
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    garantia_info = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReclamacionGarantia
+        fields = [
+            'id_reclamacion', 'garantia_id', 'garantia_info',
+            'descripcion_problema', 'fecha_reclamacion',
+            'estado', 'estado_display', 'resolucion', 'fecha_resolucion',
+        ]
+
+    def get_garantia_info(self, obj):
+        return {
+            'id_garantia': obj.garantia_id,
+            'producto': obj.garantia.id_producto.nombre,
+            'cliente_id': obj.garantia.id_cliente,
+        }

@@ -12,6 +12,9 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
     precio_compra_unitario: '',
     precio_final: '',
     id_proveedor: '',
+    meses_garantia: 0,
+    tipo_garantia: '',
+    descripcion_garantia: '',
   })
 
   const [errors, setErrors] = useState({})
@@ -29,6 +32,9 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
         precio_compra_unitario: producto.precio_compra_unitario || '',
         precio_final: producto.precio_final || '',
         id_proveedor: producto.id_proveedor || '',
+        meses_garantia: producto.meses_garantia ?? 0,
+        tipo_garantia: producto.tipo_garantia || '',
+        descripcion_garantia: producto.descripcion_garantia || '',
       })
     }
   }, [producto])
@@ -77,6 +83,7 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
   const stockActual = parseInt(formData.cantidad_actual) || 0
   const stockMinimo = parseInt(formData.cantidad_minima) || 0
   const stockBajo = formData.cantidad_actual !== '' && formData.cantidad_minima !== '' && stockActual <= stockMinimo
+  const tieneGarantia = parseInt(formData.meses_garantia) > 0
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -257,6 +264,76 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
               <p className="text-xs text-red-700 dark:text-red-300">
                 La cantidad actual ({stockActual}) está por debajo del mínimo ({stockMinimo})
               </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Garantía */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-primary-600 dark:text-primary-400">5</span>
+          </div>
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Garantía</h4>
+          {tieneGarantia && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              {formData.meses_garantia} meses
+            </span>
+          )}
+        </div>
+        <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-xl p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                Duración de garantía (meses)
+              </label>
+              <input
+                type="number"
+                name="meses_garantia"
+                min="0"
+                max="120"
+                value={formData.meses_garantia}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600 transition-colors"
+                placeholder="0 = sin garantía"
+              />
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">0 = sin garantía</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                Tipo de garantía
+              </label>
+              <select
+                name="tipo_garantia"
+                value={formData.tipo_garantia}
+                onChange={handleChange}
+                disabled={!tieneGarantia}
+                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">Seleccionar tipo</option>
+                <option value="fabricante">Fabricante</option>
+                <option value="proveedor">Proveedor</option>
+                <option value="tienda">Tienda</option>
+              </select>
+            </div>
+          </div>
+          {tieneGarantia && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                Descripción / Condiciones de garantía
+              </label>
+              <textarea
+                name="descripcion_garantia"
+                value={formData.descripcion_garantia}
+                onChange={handleChange}
+                rows={2}
+                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600 transition-colors resize-none"
+                placeholder="Ej: Cubre defectos de fabricación, no incluye daños por uso..."
+              />
             </div>
           )}
         </div>

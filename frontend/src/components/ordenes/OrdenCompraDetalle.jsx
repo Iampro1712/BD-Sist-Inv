@@ -19,7 +19,7 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
     new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 
   const formatDate = (d) =>
-    new Date(d).toLocaleDateString('es-NI', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   const cfg = estadoConfig[orden.estado] || estadoConfig.pendiente
 

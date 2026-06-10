@@ -6,7 +6,7 @@ const OrdenVentaDetalle = ({ orden }) => {
     new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 
   const formatDate = (d) =>
-    new Date(d).toLocaleDateString('es-NI', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   const totalItems = orden.productos?.reduce((s, p) => s + (p.cantidad || 1), 0) || 0
   const subtotal   = orden.productos?.reduce((s, p) => s + (p.subtotal || 0), 0) || 0
