@@ -1,0 +1,322 @@
+================================================================================
+         INVENTRIX - HISTORIAL DE SPRINTS DE DESARROLLO
+         Sistema de Gestión de Inventario, Ventas y Servicios
+================================================================================
+Versión: 1.0
+Fecha de generación: 2026-05-27
+Proyecto: Inventrix
+Repositorio: inventrix-db
+================================================================================
+
+METODOLOGÍA
+  El desarrollo de Inventrix se llevó a cabo siguiendo un enfoque iterativo e
+  incremental. Cada sprint entregó funcionalidades completas y desplegables,
+  priorizando los módulos core del sistema antes de incorporar mejoras de
+  experiencia de usuario y características avanzadas.
+
+================================================================================
+SPRINT 1 — INICIALIZACIÓN Y NÚCLEO DEL SISTEMA
+Período: Noviembre 2025 (semana del 24 al 25)
+Estado: COMPLETADO
+================================================================================
+
+OBJETIVO
+  Establecer la base técnica del proyecto y los módulos fundamentales de
+  gestión de inventario.
+
+TAREAS COMPLETADAS
+  [x] Inicialización del proyecto Inventrix
+        - Configuración de Django 6.0 + Django REST Framework
+        - Configuración de React 19 + Vite 7 + TailwindCSS 4
+        - Configuración de PostgreSQL 16 con Docker Compose
+        - Estructura de carpetas del backend y frontend
+        - Variables de entorno y configuración de seguridad base
+
+  [x] Módulo de Productos (RF-01)
+        - Modelo de base de datos: SKU, nombre, descripción, precio costo/venta,
+          stock actual/mínimo/total, categoría, marca e imagen
+        - API CRUD completa con paginación y filtros
+        - Validación de SKU único
+        - Filtro de bajo stock en la API
+
+  [x] Módulo de Categorías (RF-02)
+        - Modelo y API CRUD de categorías
+        - Asociación productos → categoría
+
+  [x] Módulo de Marcas (RF-03)
+        - Modelo y API CRUD de marcas
+        - Asociación productos → marca
+
+  [x] Módulo de Proveedores (RF-04)
+        - Modelo con nombre, contacto, teléfono, correo y dirección
+        - API CRUD completa
+
+  [x] Módulo de Clientes (RF-05)
+        - Modelo con nombre, teléfono, correo y dirección
+        - API CRUD completa
+
+  [x] Dashboard básico (RF-16)
+        - Métricas en tiempo real: total productos, clientes, proveedores
+        - Listado de productos con stock bajo
+
+  [x] Infraestructura de despliegue
+        - Docker Compose para desarrollo local
+        - Health check de PostgreSQL con psycopg2
+        - Migración del frontend de Netlify a Vercel
+        - Configuración de vercel.json
+
+ENTREGABLES
+  - Sistema base funcional con backend y frontend desplegados
+  - API REST disponible con endpoints de productos, categorías, marcas,
+    proveedores y clientes
+  - Dashboard operativo con métricas de inventario
+
+COMMITS ASOCIADOS
+  22fd584 - feat: Initialize Inventrix inventory management system
+  72e7d21 - feat(backend): Replace netcat with psycopg2 for PostgreSQL health check
+  cdbe60c - feat(frontend): Add dark mode support to navigation components
+  d4b6613 - chore(frontend): Migrate deployment config from Netlify to Vercel
+  bbed0a5 - Moving to root vercel config
+  c59a565 - chore(vercel): Consolidate deployment config to root directory
+
+
+================================================================================
+SPRINT 2 — ÓRDENES DE COMPRA, VENTAS Y MOVIMIENTOS DE INVENTARIO
+Período: Diciembre 2025
+Estado: COMPLETADO
+================================================================================
+
+OBJETIVO
+  Implementar el ciclo completo de compras y ventas con actualización automática
+  de stock e historial de movimientos.
+
+TAREAS COMPLETADAS
+  [x] Módulo de Órdenes de Compra (RF-10)
+        - Modelo de orden con proveedor, estado (Pendiente/Recibida/Cancelada)
+        - Modelo de detalle de orden con múltiples ítems, cantidad y precio
+        - Cálculo automático de subtotales, impuestos y totales
+        - Actualización automática de stock al marcar orden como Recibida
+        - Serializers con lógica de negocio personalizada
+
+  [x] Módulo de Órdenes de Venta (RF-11)
+        - Modelo de orden con cliente, estado y múltiples ítems
+        - Decremento automático de stock al registrar venta
+        - Validación de stock suficiente antes de confirmar venta
+        - Validación de fecha: no se permiten fechas futuras
+        - Cálculo de subtotales, descuentos y totales
+
+  [x] Módulo de Movimientos de Inventario (RF-12)
+        - Registro automático de movimientos ante cada cambio de stock
+        - Tipos de movimiento: entrada, salida, ajuste
+        - Referencia al origen del cambio (orden de compra, venta)
+        - Historial de solo consulta (inmutable)
+
+  [x] Mejoras a serializers y vistas de la API
+        - Lógica personalizada en serializers de compra y venta
+        - Comentarios de desarrollo para facilitar mantenimiento
+
+ENTREGABLES
+  - Ciclo de compras completo: crear orden → recibir mercadería → actualizar stock
+  - Ciclo de ventas completo: crear venta → validar stock → decrementar inventario
+  - Historial de movimientos de inventario con trazabilidad por origen
+
+COMMITS ASOCIADOS
+  dad5a1a - feat(api): Enhance purchase and sales order serializers with custom logic
+  9fbb742 - chore(api): Add development marker comments to serializers and views
+
+
+================================================================================
+SPRINT 3 — BITÁCORA DE SERVICIOS, MOTOS Y ALMACENAMIENTO EN LA NUBE
+Período: Marzo 2026 (semana del 11)
+Estado: COMPLETADO
+================================================================================
+
+OBJETIVO
+  Implementar el sistema especializado de bitácora de servicios para motos con
+  soporte fotográfico en Cloudflare R2.
+
+TAREAS COMPLETADAS
+  [x] Módulo de Motos (RF-06)
+        - Modelo: marca, modelo, año, placa de circulación
+        - Asociación moto → cliente propietario
+        - Filtrado de motos por cliente
+
+  [x] Módulo de Servicios de Moto (RF-07, RF-08)
+        - Catálogo de servicios estándar con nombre y precio de mano de obra
+        - Registro de servicios por moto: tipo, costo, descripción y fecha
+        - Historial de servicios por moto y por cliente
+
+  [x] Bitácora de Servicios — 4 Módulos (RF-09)
+        - Modelo de bitácora con 4 etapas secuenciales:
+            1. Recepción: estado inicial, nivel de combustible, daños
+               preexistentes
+            2. Diagnóstico: problemas identificados con evidencia fotográfica
+            3. Reparación: trabajos realizados, técnico responsable, fotos
+               de progreso
+            4. Entrega: checklist de finalización y confirmación al cliente
+        - Soporte de notas, técnico responsable y múltiples fotos por etapa
+        - Vista combinada servicio + bitácora en la API
+
+  [x] Integración con Cloudflare R2 (RNF-04.3)
+        - Almacenamiento de fotografías de bitácora en R2
+        - URLs referenciadas en campos JSONB de PostgreSQL
+        - Compatible con API S3 para portabilidad futura
+
+  [x] Despliegue y configuración
+        - Actualización de VITE_API_URL al nuevo endpoint de producción
+        - Actualización de react-router-dom a versión 7.13.1
+        - Renovación de caché en Vercel
+
+ENTREGABLES
+  - Sistema de bitácora completo para documentar el ciclo de vida de un
+    servicio de moto desde recepción hasta entrega
+  - Almacenamiento de imágenes en Cloudflare R2 operativo
+  - API de bitácora integrada con el módulo de servicios y clientes
+
+COMMITS ASOCIADOS
+  7c3713d - feat(bitacora): Add audit trail system with R2 storage integration
+  b7c525d - Merge branch 'master'
+  828a39c - chore(frontend): Upgrade react-router-dom to 7.13.1
+  35ba7ce - to renew cache in vercel
+  b73d597 - Update VITE_API_URL to new API endpoint
+
+
+================================================================================
+SPRINT 4 — AUDITORÍA, DARK MODE, FILTROS Y DOCUMENTACIÓN
+Período: Abril 2026 (semanas del 27 al 29)
+Estado: COMPLETADO
+================================================================================
+
+OBJETIVO
+  Implementar el sistema de auditoría de productos con triggers de base de
+  datos, finalizar el modo oscuro y mejorar los filtros de la interfaz.
+
+TAREAS COMPLETADAS
+  [x] Sistema de Auditoría de Productos (RF-14, RNF-12)
+        - Triggers de PostgreSQL que capturan automáticamente cada modificación
+          a la tabla de productos
+        - Registro de: campo modificado, valor anterior (JSON), valor nuevo
+          (JSON), usuario y timestamp
+        - Tabla de auditoría inmutable con índices optimizados
+        - Página "Logs de Auditoría" en el frontend (/logs-auditoria)
+
+  [x] Mejoras de UI — Dark Mode (RNF-06.2)
+        - Modo oscuro completo en componentes de navegación
+        - Página de Logs de Auditoría compatible con dark mode
+        - Persistencia de preferencia de modo del usuario
+
+  [x] Refactorización de Órdenes de Venta
+        - Renombrado de sección "Dashboard" a "Home"
+        - Mejora de filtros en la página de órdenes de venta
+        - Optimización de la experiencia de búsqueda y filtrado
+
+  [x] Reorganización de documentación
+        - Reestructuración de documentación del proyecto
+        - Actualización del esquema de base de datos
+        - Documentación de triggers de auditoría
+
+ENTREGABLES
+  - Sistema de auditoría completo con triggers de PostgreSQL
+  - Interfaz con dark mode funcional en todos los módulos principales
+  - Filtros mejorados en órdenes de venta
+  - Documentación del proyecto reorganizada y actualizada
+
+COMMITS ASOCIADOS
+  8cd8a18 - docs: reorganize project documentation and database schema
+  0b5a512 - Merge branch 'master'
+  da97f9a - feat(ui): Rename Dashboard to Home and refactor sales orders filters
+  24c715e - feat(auditoria): Add comprehensive product audit trail system
+  c60678b - feat(ui): Add audit logs page and enhance dark mode support
+
+
+================================================================================
+SPRINT 5 — VALIDACIONES, NAVBAR GLOBAL Y AJUSTES DE INVENTARIO
+Período: Mayo 2026 (semanas del 4 al 25)
+Estado: COMPLETADO
+================================================================================
+
+OBJETIVO
+  Completar el sistema de validaciones en tres capas, implementar búsqueda
+  global en la navbar, añadir ajustes manuales de inventario y asociar
+  proveedor directamente a productos.
+
+TAREAS COMPLETADAS
+  [x] Sistema de Validación en Tres Capas (RNF-09)
+        - Validación HTML5 nativa en formularios del frontend
+        - Validación JavaScript en tiempo real (onChange y onSubmit)
+        - Validación de negocio en serializers del backend
+        - Documentación de guías de validación para el equipo
+
+  [x] Navbar con Búsqueda Global Centralizada (RF-15)
+        - Buscador global centrado en la navbar
+        - Búsqueda en tiempo real de productos, clientes y proveedores
+        - Debounce implementado para optimizar solicitudes al servidor
+        - Navegación directa a la página del resultado seleccionado
+
+  [x] Ajuste Manual de Inventario (RF-12.3)
+        - Endpoint dedicado /inventory/adjust/ en el backend
+        - Script SQL de configuración de base de datos para ajustes
+        - Registro del ajuste como movimiento de inventario con referencia
+          "ajuste manual"
+
+  [x] Campo Proveedor en Productos (RF-01.2, RF-04.5)
+        - Asociación directa producto → proveedor en el modelo
+        - Campo proveedor en formularios de creación y edición de productos
+        - Mejoras en gestión de órdenes de compra relacionadas al proveedor
+
+  [x] Optimización de despliegue en Vercel
+        - Configuración avanzada de vercel.json
+        - Optimización del proceso de build con Vite
+        - Code splitting y lazy loading para mejorar tiempo de carga inicial
+
+ENTREGABLES
+  - Validación robusta en frontend y backend para todos los formularios críticos
+  - Buscador global operativo desde cualquier página del sistema
+  - Ajuste manual de inventario disponible como operación de respaldo
+  - Productos con campo de proveedor asociado directamente
+  - Frontend optimizado para producción en Vercel
+
+COMMITS ASOCIADOS
+  c3aee83 - docs: Add validation guides and refactor navbar with centered search
+  8a5f974 - chore(frontend): Add Vercel configuration and optimize build settings
+  39f5f90 - feat(inventory): Add manual inventory adjustment endpoint and database setup
+  a9edd49 - feat(backend,frontend): Add supplier field to products and enhance
+            purchase order management
+
+
+================================================================================
+RESUMEN GENERAL DEL PROYECTO
+================================================================================
+
+  Sprint  Período              Módulos Principales                       Estado
+  ──────────────────────────────────────────────────────────────────────────────
+  1       Nov 2025 (sem. 4)    Inicialización, Productos, Clientes,     DONE
+                               Proveedores, Categorías, Marcas, Dashboard
+  2       Dic 2025             Órdenes de Compra, Órdenes de Venta,     DONE
+                               Movimientos de Inventario
+  3       Mar 2026 (sem. 2)    Motos, Servicios, Bitácora (4 módulos),  DONE
+                               Integración Cloudflare R2
+  4       Abr 2026 (sem. 4-5)  Auditoría PostgreSQL, Dark Mode,         DONE
+                               Filtros UI, Documentación
+  5       May 2026             Validaciones 3 capas, Búsqueda Global,   DONE
+                               Ajuste Manual de Inventario, Proveedor
+                               en Productos, Optimización Vercel
+
+ESTADÍSTICAS
+  Total de commits: 23
+  Duración total: ~6 meses (Noviembre 2025 — Mayo 2026)
+  Requerimientos funcionales cubiertos: 17 módulos (RF-01 al RF-17)
+  Requerimientos no funcionales cubiertos: 12 categorías (RNF-01 al RNF-12)
+  Entidades de base de datos: 13 modelos principales
+
+TECNOLOGÍAS UTILIZADAS
+  Backend  : Django 6.0, Django REST Framework, PostgreSQL 16, Gunicorn
+  Frontend : React 19, Vite 7, TailwindCSS 4, React Query, Zustand
+  Storage  : Cloudflare R2 (S3-compatible)
+  DevOps   : Docker Compose, Vercel (frontend), GitHub
+  DB Extra : Triggers PostgreSQL, JSONB, índices compuestos
+
+
+================================================================================
+                          FIN DEL DOCUMENTO
+================================================================================

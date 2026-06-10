@@ -29,10 +29,36 @@ const formatDate = () => {
   })
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS PDF
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Helper interno: Aplica estilos al encabezado de una hoja ExcelJS.
- * @param {ExcelJS.Row} headerRow - Fila de encabezado
- * @param {string} hexColor - Color de fondo (sin '#'), e.g. '3B82F6'
+ * Escribe encabezado del negocio (nombre + RUC) en un doc jsPDF.
+ * Retorna la coordenada Y donde termina el encabezado.
+ * @param {jsPDF} doc
+ * @returns {number}
+ */
+const _encabezadoPDF = (doc) => {
+  doc.setFontSize(14)
+  doc.setFont(undefined, 'bold')
+  doc.text(NEGOCIO.nombre, 14, 14)
+  doc.setFont(undefined, 'normal')
+  doc.setFontSize(9)
+  doc.text(`RUC: ${NEGOCIO.ruc}`, 14, 20)
+  doc.setLineWidth(0.3)
+  doc.line(14, 23, 196, 23)
+  return 28
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS EXCEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Aplica estilos al encabezado de columnas de una hoja ExcelJS.
+ * @param {ExcelJS.Row} headerRow
+ * @param {string} hexColor - Color de fondo sin '#', e.g. '3B82F6'
  */
 const _estilarEncabezado = (headerRow, hexColor) => {
   headerRow.eachCell((cell) => {
@@ -53,7 +79,7 @@ const _estilarEncabezado = (headerRow, hexColor) => {
 }
 
 /**
- * Helper interno: Aplica bordes a una fila de datos ExcelJS.
+ * Aplica bordes a una fila de datos ExcelJS.
  * @param {ExcelJS.Row} row
  */
 const _estilarFila = (row) => {
@@ -69,7 +95,7 @@ const _estilarFila = (row) => {
 }
 
 /**
- * Helper interno: Descarga un Workbook de ExcelJS como archivo .xlsx en el navegador.
+ * Descarga un Workbook de ExcelJS como archivo .xlsx en el navegador.
  * @param {ExcelJS.Workbook} wb
  * @param {string} filename
  */
@@ -87,21 +113,58 @@ const _descargarWorkbook = async (wb, filename) => {
 }
 
 /**
- * Helper interno: Escribe encabezado del negocio (nombre + RUC) en un doc jsPDF.
- * Retorna la coordenada Y donde termina el encabezado para continuar debajo.
- * @param {jsPDF} doc
- * @returns {number} Y de inicio del contenido posterior
+ * Inserta las filas de encabezado del negocio, título, fecha, período y
+ * resumen opcional en una hoja ExcelJS. Debe llamarse ANTES de agregar los
+ * encabezados de columna y los datos.
+ *
+ * @param {ExcelJS.Worksheet} ws
+ * @param {number}            numCols  - Número de columnas (para merge)
+ * @param {string}            titulo   - Título del reporte
+ * @param {object}            [opts]
+ * @param {object}            [opts.filtros]   - { fecha_inicio, fecha_fin }
+ * @param {Array}             [opts.resumen]   - [{ label, valor }, ...]
  */
-const _encabezadoPDF = (doc) => {
-  doc.setFontSize(14)
-  doc.setFont(undefined, 'bold')
-  doc.text(NEGOCIO.nombre, 14, 14)
-  doc.setFont(undefined, 'normal')
-  doc.setFontSize(9)
-  doc.text(`RUC: ${NEGOCIO.ruc}`, 14, 20)
-  doc.setLineWidth(0.3)
-  doc.line(14, 23, 196, 23)
-  return 28
+const _encabezadoExcel = (ws, numCols, titulo, opts = {}) => {
+  const { filtros, resumen } = opts
+  const lastCol = String.fromCharCode(64 + numCols)
+
+  /** Agrega una fila con la celda A mergeada hasta lastCol y aplica fuente. */
+  const addMerged = (value, font = {}) => {
+    const rowIdx = ws.rowCount + 1
+    ws.addRow([value])
+    ws.mergeCells(`A${rowIdx}:${lastCol}${rowIdx}`)
+    const cell = ws.getCell(`A${rowIdx}`)
+    cell.value = value
+    cell.font = font
+    cell.alignment = { vertical: 'middle', horizontal: 'left' }
+  }
+
+  // Nombre del negocio
+  addMerged(NEGOCIO.nombre, { bold: true, size: 14 })
+  // RUC
+  addMerged(`RUC: ${NEGOCIO.ruc}`, { size: 10 })
+  // Separador
+  ws.addRow([])
+  // Título del reporte
+  addMerged(titulo, { bold: true, size: 13 })
+  // Fecha de generación
+  addMerged(`Fecha de generación: ${formatDate()}`, { size: 10 })
+  // Período (opcional)
+  if (filtros?.fecha_inicio && filtros?.fecha_fin) {
+    addMerged(`Período: ${filtros.fecha_inicio} – ${filtros.fecha_fin}`, { size: 10 })
+  }
+  // Resumen (opcional)
+  if (resumen?.length) {
+    ws.addRow([])
+    addMerged('Resumen', { bold: true, size: 11 })
+    resumen.forEach(({ label, valor }) => {
+      const row = ws.addRow([`${label}:`, valor])
+      row.getCell(1).font = { bold: true, size: 10 }
+      row.getCell(2).font = { size: 10 }
+    })
+  }
+  // Fila vacía antes del encabezado de columnas
+  ws.addRow([])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,7 +328,7 @@ export const exportarProductosPDF = (productos, filtros) => {
     head: [['Posición', 'Producto', 'Cantidad Vendida', 'Total Ventas']],
     body: tableData,
     theme: 'grid',
-    styles: { fontSize: 9 },
+    styles: { fontSize: 8 },
     headStyles: { fillColor: [139, 92, 246] },
   })
 
@@ -273,33 +336,8 @@ export const exportarProductosPDF = (productos, filtros) => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXPORTACIONES A EXCEL  (usando ExcelJS — reemplaza xlsx)
+// EXPORTACIONES A EXCEL  (usando ExcelJS)
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Helper interno: Inserta dos filas de encabezado del negocio en una hoja ExcelJS
- * y retorna el número de fila donde deben comenzar los datos (después del encabezado).
- * @param {ExcelJS.Worksheet} ws
- * @param {number} numCols - Cantidad de columnas para hacer merge
- * @returns {number} Índice de fila de inicio de datos
- */
-const _encabezadoExcel = (ws, numCols) => {
-  const lastCol = String.fromCharCode(64 + numCols)
-
-  const rowNombre = ws.insertRow(1, [NEGOCIO.nombre])
-  ws.mergeCells(`A1:${lastCol}1`)
-  rowNombre.getCell(1).font = { bold: true, size: 14 }
-  rowNombre.getCell(1).alignment = { horizontal: 'left' }
-
-  const rowRuc = ws.insertRow(2, [`RUC: ${NEGOCIO.ruc}`])
-  ws.mergeCells(`A2:${lastCol}2`)
-  rowRuc.getCell(1).font = { size: 10 }
-  rowRuc.getCell(1).alignment = { horizontal: 'left' }
-
-  ws.insertRow(3, [])
-
-  return 4
-}
 
 /**
  * Exportar reporte de inventario a Excel
@@ -309,16 +347,25 @@ export const exportarInventarioCSV = async (reporte) => {
   const ws = wb.addWorksheet('Inventario')
 
   ws.columns = [
-    { header: 'Código',        key: 'Código',        width: 14 },
-    { header: 'Producto',      key: 'Producto',      width: 32 },
-    { header: 'Stock',         key: 'Stock',         width: 12 },
-    { header: 'Stock Mínimo',  key: 'Stock Mínimo',  width: 16 },
-    { header: 'Precio Venta',  key: 'Precio Venta',  width: 18 },
-    { header: 'Valor Stock',   key: 'Valor Stock',   width: 18 },
+    { key: 'Código',       width: 14 },
+    { key: 'Producto',     width: 32 },
+    { key: 'Stock',        width: 12 },
+    { key: 'Stock Mínimo', width: 16 },
+    { key: 'Precio Venta', width: 18 },
+    { key: 'Valor Stock',  width: 18 },
   ]
 
-  _encabezadoExcel(ws, 6)
-  _estilarEncabezado(ws.getRow(4), '3B82F6')
+  _encabezadoExcel(ws, 6, 'Reporte de Inventario', {
+    resumen: [
+      { label: 'Total Productos',          valor: reporte.total_productos },
+      { label: 'Valor Total',              valor: formatCurrency(reporte.valor_total) },
+      { label: 'Productos con Stock Bajo', valor: reporte.productos_stock_bajo },
+      { label: 'Productos Sin Stock',      valor: reporte.productos_sin_stock },
+    ],
+  })
+
+  const headerRow = ws.addRow(['Código', 'Producto', 'Stock', 'Stock Mínimo', 'Precio Venta', 'Valor Stock'])
+  _estilarEncabezado(headerRow, '3B82F6')
 
   reporte.productos?.forEach((p) => {
     const row = ws.addRow({
@@ -338,20 +385,29 @@ export const exportarInventarioCSV = async (reporte) => {
 /**
  * Exportar reporte de ventas a Excel
  */
-export const exportarVentasCSV = async (reporte) => {
+export const exportarVentasCSV = async (reporte, filtros) => {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Ventas')
 
   ws.columns = [
-    { header: 'Orden',   key: 'Orden',   width: 16 },
-    { header: 'Cliente', key: 'Cliente', width: 32 },
-    { header: 'Fecha',   key: 'Fecha',   width: 14 },
-    { header: 'Total',   key: 'Total',   width: 18 },
-    { header: 'Estado',  key: 'Estado',  width: 14 },
+    { key: 'Orden',   width: 16 },
+    { key: 'Cliente', width: 32 },
+    { key: 'Fecha',   width: 14 },
+    { key: 'Total',   width: 18 },
+    { key: 'Estado',  width: 14 },
   ]
 
-  _encabezadoExcel(ws, 5)
-  _estilarEncabezado(ws.getRow(4), '10B981')
+  _encabezadoExcel(ws, 5, 'Reporte de Ventas', {
+    filtros,
+    resumen: [
+      { label: 'Total Ventas',       valor: formatCurrency(reporte.total_ventas) },
+      { label: 'Número de Órdenes',  valor: reporte.numero_ordenes },
+      { label: 'Ticket Promedio',    valor: formatCurrency(reporte.ticket_promedio) },
+    ],
+  })
+
+  const headerRow = ws.addRow(['Orden', 'Cliente', 'Fecha', 'Total', 'Estado'])
+  _estilarEncabezado(headerRow, '10B981')
 
   reporte.ordenes?.forEach((o) => {
     const row = ws.addRow({
@@ -370,20 +426,29 @@ export const exportarVentasCSV = async (reporte) => {
 /**
  * Exportar reporte de compras a Excel
  */
-export const exportarComprasCSV = async (reporte) => {
+export const exportarComprasCSV = async (reporte, filtros) => {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Compras')
 
   ws.columns = [
-    { header: 'Orden',     key: 'Orden',     width: 16 },
-    { header: 'Proveedor', key: 'Proveedor', width: 32 },
-    { header: 'Fecha',     key: 'Fecha',     width: 14 },
-    { header: 'Total',     key: 'Total',     width: 18 },
-    { header: 'Estado',    key: 'Estado',    width: 14 },
+    { key: 'Orden',     width: 16 },
+    { key: 'Proveedor', width: 32 },
+    { key: 'Fecha',     width: 14 },
+    { key: 'Total',     width: 18 },
+    { key: 'Estado',    width: 14 },
   ]
 
-  _encabezadoExcel(ws, 5)
-  _estilarEncabezado(ws.getRow(4), '3B82F6')
+  _encabezadoExcel(ws, 5, 'Reporte de Compras', {
+    filtros,
+    resumen: [
+      { label: 'Total Compras',      valor: formatCurrency(reporte.total_compras) },
+      { label: 'Número de Órdenes',  valor: reporte.numero_ordenes },
+      { label: 'Compra Promedio',    valor: formatCurrency(reporte.compra_promedio) },
+    ],
+  })
+
+  const headerRow = ws.addRow(['Orden', 'Proveedor', 'Fecha', 'Total', 'Estado'])
+  _estilarEncabezado(headerRow, '3B82F6')
 
   reporte.ordenes?.forEach((o) => {
     const row = ws.addRow({
@@ -402,19 +467,21 @@ export const exportarComprasCSV = async (reporte) => {
 /**
  * Exportar productos más vendidos a Excel
  */
-export const exportarProductosCSV = async (productos) => {
+export const exportarProductosCSV = async (productos, filtros) => {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Productos Más Vendidos')
 
   ws.columns = [
-    { header: 'Posición',        key: 'Posición',        width: 14 },
-    { header: 'Producto',        key: 'Producto',        width: 38 },
-    { header: 'Cantidad Vendida',key: 'Cantidad Vendida',width: 20 },
-    { header: 'Total Ventas',    key: 'Total Ventas',    width: 20 },
+    { key: 'Posición',         width: 14 },
+    { key: 'Producto',         width: 38 },
+    { key: 'Cantidad Vendida', width: 20 },
+    { key: 'Total Ventas',     width: 20 },
   ]
 
-  _encabezadoExcel(ws, 4)
-  _estilarEncabezado(ws.getRow(4), '8B5CF6')
+  _encabezadoExcel(ws, 4, 'Productos Más Vendidos', { filtros })
+
+  const headerRow = ws.addRow(['Posición', 'Producto', 'Cantidad Vendida', 'Total Ventas'])
+  _estilarEncabezado(headerRow, '8B5CF6')
 
   productos?.forEach((p, index) => {
     const row = ws.addRow({

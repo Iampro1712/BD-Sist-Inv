@@ -1,0 +1,443 @@
+================================================================================
+         INVENTRIX - ESTUDIO DE FACTIBILIDAD ECONÓMICA
+         Sistema de Gestión de Inventario, Ventas y Servicios
+================================================================================
+Versión: 1.0
+Fecha: 2026-05-28
+Proyecto: Inventrix
+Cliente: Negocio PyME (taller de motos / comercio minorista) — Nicaragua
+================================================================================
+
+INTRODUCCIÓN
+  Este documento evalúa la viabilidad económica de contratar el desarrollo del
+  sistema Inventrix a un equipo externo de desarrolladores de software. Se
+  analiza el costo de desarrollo, los gastos operativos mensuales una vez
+  desplegado el sistema, los beneficios económicos esperados para el negocio
+  y el retorno de la inversión frente a las alternativas disponibles en el
+  mercado.
+
+  Los valores monetarios se expresan en dólares estadounidenses (USD), moneda
+  de referencia en Nicaragua y América Central para servicios tecnológicos.
+
+  El estudio responde a la pregunta: ¿Vale la pena económicamente invertir en
+  el desarrollo de este sistema?
+
+================================================================================
+1. INVERSIÓN EN DESARROLLO
+================================================================================
+
+------------------------------------------------------------------------
+1.1 ESTIMACIÓN DE HORAS DE TRABAJO POR MÓDULO
+------------------------------------------------------------------------
+
+  El alcance del sistema fue desglosado en sprints de desarrollo. A
+  continuación se estima el esfuerzo requerido de un equipo externo para
+  construir cada etapa:
+
+  Sprint  Módulos a desarrollar                             Horas est.
+  ──────────────────────────────────────────────────────────────────────
+  1       Infraestructura base, Productos, Clientes,        80 hrs
+          Proveedores, Categorías, Marcas, Dashboard,
+          Docker, despliegue en Vercel
+
+  2       Órdenes de Compra, Órdenes de Venta,              60 hrs
+          Movimientos de Inventario
+
+  3       Módulo de Motos, Servicios, Bitácora fotográfica  90 hrs
+          de 4 etapas, Integración con Cloudflare R2
+
+  4       Sistema de Auditoría con triggers PostgreSQL,     50 hrs
+          Modo oscuro, mejoras de filtros, documentación
+
+  5       Validaciones en 3 capas, Búsqueda global,         60 hrs
+          Ajuste manual de inventario, Campo proveedor
+          en productos, Optimización de despliegue
+
+  ──────────────────────────────────────────────────────────────────────
+  TOTAL HORAS ESTIMADAS DE DESARROLLO                       340 hrs
+  ──────────────────────────────────────────────────────────────────────
+
+------------------------------------------------------------------------
+1.2 COSTO DE DESARROLLO SEGÚN PERFIL DEL EQUIPO CONTRATADO
+------------------------------------------------------------------------
+
+  El costo total depende del perfil y ubicación del equipo de desarrollo.
+  Se presentan cuatro escenarios reales para Nicaragua y la región:
+
+  Perfil del equipo          Tarifa/hora   Costo total estimado
+  ─────────────────────────────────────────────────────────────────────
+  Desarrollador freelance    $10 - $15     $3,400 - $5,100
+  local (Nicaragua / C.A.)
+
+  Desarrollador freelance    $25 - $40     $8,500 - $13,600
+  regional (LATAM)
+
+  Pequeña empresa de         $40 - $60     $13,600 - $20,400
+  software local
+
+  Empresa de software        $70 - $100    $23,800 - $34,000
+  regional establecida
+
+  Recomendación: Para el perfil de este proyecto (Django + React +
+  PostgreSQL, alcance bien definido), contratar un desarrollador
+  freelance con experiencia comprobada en estas tecnologías ofrece
+  el mejor equilibrio entre costo y calidad. El presupuesto objetivo
+  para el cliente es de $5,000 - $10,000 USD para el desarrollo completo.
+
+------------------------------------------------------------------------
+1.3 HERRAMIENTAS Y LICENCIAS DE DESARROLLO
+------------------------------------------------------------------------
+
+  Todo el stack tecnológico propuesto utiliza software de código abierto
+  y gratuito. El cliente no paga licencias por ninguna de estas herramientas:
+
+  Herramienta / Plataforma   Licencia      Costo para el cliente
+  ─────────────────────────────────────────────────────────────────────
+  Python / Django / DRF      Código abierto   $0.00
+  React / Vite / Tailwind    Código abierto   $0.00
+  PostgreSQL                 Código abierto   $0.00
+  Docker                     Gratuito         $0.00
+  Git / GitHub               Gratuito         $0.00
+  Vercel (frontend)          Plan Hobby       $0.00
+  Cloudflare R2              Tier gratuito    $0.00
+  ─────────────────────────────────────────────────────────────────────
+  TOTAL EN LICENCIAS DE SOFTWARE                           $0.00 USD
+
+  Esto contrasta con sistemas propietarios que cobran licencias anuales
+  de $500 - $5,000 USD solo por el derecho de uso del software.
+
+================================================================================
+2. COSTOS OPERATIVOS MENSUALES POST-ENTREGA
+================================================================================
+
+  Una vez que el equipo entrega el sistema, el cliente asume los siguientes
+  costos de operación mensual para mantenerlo en producción. Los costos
+  dependen del tamaño y nivel de actividad del negocio.
+
+------------------------------------------------------------------------
+2.1 ESCENARIO 2 — NEGOCIO MEDIANO
+  Perfil: 3-5 usuarios, hasta 5,000 productos, hasta 10,000 operaciones/mes,
+          entre 1 y 10 GB de fotografías almacenadas
+------------------------------------------------------------------------
+
+  Servicio             Proveedor            Plan            Costo/mes
+  ─────────────────────────────────────────────────────────────────────
+  Alojamiento frontend Vercel               Pro             $20.00
+  Servidor VPS         DigitalOcean /       2 vCPU / 2 GB   $12.00 - $18.00
+  (backend + DB)       Linode               RAM / 50 GB SSD
+  Almacenamiento imgs  Cloudflare R2        Pay-as-you-go   $0.00 - $5.00
+  Dominio web propio   Registrador          .com            $1.00 - $1.50
+  SSL / HTTPS          Cloudflare /         Automático      $0.00
+                       Let's Encrypt
+  ─────────────────────────────────────────────────────────────────────
+  TOTAL MENSUAL OPERATIVO                                 $33.00 - $44.50
+
+------------------------------------------------------------------------
+2.2 ESCENARIO 3 — NEGOCIO EN CRECIMIENTO
+  Perfil: 10+ usuarios, más de 10,000 productos, alta concurrencia,
+          más de 10 GB de fotografías, alta disponibilidad requerida
+------------------------------------------------------------------------
+
+  Servicio             Proveedor            Plan            Costo/mes
+  ─────────────────────────────────────────────────────────────────────
+  Alojamiento frontend Vercel               Pro             $20.00 - $50.00
+  Servidor VPS         DigitalOcean /       4 vCPU / 8 GB   $40.00 - $80.00
+  (backend + DB)       AWS / Linode         RAM / 100 GB SSD
+  Base de datos        Supabase / Neon /    Pro managed     $25.00 - $100.00
+  administrada         AWS RDS
+  Almacenamiento imgs  Cloudflare R2        Pay-as-you-go   $5.00 - $20.00
+  Dominio + CDN        Cloudflare           Pro             $20.00
+  Monitoreo / logs     Servicio externo     Básico          $0.00 - $20.00
+  ─────────────────────────────────────────────────────────────────────
+  TOTAL MENSUAL OPERATIVO                               $110.00 - $290.00
+
+================================================================================
+3. COMPARACIÓN CON ALTERNATIVAS DE MERCADO
+================================================================================
+
+  Antes de decidir encargar el desarrollo, el cliente debe considerar las
+  alternativas disponibles en el mercado para gestión de inventario en PyMEs
+  latinoamericanas:
+
+  Sistema              Origen    Precio/mes    Qué incluye      Limitaciones
+  ──────────────────────────────────────────────────────────────────────────
+  Inventrix            Propio    $5 - $45      Sistema          Requiere desarrollo
+  (desarrollo a        (desarrollo              completo         inicial. Sin sistema
+  medida)              por encargo)             + código         de login hasta v2.1.
+                                               propiedad del
+                                               cliente
+
+  Bind ERP             México    $50 - $200    Inventario,      Enfocado en mercado
+                                               facturación,     mexicano (SAT/CFDI).
+                                               contabilidad     Sin bitácora de motos.
+
+  Alegra               Colombia  $30 - $120    Inventario,      Funciones avanzadas
+                                               facturación,     requieren plan Pro.
+                                               contabilidad     Sin módulo de motos.
+
+  Siigo                Colombia  $40 - $150    Contabilidad,    Enfocado en
+                                               facturación,     contabilidad fiscal.
+                                               inventario       No apto para talleres.
+
+  Odoo Community       Global    $0 (hosting   ERP completo     Configuración inicial
+                                 propio) /     con inventario,  muy compleja. Requiere
+                                 $80 - $300    ventas, CRM      técnico especializado.
+                                 (cloud)
+
+  Excel / Cuaderno     -         $0 - $12      Registro manual  Sin automatización,
+                                               básico           sin trazabilidad,
+                                                                propenso a errores.
+
+  Por qué Inventrix frente a las alternativas:
+    [✓] El cliente es propietario del código: puede modificar el sistema sin
+        depender del proveedor original ni pagar licencias perpetuas.
+    [✓] Módulo de bitácora fotográfica para motos: función especializada no
+        disponible en ningún sistema genérico del mercado sin desarrollo
+        adicional costoso.
+    [✓] Diseñado para Nicaragua: español, formato de teléfono local (+505),
+        sin funcionalidades fiscales de otros países que encarecen el plan
+        y complican el uso.
+    [✓] Costo operativo mínimo: desde $5/mes, frente a $30 - $200/mes de
+        las alternativas comerciales.
+    [✓] Sin riesgo de discontinuación: el cliente no depende de que una
+        empresa extranjera continúe ofreciendo el servicio.
+
+================================================================================
+4. ANÁLISIS COSTO-BENEFICIO
+================================================================================
+
+------------------------------------------------------------------------
+4.1 BENEFICIOS ECONÓMICOS ESPERADOS PARA EL NEGOCIO
+------------------------------------------------------------------------
+
+  Una vez implementado, el sistema genera los siguientes ahorros mensuales
+  estimados para un negocio pequeño de Nicaragua:
+
+  Beneficio                          Ahorro mensual estimado
+  ─────────────────────────────────────────────────────────────────────
+  Eliminación del registro manual    El empleado dedica 2-4 horas diarias
+  en cuadernos o Excel               menos a tareas manuales de registro.
+                                     A $2/hora × 22 días laborales:
+                                     ahorro de $88 - $176 USD/mes en
+                                     tiempo productivo recuperado.
+
+  Reducción de errores en stock      Se evitan pérdidas por ventas de
+  y compras                          productos agotados o compras de
+                                     mercadería ya existente. Estimado:
+                                     $50 - $200 USD/mes según volumen.
+
+  Trazabilidad en servicios          La bitácora fotográfica reduce disputas
+  de motos (bitácora)                con clientes por servicios no
+                                     documentados y mejora la confianza.
+                                     Estimado: $30 - $100 USD/mes.
+
+  Reportes automáticos de ventas     Se eliminan horas de trabajo manual
+  y compras                          para generar reportes en Excel.
+                                     Estimado: 4-8 horas/mes × $2/hr =
+                                     $8 - $16 USD/mes.
+
+  ─────────────────────────────────────────────────────────────────────
+  AHORRO TOTAL MENSUAL ESTIMADO              $176 - $492 USD/mes
+  (escenario conservador, negocio pequeño)
+  ─────────────────────────────────────────────────────────────────────
+
+------------------------------------------------------------------------
+4.2 RETORNO DE INVERSIÓN (ROI)
+------------------------------------------------------------------------
+
+  Escenario A — Desarrollo con freelancer local ($5,000 USD):
+
+  Parámetro                              Valor
+  ─────────────────────────────────────────────────────────────────────
+  Inversión en desarrollo                $5,000 USD (pago único)
+  Costo operativo mensual                $7.50 USD
+  Ahorro mensual estimado (mínimo)       $176 USD
+  Beneficio neto mensual                 $168.50 USD
+  Período de recuperación de inversión   30 meses (aprox. 2.5 años)
+  ─────────────────────────────────────────────────────────────────────
+
+  Escenario B — Desarrollo con empresa regional ($10,000 USD):
+
+  Parámetro                              Valor
+  ─────────────────────────────────────────────────────────────────────
+  Inversión en desarrollo                $10,000 USD (pago único)
+  Costo operativo mensual                $7.50 USD
+  Ahorro mensual estimado (mínimo)       $176 USD
+  Beneficio neto mensual                 $168.50 USD
+  Período de recuperación de inversión   59 meses (aprox. 5 años)
+  ─────────────────────────────────────────────────────────────────────
+
+  Nota importante: Si el cliente hubiera contratado una alternativa
+  comercial como Alegra o Bind ($50/mes), pagaría $600/año adicionales
+  en licencias indefinidamente. Inventrix elimina ese gasto permanente.
+  Considerando el ahorro en licencias vs. Alegra ($50/mes):
+    - Escenario A: recuperación en 17 meses
+    - Escenario B: recuperación en 30 meses
+
+------------------------------------------------------------------------
+4.3 COSTO TOTAL DE PROPIEDAD A 3 AÑOS (TCO)
+------------------------------------------------------------------------
+
+  Comparación entre contratar el desarrollo de Inventrix versus suscribirse
+  a una alternativa comercial equivalente ($50/mes):
+
+  Concepto                     Inventrix          Alternativa comercial
+                               (desarrollo propio) ($50/mes)
+  ─────────────────────────────────────────────────────────────────────
+  Desarrollo / Licencia año 1  $5,000 - $10,000   $600 (suscripción)
+  Operación año 1              $90                 $600
+  Operación año 2              $90                 $630 (+5% inflación)
+  Operación año 3              $90                 $662
+  Personalizaciones futuras    $0 - $500*          $500 - $3,000
+  Capacitación inicial         $0 - $200           $200 - $500
+  ─────────────────────────────────────────────────────────────────────
+  TCO a 3 años                 $5,470 - $11,090   $2,992 - $5,992
+  ─────────────────────────────────────────────────────────────────────
+  TCO a 5 años                 $5,650 - $11,290   $4,100 - $8,500
+  TCO a 7 años                 $5,830 - $11,490   $5,800 - $12,600
+  ─────────────────────────────────────────────────────────────────────
+
+  * Las personalizaciones en Inventrix son opcionales y a costo de mercado,
+    ya que el cliente es propietario del código fuente.
+
+  Interpretación: Inventrix tiene un costo inicial más alto en el corto
+  plazo, pero a partir del año 5-7 resulta más económico que cualquier
+  suscripción mensual, además de ofrecer funcionalidades a medida que
+  ningún sistema comercial cubre (como la bitácora de motos).
+
+================================================================================
+5. ESTRUCTURA DE PAGOS RECOMENDADA AL EQUIPO DE DESARROLLO
+================================================================================
+
+  Para reducir el riesgo financiero del cliente, se recomienda negociar
+  el pago del desarrollo por hitos entregables verificables:
+
+  Hito  Entregable                              % del total   Monto (ej. $7,000)
+  ──────────────────────────────────────────────────────────────────────────────
+  1     Módulo de Productos, Categorías,         20%           $1,400
+        Marcas, Proveedores, Clientes y
+        Dashboard funcional
+
+  2     Órdenes de Compra, Órdenes de Venta      20%           $1,400
+        y Movimientos de Inventario funcionando
+
+  3     Bitácora de Servicios completa con        25%           $1,750
+        integración a Cloudflare R2 y
+        módulo de Motos
+
+  4     Sistema de Auditoría, Reportes,           20%           $1,400
+        Búsqueda Global y Validaciones
+
+  5     Despliegue en producción, pruebas         15%           $1,050
+        de aceptación, entrega de credenciales
+        y documentación técnica
+
+  ──────────────────────────────────────────────────────────────────────────────
+  TOTAL                                          100%          $7,000
+
+  Condición: Ningún pago se realiza si el hito no fue demostrado y aprobado
+  por el cliente. El código se entrega al repositorio del cliente al completar
+  cada hito.
+
+================================================================================
+6. PROYECCIÓN FINANCIERA A 12 MESES POST-IMPLEMENTACIÓN
+================================================================================
+
+  Asumiendo inversión de $7,000 USD en desarrollo (escenario medio) y
+  ahorro mensual conservador de $176 USD:
+
+  Mes    Costo acumulado    Ahorro acumulado    Balance neto
+         (desarrollo +      (desde la puesta    acumulado
+          operación)        en marcha)
+  ──────────────────────────────────────────────────────────────────
+  0      $7,000             $0                  -$7,000
+  1      $7,007.50          $176                -$6,831.50
+  3      $7,022.50          $528                -$6,494.50
+  6      $7,045.00          $1,056              -$5,989.00
+  12     $7,090.00          $2,112              -$4,978.00
+  24     $7,180.00          $4,224              -$2,956.00
+  36     $7,270.00          $6,336              -$934.00
+  41     $7,307.50          $7,216              +$0 (punto de equilibrio)
+  48     $7,360.00          $8,448              +$1,088.00
+  ──────────────────────────────────────────────────────────────────
+  Punto de equilibrio aproximado: mes 41 (3 años y 5 meses)
+
+================================================================================
+7. RIESGOS ECONÓMICOS Y MEDIDAS DE CONTROL
+================================================================================
+
+  ID    Riesgo                          Prob.   Impacto  Medida de control
+  ──────────────────────────────────────────────────────────────────────────
+  RE-1  El equipo cobra más de lo        Media   Alta     Negociar precio fijo
+        presupuestado por cambios                         por alcance cerrado.
+        de alcance                                        Documentar los RF en
+                                                          el contrato antes de
+                                                          iniciar.
+
+  RE-2  El sistema se entrega tarde      Media   Media    Establecer fechas de
+        o incompleto                                      entrega por hito con
+                                                          penalidades contractuales.
+                                                          Revisar demos semanales.
+
+  RE-3  Los costos de hosting suben      Baja    Baja     Migración posible a otro
+        inesperadamente                                   proveedor VPS. Datos
+                                                          portables con Docker.
+
+  RE-4  Cloudflare R2 supera el          Baja    Baja     El plan gratuito cubre
+        plan gratuito                                     10 GB. Costo adicional:
+                                                          $0.015/GB. Para uso
+                                                          típico: menos de $5/mes.
+
+  RE-5  El sistema requiere soporte      Media   Media    El código es propiedad
+        técnico costoso en el futuro                      del cliente. Puede
+                                                          contratar cualquier
+                                                          desarrollador Django/React
+                                                          sin depender del equipo
+                                                          original.
+
+  RE-6  El negocio no adopta el          Media   Alta     Planificar capacitación
+        sistema y continúa usando                         práctica de 4-8 horas
+        métodos manuales                                  con el equipo del negocio
+                                                          como parte del contrato.
+
+================================================================================
+8. CONCLUSIÓN DE FACTIBILIDAD ECONÓMICA
+================================================================================
+
+  VEREDICTO: ECONÓMICAMENTE FACTIBLE — SE RECOMIENDA PROCEDER CON PRECAUCIÓN
+
+  El análisis económico demuestra que contratar el desarrollo de Inventrix
+  es una inversión justificada para una PyME en Nicaragua, bajo las siguientes
+  condiciones:
+
+    [✓] El costo operativo mensual post-entrega es mínimo ($5 - $45 USD),
+        muy inferior a cualquier alternativa comercial equivalente.
+
+    [✓] El sistema cubre una necesidad real del negocio que los sistemas
+        comerciales disponibles no atienden: la bitácora fotográfica de
+        servicios para motos.
+
+    [✓] El cliente es propietario del código fuente, eliminando la
+        dependencia de proveedores y los riesgos de aumentos de precio
+        o discontinuación del servicio.
+
+    [✓] A partir del año 5, el TCO de Inventrix es inferior al de
+        cualquier alternativa de suscripción mensual comparable.
+
+    [!] El punto de equilibrio financiero se alcanza aproximadamente en
+        el mes 41 (3.5 años). El cliente debe evaluar si el horizonte
+        de uso del sistema justifica la inversión inicial.
+
+    [!] El riesgo principal es el incumplimiento del equipo contratado.
+        Se mitiga con contrato por hitos, revisiones periódicas y
+        entrega incremental del código fuente desde el inicio.
+
+  Presupuesto recomendado para el cliente: $5,000 - $8,000 USD para
+  el desarrollo completo con un equipo freelance regional calificado,
+  negociado por hitos y con contrato escrito que incluya la entrega
+  del código fuente como condición de pago final.
+
+
+================================================================================
+                          FIN DEL DOCUMENTO
+================================================================================

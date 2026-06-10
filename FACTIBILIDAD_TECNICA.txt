@@ -1,0 +1,456 @@
+================================================================================
+         INVENTRIX - ESTUDIO DE FACTIBILIDAD TÉCNICA
+         Sistema de Gestión de Inventario, Ventas y Servicios
+================================================================================
+Versión: 1.0
+Fecha: 2026-05-28
+Proyecto: Inventrix
+Cliente: Negocio PyME (taller de motos / comercio minorista) — Nicaragua
+================================================================================
+
+INTRODUCCIÓN
+  Este documento evalúa la viabilidad técnica de encargar el desarrollo del
+  sistema Inventrix a un equipo externo de desarrolladores de software. Se
+  analiza si la tecnología propuesta es adecuada, si el equipo contratado
+  cuenta con las capacidades necesarias, si la infraestructura requerida es
+  accesible para el cliente, y cuáles son los riesgos técnicos a considerar
+  antes de aprobar el proyecto.
+
+  El estudio responde a la pregunta: ¿Es técnicamente posible construir y
+  mantener este sistema con los recursos y tecnologías disponibles?
+
+================================================================================
+1. DESCRIPCIÓN TÉCNICA DEL SISTEMA SOLICITADO
+================================================================================
+
+  El cliente requiere una aplicación web de gestión empresarial que integre:
+  control de inventario, registro de ventas y compras, gestión de clientes y
+  proveedores, y una bitácora fotográfica de servicios para motos. El sistema
+  debe ser accesible desde navegadores web en cualquier dispositivo, sin
+  necesidad de instalar software en las computadoras del negocio.
+
+  Tipo de sistema: Aplicación web SPA (Single Page Application)
+  Modelo de acceso: Navegador web (Chrome, Firefox, Edge, Safari)
+  Modelo de despliegue propuesto por el equipo de desarrollo:
+    - Frontend: Vercel (plataforma en la nube, sin servidor propio)
+    - Backend:  Servidor VPS con contenedor Docker y Gunicorn
+    - Base de datos: PostgreSQL 16
+    - Almacenamiento de imágenes: Cloudflare R2 (servicio en la nube)
+
+================================================================================
+2. EVALUACIÓN DEL STACK TECNOLÓGICO PROPUESTO
+================================================================================
+
+  El equipo de desarrollo propone las siguientes tecnologías. A continuación
+  se evalúa cada una desde la perspectiva del cliente: madurez, costo,
+  disponibilidad de soporte y adecuación al proyecto.
+
+------------------------------------------------------------------------
+2.1 BACKEND (servidor y lógica de negocio)
+------------------------------------------------------------------------
+
+  Tecnología         Versión   Evaluación para el cliente
+  ─────────────────────────────────────────────────────────────────────
+  Python             3.12+     Lenguaje de programación libre y gratuito.
+                               Uno de los más usados del mundo. Gran cantidad
+                               de desarrolladores disponibles si se necesita
+                               reemplazar o ampliar el equipo en el futuro.
+
+  Django             6.0.3     Framework web gratuito y de código abierto.
+                               Usado por empresas como Instagram, Pinterest y
+                               Mozilla. Incluye seguridad, validación de datos
+                               y gestión de base de datos sin costo adicional.
+
+  Django REST        3.14+     Extensión de Django para construir APIs web.
+  Framework                    Estándar de la industria para proyectos Python.
+                               Gratuita y ampliamente documentada.
+
+  PostgreSQL         16        Base de datos gratuita y de código abierto.
+                               Usada en proyectos empresariales de gran escala.
+                               Ofrece características avanzadas necesarias para
+                               este proyecto: almacenamiento de datos en formato
+                               JSON (fotos de bitácora) y registro automático de
+                               cambios mediante triggers.
+
+  Gunicorn           Latest    Servidor de producción para aplicaciones Python.
+                               Gratuito. Permite manejar múltiples usuarios
+                               simultáneos sin degradar el rendimiento.
+
+  boto3 + Pillow     Latest    Librerías para manejo de imágenes y conexión con
+                               Cloudflare R2. Gratuitas. Gestionadas por el
+                               equipo de desarrollo.
+
+------------------------------------------------------------------------
+2.2 FRONTEND (interfaz de usuario)
+------------------------------------------------------------------------
+
+  Tecnología         Versión   Evaluación para el cliente
+  ─────────────────────────────────────────────────────────────────────
+  React              19.2.4    Librería de interfaz de usuario más usada en
+                               la industria actualmente. Gratuita. Garantiza
+                               compatibilidad futura y disponibilidad de
+                               desarrolladores para mantenimiento.
+
+  Vite               7.0       Herramienta de construcción del frontend.
+                               Gratuita. Produce aplicaciones optimizadas con
+                               tiempos de carga rápidos para el usuario final.
+
+  TailwindCSS        4.1.17    Framework de diseño visual. Gratuito. Permite
+                               construir interfaces modernas y responsivas
+                               (adaptadas a móvil, tablet y computadora).
+
+  React Query +      Latest    Librerías de gestión de datos en el frontend.
+  Zustand                      Gratuitas. Reducen la cantidad de llamadas al
+                               servidor y mantienen la interfaz fluida.
+
+  React Router DOM   7.13.1    Manejo de navegación entre páginas dentro de
+                               la aplicación. Gratuito.
+
+  Recharts           Latest    Librería de gráficos para los reportes y el
+                               dashboard. Gratuita.
+
+  jsPDF + ExcelJS    Latest    Generación de reportes en PDF y Excel
+                               directamente en el navegador del usuario.
+                               Gratuitas.
+
+------------------------------------------------------------------------
+2.3 INFRAESTRUCTURA Y DESPLIEGUE
+------------------------------------------------------------------------
+
+  Componente         Evaluación para el cliente
+  ─────────────────────────────────────────────────────────────────────
+  Docker             Tecnología de contenedores que garantiza que el sistema
+                     funcione igual en desarrollo, pruebas y producción.
+                     Reduce el riesgo de errores por diferencias de entorno.
+
+  Vercel             Plataforma en la nube para alojar el frontend. No
+                     requiere que el cliente administre servidores. Incluye
+                     HTTPS, CDN global y despliegue automático desde GitHub.
+                     Plan gratuito disponible para uso inicial.
+
+  Cloudflare R2      Servicio de almacenamiento de imágenes en la nube.
+                     Compatible con el estándar de Amazon S3, lo que facilita
+                     migrar a otro proveedor si fuera necesario. El plan
+                     gratuito cubre hasta 10 GB de almacenamiento y 1 millón
+                     de operaciones al mes, suficiente para uso inicial.
+
+  GitHub             Plataforma de control de versiones. El código fuente del
+                     proyecto queda respaldado y accesible para el cliente,
+                     quien puede contratar cualquier otro desarrollador para
+                     modificaciones futuras.
+
+================================================================================
+3. ARQUITECTURA DEL SISTEMA
+================================================================================
+
+  El equipo de desarrollo propone una arquitectura de tres capas desacopladas,
+  lo que significa que cada parte del sistema puede actualizarse o reemplazarse
+  de forma independiente sin afectar las demás.
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  INTERFAZ DE USUARIO (Frontend)                                  │
+  │  React 19 + Vite 7 → alojado en Vercel                          │
+  │  El usuario accede desde cualquier navegador web                 │
+  └────────────────────────┬─────────────────────────────────────────┘
+                           │ Conexión segura HTTPS
+  ┌────────────────────────┴─────────────────────────────────────────┐
+  │  SERVIDOR DE APLICACIONES (Backend)                              │
+  │  Django 6 + Django REST Framework                                │
+  │  Procesa la lógica del negocio: ventas, inventario, reportes     │
+  └─────────────┬──────────────────────────┬────────────────────────┘
+                │                          │
+  ┌─────────────┴──────────┐  ┌────────────┴───────────────────────┐
+  │  BASE DE DATOS         │  │  ALMACENAMIENTO DE IMÁGENES        │
+  │  PostgreSQL 16         │  │  Cloudflare R2                     │
+  │  Productos, clientes,  │  │  Fotos de bitácora de servicios    │
+  │  ventas, compras,      │  │  e imágenes de productos           │
+  │  auditoría, etc.       │  └────────────────────────────────────┘
+  └────────────────────────┘
+
+  Ventaja de esta arquitectura para el cliente:
+    - Si el proveedor de hosting del frontend cambia de precio, solo se
+      migra esa capa sin tocar el resto del sistema.
+    - Si se requiere cambiar el proveedor de imágenes (R2), el resto del
+      sistema no se ve afectado.
+    - El equipo puede trabajar en el frontend y el backend en paralelo,
+      acortando los tiempos de entrega.
+
+================================================================================
+4. CAPACIDADES TÉCNICAS REQUERIDAS DEL EQUIPO DE DESARROLLO
+================================================================================
+
+  Para construir y mantener este sistema, el equipo contratado debe acreditar
+  experiencia en las siguientes áreas:
+
+  Área                         Nivel requerido   Justificación
+  ─────────────────────────────────────────────────────────────────────
+  Python / Django              Avanzado          Backend completo del sistema.
+                                                 Serializers, modelos, vistas,
+                                                 migraciones y triggers.
+
+  React / JavaScript           Avanzado          Frontend SPA con múltiples
+                                                 módulos, formularios y gráficos.
+
+  PostgreSQL                   Intermedio        Diseño de esquema, consultas
+                                                 optimizadas, triggers de auditoría
+                                                 y campos JSONB.
+
+  Docker / Linux               Intermedio        Contenedorización del backend,
+                                                 configuración de producción y
+                                                 gestión de variables de entorno.
+
+  Diseño responsivo (CSS)      Intermedio        La interfaz debe funcionar en
+                                                 móvil, tablet y computadora.
+
+  Integración con APIs cloud   Básico            Configuración de Cloudflare R2
+  (S3-compatible)                                para almacenamiento de imágenes.
+
+  Seguridad web básica         Intermedio        CORS, protección contra XSS,
+                                                 inyección SQL, manejo seguro de
+                                                 contraseñas y variables de entorno.
+
+  Nota para el cliente: El equipo de desarrollo debe presentar un portafolio
+  que incluya al menos un proyecto Django + React desplegado en producción.
+  Se recomienda solicitar referencias de proyectos similares antes de firmar
+  el contrato.
+
+================================================================================
+5. REQUERIMIENTOS DE INFRAESTRUCTURA PARA EL CLIENTE
+================================================================================
+
+------------------------------------------------------------------------
+5.1 LO QUE DEBE PROVEER EL CLIENTE
+------------------------------------------------------------------------
+
+  Recurso                       Detalle
+  ─────────────────────────────────────────────────────────────────────
+  Computadora para uso diario   Cualquier PC o laptop con navegador web
+                                actualizado (Chrome, Firefox o Edge).
+                                No se requiere instalación de software.
+
+  Conexión a internet           Mínimo 5 Mbps de velocidad de descarga
+                                para uso normal del sistema.
+
+  Dominio web (opcional)        Nombre de dominio propio (ej: mitaller.com).
+                                Costo: $12 - $18 USD/año. El equipo puede
+                                adquirirlo a cuenta del cliente.
+
+  Cuenta en Cloudflare          Cuenta gratuita en cloudflare.com para
+                                el almacenamiento de imágenes (R2).
+                                El equipo guía la configuración inicial.
+
+------------------------------------------------------------------------
+5.2 LO QUE ADMINISTRA EL EQUIPO DE DESARROLLO
+------------------------------------------------------------------------
+
+  Recurso                       Detalle
+  ─────────────────────────────────────────────────────────────────────
+  Servidor VPS (hosting)        El equipo configura y gestiona el servidor
+                                donde corre el backend. Costo mensual a
+                                cargo del cliente (ver Factibilidad Económica).
+
+  Base de datos PostgreSQL      Instalada en el mismo servidor VPS. El equipo
+                                configura backups automáticos diarios.
+
+  Despliegue del frontend       El equipo configura Vercel y el despliegue
+  en Vercel                     automático desde GitHub.
+
+  Certificado SSL/HTTPS         Gestionado automáticamente por Vercel y el
+                                proxy del servidor. Sin costo adicional.
+
+------------------------------------------------------------------------
+5.3 REQUERIMIENTOS TÉCNICOS MÍNIMOS DE PRODUCCIÓN
+------------------------------------------------------------------------
+
+  Componente           Especificación mínima
+  ─────────────────────────────────────────────────────────────────────
+  Servidor VPS         4 vCPU / 8 GB RAM / 80 GB SSD
+  (backend + DB)       Sistema operativo: Ubuntu 24.04 LTS
+  Frontend             Vercel (plataforma administrada, sin servidor propio)
+  Almacenamiento imgs  Cloudflare R2 (tier gratuito: 10 GB)
+  Red                  HTTPS obligatorio. Dominio propio recomendado.
+  Backup               Automatizado diariamente con retención de 30 días.
+
+================================================================================
+6. SEGURIDAD TÉCNICA DEL SISTEMA
+================================================================================
+
+  El equipo de desarrollo debe garantizar las siguientes medidas de seguridad,
+  que el cliente debe verificar en la entrega:
+
+  Aspecto               Medida exigida al equipo
+  ─────────────────────────────────────────────────────────────────────
+  Credenciales y        Ninguna contraseña ni clave de acceso debe estar
+  secretos              escrita directamente en el código fuente. Deben
+                        usarse variables de entorno en el servidor.
+
+  Control de acceso     La API del backend no debe ser accesible sin
+  a la API              autenticación para operaciones de escritura. El
+                        sistema de login debe implementarse antes del
+                        despliegue en producción.
+
+  Protección contra     El framework Django protege por defecto contra
+  ataques comunes       inyección SQL, XSS y CSRF. El equipo debe
+                        mantener estas protecciones activas.
+
+  Validación de datos   Todo dato ingresado por el usuario debe validarse
+                        tanto en el navegador como en el servidor antes
+                        de guardarse en la base de datos.
+
+  HTTPS                 El sistema completo debe operar bajo HTTPS en
+                        producción. Ninguna comunicación en texto plano.
+
+  Auditoría             El sistema debe registrar automáticamente cualquier
+                        modificación a los datos de productos mediante
+                        triggers de base de datos, sin posibilidad de
+                        alterar ese historial.
+
+  Backups               El equipo debe entregar un procedimiento documentado
+                        de respaldo y restauración de la base de datos.
+
+================================================================================
+7. ESCALABILIDAD TÉCNICA
+================================================================================
+
+  El sistema está diseñado para crecer con el negocio. A continuación se
+  describe la capacidad de escalar cada componente cuando sea necesario:
+
+  Componente        Capacidad actual          Cómo escala en el futuro
+  ─────────────────────────────────────────────────────────────────────
+  Frontend          Vercel CDN global.        Escala automáticamente sin
+                    Soporta miles de          intervención del equipo técnico.
+                    usuarios simultáneos.
+
+  Backend           1 servidor con            Se puede aumentar la capacidad
+                    3 procesos paralelos.     del VPS (más RAM/CPU) o agregar
+                                              servidores adicionales.
+
+  Base de datos     1 instancia PostgreSQL.   Migración a un servicio de base
+                                              de datos administrado (Supabase,
+                                              Neon) sin cambios en el sistema.
+
+  Almacenamiento    Cloudflare R2 gratuito    El almacenamiento puede crecer
+  de imágenes       hasta 10 GB.              sin límite práctico a $0.015/GB.
+
+================================================================================
+8. RIESGOS TÉCNICOS Y MEDIDAS DE MITIGACIÓN
+================================================================================
+
+  ID    Riesgo                          Prob.   Impacto  Medida preventiva
+  ──────────────────────────────────────────────────────────────────────────
+  RT-1  El sistema se entrega sin       Media   Alta     Exigir en el contrato
+        sistema de autenticación                         que el login de usuarios
+        de usuarios                                      sea parte del alcance
+                                                         antes de ir a producción.
+
+  RT-2  Pérdida de datos por falla      Baja    Alta     Exigir al equipo la
+        del servidor sin backup                          configuración de backups
+                                                         automáticos diarios y
+                                                         un procedimiento de
+                                                         restauración probado.
+
+  RT-3  El equipo abandona el           Media   Alta     Exigir entrega del código
+        proyecto antes de terminar                       fuente en GitHub desde
+                                                         el inicio. Pago por
+                                                         hitos entregados.
+
+  RT-4  Dificultad para encontrar       Media   Media    Usar tecnologías populares
+        soporte técnico futuro                           (Django, React, PostgreSQL)
+                                                         con grandes comunidades
+                                                         de desarrolladores.
+
+  RT-5  Dependencia del equipo          Media   Media    El código fuente es
+        original para cualquier                          propiedad del cliente.
+        cambio                                           Cualquier desarrollador
+                                                         con experiencia en
+                                                         Django/React puede
+                                                         continuar el proyecto.
+
+  RT-6  Caída del servicio de           Baja    Media    Las URLs de imágenes
+        Cloudflare R2                                    se guardan en la base
+                                                         de datos. El sistema
+                                                         sigue operando aunque
+                                                         las imágenes no carguen.
+
+  RT-7  Rendimiento insuficiente        Baja    Media    La arquitectura soporta
+        con muchos usuarios                              escalar horizontalmente.
+        simultáneos                                      El VPS puede aumentarse
+                                                         de plan en cualquier
+                                                         momento.
+
+================================================================================
+9. COMPATIBILIDAD CON DISPOSITIVOS Y NAVEGADORES
+================================================================================
+
+  Dispositivo / Navegador    Compatibilidad
+  ─────────────────────────────────────────────────────────────────────
+  Google Chrome (última)     Completa — navegador recomendado
+  Mozilla Firefox (última)   Completa
+  Microsoft Edge (última)    Completa
+  Safari / iPhone / iPad     Completa
+  Teléfonos Android          Completa (diseño adaptado a pantalla pequeña)
+  Tabletas                   Completa
+
+  El sistema no requiere instalar ninguna aplicación en los dispositivos
+  del negocio. Solo se necesita un navegador web actualizado.
+
+================================================================================
+10. CRITERIOS DE ACEPTACIÓN TÉCNICA PARA LA ENTREGA
+================================================================================
+
+  El cliente debe verificar los siguientes puntos antes de dar por aceptado
+  el sistema y realizar el pago final al equipo de desarrollo:
+
+  [ ] El sistema funciona correctamente en Chrome, Firefox y Edge.
+  [ ] La interfaz se adapta correctamente en celular, tablet y computadora.
+  [ ] Todos los módulos del sistema operan sin errores críticos.
+  [ ] El sistema cuenta con HTTPS activo en producción.
+  [ ] Los backups automáticos están configurados y se ha probado la
+      restauración al menos una vez.
+  [ ] El código fuente está disponible en el repositorio GitHub del cliente.
+  [ ] El equipo entrega las credenciales del servidor VPS, Vercel,
+      Cloudflare R2 y GitHub al cliente.
+  [ ] Se entrega documentación de despliegue para futuras actualizaciones.
+  [ ] El sistema de autenticación de usuarios está implementado y funcional.
+  [ ] Los triggers de auditoría de base de datos están activos y registrando
+      cambios correctamente.
+
+================================================================================
+11. CONCLUSIÓN DE FACTIBILIDAD TÉCNICA
+================================================================================
+
+  VEREDICTO: TÉCNICAMENTE FACTIBLE — SE RECOMIENDA PROCEDER
+
+  El sistema Inventrix puede ser construido con tecnologías maduras, gratuitas
+  y ampliamente soportadas. Las conclusiones del estudio son:
+
+    [✓] El stack tecnológico propuesto (Django + React + PostgreSQL) es
+        estándar en la industria, con abundante documentación y soporte
+        comunitario global.
+
+    [✓] No se requiere ningún software propietario ni licencias de pago
+        para el desarrollo ni para la operación del sistema.
+
+    [✓] La infraestructura de producción es accesible para una PyME:
+        no se necesita administrar servidores complejos ni contratar
+        personal técnico permanente.
+
+    [✓] El cliente conserva la propiedad del código fuente, lo que
+        elimina la dependencia del equipo de desarrollo original.
+
+    [✓] La arquitectura es escalable y puede crecer con el negocio sin
+        necesidad de reescribir el sistema.
+
+    [!] Condición técnica prioritaria: el sistema de autenticación de
+        usuarios debe incluirse en el alcance del contrato antes del
+        despliegue en producción. Sin este módulo, cualquier persona
+        con acceso a la URL del sistema podría ver y modificar los datos.
+
+  Se recomienda al cliente incluir en el contrato de desarrollo una cláusula
+  de entrega del código fuente, credenciales de infraestructura y
+  documentación técnica como condición de pago del último hito.
+
+
+================================================================================
+                          FIN DEL DOCUMENTO
+================================================================================
