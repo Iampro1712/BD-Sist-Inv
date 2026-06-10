@@ -1,10 +1,32 @@
-import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import ExcelJS from 'exceljs'
-
 /**
- * Utilidades para exportar reportes a diferentes formatos
+ * Utilidades para exportar reportes a diferentes formatos.
+ *
+ * jsPDF, jspdf-autotable y ExcelJS (~1.2 MB en conjunto) se importan de forma
+ * dinámica y solo se descargan cuando el usuario realmente exporta, en vez de
+ * inflar el bundle inicial de la página de Reportes.
  */
+
+let _pdfLibs = null
+/** Carga (una sola vez) jsPDF + autoTable bajo demanda. */
+const loadPdf = async () => {
+  if (!_pdfLibs) {
+    const [jspdfMod, autoTableMod] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ])
+    _pdfLibs = { jsPDF: jspdfMod.jsPDF, autoTable: autoTableMod.default }
+  }
+  return _pdfLibs
+}
+
+let _ExcelJS = null
+/** Carga (una sola vez) ExcelJS bajo demanda. */
+const loadExcel = async () => {
+  if (!_ExcelJS) {
+    _ExcelJS = (await import('exceljs')).default
+  }
+  return _ExcelJS
+}
 
 // Datos del negocio
 const NEGOCIO = {
@@ -174,7 +196,8 @@ const _encabezadoExcel = (ws, numCols, titulo, opts = {}) => {
 /**
  * Exportar reporte de inventario a PDF
  */
-export const exportarInventarioPDF = (reporte) => {
+export const exportarInventarioPDF = async (reporte) => {
+  const { jsPDF, autoTable } = await loadPdf()
   const doc = new jsPDF()
   let y = _encabezadoPDF(doc)
 
@@ -217,7 +240,8 @@ export const exportarInventarioPDF = (reporte) => {
 /**
  * Exportar reporte de ventas a PDF
  */
-export const exportarVentasPDF = (reporte, filtros) => {
+export const exportarVentasPDF = async (reporte, filtros) => {
+  const { jsPDF, autoTable } = await loadPdf()
   const doc = new jsPDF()
   let y = _encabezadoPDF(doc)
 
@@ -260,7 +284,8 @@ export const exportarVentasPDF = (reporte, filtros) => {
 /**
  * Exportar reporte de compras a PDF
  */
-export const exportarComprasPDF = (reporte, filtros) => {
+export const exportarComprasPDF = async (reporte, filtros) => {
+  const { jsPDF, autoTable } = await loadPdf()
   const doc = new jsPDF()
   let y = _encabezadoPDF(doc)
 
@@ -303,7 +328,8 @@ export const exportarComprasPDF = (reporte, filtros) => {
 /**
  * Exportar productos más vendidos a PDF
  */
-export const exportarProductosPDF = (productos, filtros) => {
+export const exportarProductosPDF = async (productos, filtros) => {
+  const { jsPDF, autoTable } = await loadPdf()
   const doc = new jsPDF()
   let y = _encabezadoPDF(doc)
 
@@ -343,6 +369,7 @@ export const exportarProductosPDF = (productos, filtros) => {
  * Exportar reporte de inventario a Excel
  */
 export const exportarInventarioCSV = async (reporte) => {
+  const ExcelJS = await loadExcel()
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Inventario')
 
@@ -386,6 +413,7 @@ export const exportarInventarioCSV = async (reporte) => {
  * Exportar reporte de ventas a Excel
  */
 export const exportarVentasCSV = async (reporte, filtros) => {
+  const ExcelJS = await loadExcel()
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Ventas')
 
@@ -427,6 +455,7 @@ export const exportarVentasCSV = async (reporte, filtros) => {
  * Exportar reporte de compras a Excel
  */
 export const exportarComprasCSV = async (reporte, filtros) => {
+  const ExcelJS = await loadExcel()
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Compras')
 
@@ -468,6 +497,7 @@ export const exportarComprasCSV = async (reporte, filtros) => {
  * Exportar productos más vendidos a Excel
  */
 export const exportarProductosCSV = async (productos, filtros) => {
+  const ExcelJS = await loadExcel()
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Productos Más Vendidos')
 

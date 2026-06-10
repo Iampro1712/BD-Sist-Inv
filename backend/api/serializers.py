@@ -2,12 +2,46 @@
 Serializers para la API de Inventrix
 """
 from rest_framework import serializers
+from django.db import connection
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
     MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio,
     AuditoriaProducto, Garantia, ReclamacionGarantia
 )
+
+
+# ============================================================================
+# HELPERS PARA EVITAR N+1 EN LISTADOS
+# ============================================================================
+
+def _root_instances(serializer):
+    """Devuelve la lista completa de objetos que se están serializando.
+
+    En un listado (many=True) el `parent` es el ListSerializer y su `.instance`
+    es la página completa; en detalle es el propio objeto. Permite precargar
+    datos relacionados una sola vez por lote en vez de una query por fila.
+    """
+    root = serializer.parent if serializer.parent is not None else serializer
+    inst = root.instance
+    if inst is None:
+        return []
+    if isinstance(inst, (list, tuple)):
+        return list(inst)
+    try:
+        return list(inst)
+    except TypeError:
+        return [inst]
+
+
+def _batch_cache(serializer, attr_name, builder):
+    """Construye (y cachea en el serializer raíz) un dict de lookup por lote."""
+    root = serializer.parent if serializer.parent is not None else serializer
+    cache = getattr(root, attr_name, None)
+    if cache is None:
+        cache = builder(root)
+        setattr(root, attr_name, cache)
+    return cache
 
 
 # ============================================================================
@@ -22,7 +56,7 @@ class MarcaSerializer(serializers.ModelSerializer):
         model = Marca
         fields = ['id', 'nombre', 'descripcion', 'fecha_creacion', 'productos_count']
         read_only_fields = ['fecha_creacion', 'productos_count']
-    
+
     def get_productos_count(self, obj):
         """Retorna el número de productos asociados a esta marca"""
         return obj.productos.count()
@@ -36,7 +70,7 @@ class CategoriaSerializer(serializers.ModelSerializer):
         model = Categoria
         fields = ['id', 'nombre', 'descripcion', 'fecha_creacion', 'productos_count']
         read_only_fields = ['fecha_creacion', 'productos_count']
-    
+
     def get_productos_count(self, obj):
         """Retorna el número de productos asociados a esta categoría"""
         return obj.productos.count()
@@ -175,31 +209,44 @@ class OrdenCompraListSerializer(serializers.ModelSerializer):
         ]
 
     def get_proveedor_nombre(self, obj):
-        try:
-            proveedor = Proveedor.objects.get(id_proveedor=obj.id_proveedor)
-            return proveedor.nombre_empresa
-        except Proveedor.DoesNotExist:
-            return 'Proveedor no encontrado'
+        cache = _batch_cache(self, '_oc_proveedor_nombre', _build_proveedor_nombre_map)
+        return cache.get(obj.id_proveedor, 'Proveedor no encontrado')
 
     def get_estado(self, obj):
         return ESTADO_ID_MAP.get(obj.id_estado, 'pendiente')
 
     def get_estado_display(self, obj):
         return ESTADO_LABEL_MAP.get(obj.id_estado, 'Desconocido')
-    
+
     def get_total(self, obj):
-        from django.db import connection
-        with connection.cursor() as cursor:
-            # Sumar los precios de compra de todos los productos en la orden
-            cursor.execute("""
-                SELECT SUM(p.precio_compra_unitario)
-                FROM orden_compra oc
-                INNER JOIN orden_producto op ON op.id_orden = oc.id_orden
-                INNER JOIN productos p ON p.id_producto = op.id_producto
-                WHERE oc.id_orden = %s
-            """, [obj.id_orden])
-            result = cursor.fetchone()
-            return float(result[0]) if result and result[0] else 0.0
+        cache = _batch_cache(self, '_oc_total', _build_orden_compra_total_map)
+        return cache.get(obj.id_orden, 0.0)
+
+
+def _build_proveedor_nombre_map(root):
+    """Mapa {id_proveedor: nombre_empresa} para todos los proveedores del lote."""
+    ids = {getattr(o, 'id_proveedor', None) for o in _root_instances(root)}
+    ids.discard(None)
+    return dict(
+        Proveedor.objects.filter(id_proveedor__in=ids)
+        .values_list('id_proveedor', 'nombre_empresa')
+    )
+
+
+def _build_orden_compra_total_map(root):
+    """Mapa {id_orden: total} con una única agregación para todo el lote."""
+    ids = [o.id_orden for o in _root_instances(root)]
+    if not ids:
+        return {}
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT op.id_orden, SUM(p.precio_compra_unitario)
+            FROM orden_producto op
+            INNER JOIN productos p ON p.id_producto = op.id_producto
+            WHERE op.id_orden = ANY(%s)
+            GROUP BY op.id_orden
+        """, [ids])
+        return {row[0]: float(row[1]) if row[1] else 0.0 for row in cursor.fetchall()}
 
 
 class OrdenCompraDetailSerializer(serializers.ModelSerializer):
@@ -221,19 +268,21 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
             'total', 'subtotal', 'productos', 'notas'
         ]
 
+    def _get_proveedor(self, obj):
+        """Carga el proveedor una sola vez por objeto (nombre + contacto)."""
+        if not hasattr(self, '_proveedor_obj'):
+            self._proveedor_obj = Proveedor.objects.filter(
+                id_proveedor=obj.id_proveedor
+            ).first()
+        return self._proveedor_obj
+
     def get_proveedor_nombre(self, obj):
-        try:
-            proveedor = Proveedor.objects.get(id_proveedor=obj.id_proveedor)
-            return proveedor.nombre_empresa
-        except Proveedor.DoesNotExist:
-            return 'Proveedor no encontrado'
+        proveedor = self._get_proveedor(obj)
+        return proveedor.nombre_empresa if proveedor else 'Proveedor no encontrado'
 
     def get_proveedor_contacto(self, obj):
-        try:
-            proveedor = Proveedor.objects.get(id_proveedor=obj.id_proveedor)
-            return proveedor.persona_contacto
-        except Proveedor.DoesNotExist:
-            return None
+        proveedor = self._get_proveedor(obj)
+        return proveedor.persona_contacto if proveedor else None
 
     def get_estado(self, obj):
         return ESTADO_ID_MAP.get(obj.id_estado, 'pendiente')
@@ -278,20 +327,10 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
     def get_subtotal(self, obj):
         # El subtotal es igual al total en este caso
         return self.get_total(obj)
-    
+
     def get_total(self, obj):
-        from django.db import connection
-        with connection.cursor() as cursor:
-            # Sumar los precios de compra de todos los productos en la orden
-            cursor.execute("""
-                SELECT SUM(p.precio_compra_unitario)
-                FROM orden_compra oc
-                INNER JOIN orden_producto op ON op.id_orden = oc.id_orden
-                INNER JOIN productos p ON p.id_producto = op.id_producto
-                WHERE oc.id_orden = %s
-            """, [obj.id_orden])
-            result = cursor.fetchone()
-            return float(result[0]) if result and result[0] else 0.0
+        cache = _batch_cache(self, '_oc_total', _build_orden_compra_total_map)
+        return cache.get(obj.id_orden, 0.0)
 
 
 class OrdenCompraCreateSerializer(serializers.Serializer):
@@ -374,15 +413,21 @@ class OrdenVentaListSerializer(serializers.ModelSerializer):
         ]
     
     def get_cliente_nombre(self, obj):
-        try:
-            cliente = Cliente.objects.get(id_cliente=obj.id_cliente)
-            return cliente.nombre
-        except Cliente.DoesNotExist:
-            return 'Cliente no encontrado'
-    
+        cache = _batch_cache(self, '_ov_cliente_nombre', _build_cliente_nombre_map)
+        return cache.get(obj.id_cliente, 'Cliente no encontrado')
+
     def get_estado_display(self, obj):
         # Por ahora retornamos un estado por defecto
         return 'Completado'
+
+
+def _build_cliente_nombre_map(root):
+    """Mapa {id_cliente: nombre} para todos los clientes del lote."""
+    ids = {getattr(o, 'id_cliente', None) for o in _root_instances(root)}
+    ids.discard(None)
+    return dict(
+        Cliente.objects.filter(id_cliente__in=ids).values_list('id_cliente', 'nombre')
+    )
 
 
 class OrdenVentaDetailSerializer(serializers.ModelSerializer):
@@ -625,13 +670,13 @@ class MotoSerializer(serializers.ModelSerializer):
         ]
     
     def get_total_servicios(self, obj):
-        """Retorna el número total de servicios realizados"""
-        return obj.servicios.count()
-    
+        """Retorna el número total de servicios realizados (usa el prefetch)"""
+        return len(obj.servicios.all())
+
     def get_ultimo_servicio(self, obj):
-        """Retorna la fecha del último servicio"""
-        ultimo = obj.servicios.order_by('-fecha_servicio').first()
-        return ultimo.fecha_servicio if ultimo else None
+        """Retorna la fecha del último servicio (usa el prefetch)"""
+        fechas = [s.fecha_servicio for s in obj.servicios.all() if s.fecha_servicio]
+        return max(fechas) if fechas else None
 
 
 class ClienteConMotosSerializer(serializers.ModelSerializer):
@@ -743,21 +788,14 @@ class ServicioMotoConBitacoraSerializer(serializers.ModelSerializer):
         ]
     
     def get_bitacoras_por_modulo(self, obj):
-        """Organiza las bitácoras por módulo"""
-        bitacoras = obj.bitacoras.all()
+        """Organiza las bitácoras por módulo (una sola pasada sobre el prefetch)"""
+        grupos = {'recepcion': [], 'diagnostico': [], 'reparacion': [], 'entrega': []}
+        for bitacora in obj.bitacoras.all():
+            if bitacora.modulo in grupos:
+                grupos[bitacora.modulo].append(bitacora)
         return {
-            'recepcion': BitacoraServicioSerializer(
-                bitacoras.filter(modulo='recepcion'), many=True
-            ).data,
-            'diagnostico': BitacoraServicioSerializer(
-                bitacoras.filter(modulo='diagnostico'), many=True
-            ).data,
-            'reparacion': BitacoraServicioSerializer(
-                bitacoras.filter(modulo='reparacion'), many=True
-            ).data,
-            'entrega': BitacoraServicioSerializer(
-                bitacoras.filter(modulo='entrega'), many=True
-            ).data,
+            modulo: BitacoraServicioSerializer(items, many=True).data
+            for modulo, items in grupos.items()
         }
 
 
@@ -854,11 +892,8 @@ class GarantiaListSerializer(serializers.ModelSerializer):
         ]
 
     def get_cliente_nombre(self, obj):
-        try:
-            cliente = Cliente.objects.get(id_cliente=obj.id_cliente)
-            return cliente.nombre
-        except Cliente.DoesNotExist:
-            return None
+        cache = _batch_cache(self, '_g_cliente_nombre', _build_cliente_nombre_map)
+        return cache.get(obj.id_cliente)
 
     def get_dias_restantes(self, obj):
         from datetime import date

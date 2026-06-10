@@ -4,9 +4,15 @@ Vistas para reportes del sistema
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.db import connection
+from django.views.decorators.cache import cache_page
 from decimal import Decimal
 
+# TTL de caché para reportes (segundos). Tolera datos ligeramente añejos a
+# cambio de evitar recomputar consultas pesadas en cada carga.
+REPORTE_CACHE_TTL = 60
 
+
+@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
 def reporte_inventario(request):
     """Genera reporte del estado actual del inventario"""
@@ -74,6 +80,7 @@ def reporte_inventario(request):
     })
 
 
+@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
 def reporte_ventas(request):
     """Genera reporte de ventas por rango de fechas"""
@@ -149,78 +156,72 @@ def reporte_ventas(request):
     })
 
 
+@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
 def reporte_compras(request):
     """Genera reporte de compras por rango de fechas"""
     fecha_inicio = request.GET.get('fecha_inicio')
     fecha_fin = request.GET.get('fecha_fin')
     proveedor_id = request.GET.get('proveedor')
-    
+
     if not fecha_inicio or not fecha_fin:
         return Response({'error': 'Debe proporcionar fecha_inicio y fecha_fin'}, status=400)
-    
+
     with connection.cursor() as cursor:
         # Construir query base
         where_clause = "WHERE oc.fecha_creacion BETWEEN %s AND %s"
         params = [fecha_inicio, fecha_fin]
-        
+
         if proveedor_id:
             where_clause += " AND oc.id_proveedor = %s"
             params.append(proveedor_id)
-        
-        # Total de compras
+
+        # Total de compras: un único JOIN agregado en lugar de subconsultas
+        # correlacionadas por fila. El LEFT JOIN preserva órdenes sin líneas.
         cursor.execute(f"""
-            SELECT COUNT(*), COALESCE(SUM(
-                (SELECT SUM(p.precio_compra_unitario)
-                 FROM orden_producto op
-                 INNER JOIN productos p ON p.id_producto = op.id_producto
-                 WHERE op.id_orden = oc.id_orden)
-            ), 0)
+            SELECT COUNT(DISTINCT oc.id_orden),
+                   COALESCE(SUM(p.precio_compra_unitario), 0)
             FROM orden_compra oc
+            LEFT JOIN orden_producto op ON op.id_orden = oc.id_orden
+            LEFT JOIN productos p ON p.id_producto = op.id_producto
             {where_clause}
         """, params)
-        
+
         result = cursor.fetchone()
         numero_ordenes = result[0]
         total_compras = float(result[1]) if result[1] else 0
         compra_promedio = total_compras / numero_ordenes if numero_ordenes > 0 else 0
-        
-        # Compras por proveedor
+
+        # Compras por proveedor (mismo JOIN agregado)
         cursor.execute(f"""
-            SELECT 
+            SELECT
                 pr.nombre_empresa as proveedor,
-                COALESCE(SUM(
-                    (SELECT SUM(p.precio_compra_unitario)
-                     FROM orden_producto op
-                     INNER JOIN productos p ON p.id_producto = op.id_producto
-                     WHERE op.id_orden = oc.id_orden)
-                ), 0) as total
+                COALESCE(SUM(p.precio_compra_unitario), 0) as total
             FROM orden_compra oc
             INNER JOIN proveedores pr ON pr.id_proveedor = oc.id_proveedor
+            LEFT JOIN orden_producto op ON op.id_orden = oc.id_orden
+            LEFT JOIN productos p ON p.id_producto = op.id_producto
             {where_clause}
             GROUP BY pr.nombre_empresa
             ORDER BY total DESC
             LIMIT 10
         """, params)
-        
+
         por_proveedor = []
         for row in cursor.fetchall():
             por_proveedor.append({
                 'proveedor': row[0],
                 'total': float(row[1])
             })
-        
-        # Listado de órdenes
+
+        # Listado de órdenes (total por orden vía GROUP BY, sin subconsultas)
         cursor.execute(f"""
-            SELECT 
+            SELECT
                 oc.id_orden as numero_orden,
                 pr.nombre_empresa as proveedor,
                 oc.fecha_creacion as fecha,
-                (SELECT SUM(p.precio_compra_unitario)
-                 FROM orden_producto op
-                 INNER JOIN productos p ON p.id_producto = op.id_producto
-                 WHERE op.id_orden = oc.id_orden) as total,
-                CASE 
+                COALESCE(SUM(p.precio_compra_unitario), 0) as total,
+                CASE
                     WHEN oc.id_estado = 1 THEN 'cancelada'
                     WHEN oc.id_estado = 2 THEN 'pendiente'
                     WHEN oc.id_estado = 3 THEN 'recibida'
@@ -228,7 +229,10 @@ def reporte_compras(request):
                 END as estado
             FROM orden_compra oc
             INNER JOIN proveedores pr ON pr.id_proveedor = oc.id_proveedor
+            LEFT JOIN orden_producto op ON op.id_orden = oc.id_orden
+            LEFT JOIN productos p ON p.id_producto = op.id_producto
             {where_clause}
+            GROUP BY oc.id_orden, pr.nombre_empresa, oc.fecha_creacion, oc.id_estado
             ORDER BY oc.fecha_creacion DESC
         """, params)
         
@@ -252,6 +256,7 @@ def reporte_compras(request):
     })
 
 
+@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
 def productos_mas_vendidos(request):
     """Genera reporte de productos más vendidos"""
