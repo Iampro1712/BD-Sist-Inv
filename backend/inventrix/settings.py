@@ -110,6 +110,32 @@ else:
     }
 
 
+# Cache
+# https://docs.djangoproject.com/en/5.2/topics/cache/
+# Usa Redis si REDIS_URL está definido; en su defecto cae a memoria local
+# (por proceso). El cache acelera los reportes pesados vía cache_page.
+REDIS_URL = os.getenv('REDIS_URL')
+
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'IGNORE_EXCEPTIONS': True,  # si Redis cae, no romper la app
+            },
+            'KEY_PREFIX': 'inventrix',
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 

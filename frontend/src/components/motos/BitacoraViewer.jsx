@@ -182,6 +182,7 @@ export function BitacoraViewer({ bitacoras, onEliminarImagen }) {
                         <img
                           src={url}
                           alt={`Imagen ${index + 1}`}
+                          loading="lazy"
                           className="w-full h-24 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
                           onClick={() => setImagenAmpliada(url)}
                         />

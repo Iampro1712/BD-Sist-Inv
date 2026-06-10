@@ -7,6 +7,8 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db import models
 from django.db.models import Q, Sum, F
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio,
@@ -127,9 +129,10 @@ class ProductoViewSet(viewsets.ModelViewSet):
         with connection.cursor() as cursor:
             cursor.execute("DELETE FROM productos WHERE id_producto = %s", [instance.id_producto])
 
+    @method_decorator(cache_page(60))
     @action(detail=False, methods=['get'])
     def bajo_stock(self, request):
-        """Obtiene productos con stock bajo el mínimo"""
+        """Obtiene productos con stock bajo el mínimo (cacheado 60s)"""
         productos = self.get_queryset().filter(
             cantidad_actual__lte=F('cantidad_minima')
         )
