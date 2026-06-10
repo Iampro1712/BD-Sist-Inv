@@ -10,7 +10,7 @@ from django.db.models import Q, Sum, F
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio,
-    BitacoraServicio, AuditoriaProducto
+    BitacoraServicio, AuditoriaProducto, Garantia, ReclamacionGarantia
 )
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
@@ -22,7 +22,9 @@ from .serializers import (
     MovimientoInventarioSerializer, MovimientoInventarioCreateSerializer,
     MotoSerializer, ServicioMotoSerializer, ClienteConMotosSerializer, ServicioSerializer,
     BitacoraServicioSerializer, BitacoraServicioCreateSerializer,
-    ServicioMotoConBitacoraSerializer, AuditoriaProductoSerializer
+    ServicioMotoConBitacoraSerializer, AuditoriaProductoSerializer,
+    GarantiaListSerializer, GarantiaDetailSerializer,
+    ReclamacionCreateSerializer, ReclamacionDetailSerializer, ReclamacionListSerializer,
 )
 from .services import (
     InventoryService, OrdenCompraService, OrdenVentaService,
@@ -753,3 +755,99 @@ class AuditoriaProductoViewSet(viewsets.ReadOnlyModelViewSet):
             results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         
         return Response(results)
+
+
+# ============================================================================
+# GARANTÍA VIEWSETS
+# ============================================================================
+
+class GarantiaViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet de solo lectura para garantías (se crean automáticamente al vender)"""
+    queryset = Garantia.objects.select_related('id_producto').all()
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['fecha_inicio', 'fecha_fin', 'estado']
+    ordering = ['-fecha_inicio']
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return GarantiaDetailSerializer
+        return GarantiaListSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        estado = self.request.query_params.get('estado')
+        if estado:
+            queryset = queryset.filter(estado=estado)
+
+        cliente = self.request.query_params.get('cliente')
+        if cliente:
+            queryset = queryset.filter(id_cliente=cliente)
+
+        producto = self.request.query_params.get('producto')
+        if producto:
+            queryset = queryset.filter(id_producto_id=producto)
+
+        venta = self.request.query_params.get('venta')
+        if venta:
+            queryset = queryset.filter(id_venta=venta)
+
+        return queryset
+
+    @action(detail=False, methods=['post'])
+    def actualizar_vencidas(self, request):
+        """Marca como vencidas las garantías cuya fecha_fin ya pasó"""
+        from datetime import date
+        actualizadas = Garantia.objects.filter(
+            estado='activa',
+            fecha_fin__lt=date.today()
+        ).update(estado='vencida')
+        return Response({'actualizadas': actualizadas})
+
+
+class ReclamacionViewSet(viewsets.ModelViewSet):
+    """ViewSet para gestión de reclamaciones de garantía"""
+    queryset = ReclamacionGarantia.objects.select_related('garantia__id_producto').all()
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['fecha_reclamacion', 'estado']
+    ordering = ['-fecha_reclamacion']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ReclamacionCreateSerializer
+        if self.action in ['list']:
+            return ReclamacionListSerializer
+        return ReclamacionDetailSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        estado = self.request.query_params.get('estado')
+        if estado:
+            queryset = queryset.filter(estado=estado)
+
+        garantia = self.request.query_params.get('garantia')
+        if garantia:
+            queryset = queryset.filter(garantia_id=garantia)
+
+        return queryset
+
+    @action(detail=True, methods=['post'])
+    def resolver(self, request, pk=None):
+        """Marca la reclamación como resuelta y actualiza el estado de la garantía"""
+        reclamacion = self.get_object()
+        resolucion = request.data.get('resolucion', '')
+        if not resolucion:
+            return Response(
+                {'error': 'El campo resolucion es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        from datetime import date
+        reclamacion.estado = 'resuelto'
+        reclamacion.resolucion = resolucion
+        reclamacion.fecha_resolucion = date.today()
+        reclamacion.save()
+        reclamacion.garantia.estado = 'reclamada'
+        reclamacion.garantia.save()
+        return Response(ReclamacionDetailSerializer(reclamacion).data)
+
