@@ -753,7 +753,7 @@ El sistema ha sido sometido a una **revisión técnica exhaustiva** que verific�
 
 ## 🌟 Roadmap
 
-### 🎯 Versión Actual: 2.0
+### 🎯 Versión Actual: 3.0
 
 ✅ Sistema completo de gestión de inventario  
 ✅ Órdenes de compra y venta  
@@ -767,7 +767,7 @@ El sistema ha sido sometido a una **revisión técnica exhaustiva** que verific�
 ✅ Validación y formateo automático de teléfonos  
 ✅ Validación de rangos de fechas en reportes  
 
-### 🚀 Versión 2.1 (Q2 2026)
+### 🚀 Versión 3.1 (Q9 2026)
 
 - [ ] 🏢 **Multi-sucursal / Multi-almacén**
   - Gestión de múltiples ubicaciones
@@ -794,7 +794,7 @@ El sistema ha sido sometido a una **revisión técnica exhaustiva** que verific�
   - Recordatorios de órdenes pendientes
   - Notificaciones por email
 
-### 🎨 Versión 2.5 (Q4 2026)
+### 🎨 Versión 3.5 (Q11 2026)
 
 - [ ] 🧾 **Facturación Electrónica**
   - Integración con sistemas fiscales
@@ -816,7 +816,7 @@ El sistema ha sido sometido a una **revisión técnica exhaustiva** que verific�
   - Sincronización automática
   - Resolución de conflictos
 
-### 🤖 Versión 3.0 (2027)
+### 🤖 Versión 4.0 (2027)
 
 - [ ] 🧠 **Inteligencia Artificial**
   - Predicción de demanda
@@ -1139,7 +1139,7 @@ Si Inventrix te ha sido útil, considera:
 
 **Inventrix** - Sistema Profesional de Gestión de Inventario
 
-*Última actualización: Mayo 2026*
+*Última actualización: Junio 2026*
 
 [![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red?style=for-the-badge)](https://github.com/Iampro1712/BD-Sist-Inv)
 [![Built with Django](https://img.shields.io/badge/Built%20with-Django-092E20?style=for-the-badge&logo=django)](https://www.djangoproject.com/)
