@@ -1,5 +1,4 @@
-from django.db import migrations, models
-import django.db.models.deletion
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -9,7 +8,30 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Fase 1: agregar campos de garantía a la tabla productos (managed=False)
+        # Arregla la secuencia de django_migrations para que esta migración
+        # pueda registrarse aunque la columna id no tenga secuencia asignada.
+        migrations.RunSQL(
+            sql="""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_sequences
+                        WHERE sequencename = 'django_migrations_id_seq'
+                    ) THEN
+                        CREATE SEQUENCE django_migrations_id_seq;
+                        PERFORM setval(
+                            'django_migrations_id_seq',
+                            (SELECT COALESCE(MAX(id), 0) FROM django_migrations)
+                        );
+                        ALTER TABLE django_migrations
+                            ALTER COLUMN id SET DEFAULT nextval('django_migrations_id_seq');
+                    END IF;
+                END $$;
+            """,
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+
+        # Fase 1: columnas de garantía en productos (idempotente con IF NOT EXISTS)
         migrations.RunSQL(
             sql="""
                 ALTER TABLE productos
@@ -22,67 +44,47 @@ class Migration(migrations.Migration):
                     DROP COLUMN IF EXISTS meses_garantia,
                     DROP COLUMN IF EXISTS descripcion_garantia,
                     DROP COLUMN IF EXISTS tipo_garantia;
-            """
+            """,
         ),
 
-        # Fase 2: tabla garantías (managed=True, Django la crea)
-        migrations.CreateModel(
-            name='Garantia',
-            fields=[
-                ('id_garantia', models.AutoField(primary_key=True, serialize=False)),
-                ('id_producto', models.ForeignKey(
-                    on_delete=django.db.models.deletion.PROTECT,
-                    related_name='garantias',
-                    to='inventory.producto',
-                    db_column='id_producto',
-                    db_constraint=False,
-                )),
-                ('id_venta', models.IntegerField()),
-                ('id_cliente', models.IntegerField()),
-                ('cantidad', models.IntegerField(default=1)),
-                ('fecha_inicio', models.DateField()),
-                ('fecha_fin', models.DateField()),
-                ('estado', models.CharField(
-                    choices=[('activa', 'Activa'), ('vencida', 'Vencida'), ('reclamada', 'Reclamada')],
-                    default='activa',
-                    max_length=20,
-                )),
-                ('notas', models.TextField(blank=True, null=True)),
-            ],
-            options={
-                'db_table': 'garantias',
-                'ordering': ['-fecha_inicio'],
-            },
+        # Fase 2: tabla garantías (idempotente con IF NOT EXISTS)
+        migrations.RunSQL(
+            sql="""
+                CREATE TABLE IF NOT EXISTS garantias (
+                    id_garantia  SERIAL PRIMARY KEY,
+                    id_producto  INTEGER NOT NULL
+                                 REFERENCES productos(id_producto)
+                                 ON DELETE RESTRICT
+                                 DEFERRABLE INITIALLY DEFERRED,
+                    id_venta     INTEGER NOT NULL,
+                    id_cliente   INTEGER NOT NULL,
+                    cantidad     INTEGER NOT NULL DEFAULT 1,
+                    fecha_inicio DATE NOT NULL,
+                    fecha_fin    DATE NOT NULL,
+                    estado       VARCHAR(20) NOT NULL DEFAULT 'activa'
+                                 CHECK (estado IN ('activa','vencida','reclamada')),
+                    notas        TEXT
+                );
+            """,
+            reverse_sql="DROP TABLE IF EXISTS garantias;",
         ),
 
-        # Fase 3: tabla reclamaciones (managed=True)
-        migrations.CreateModel(
-            name='ReclamacionGarantia',
-            fields=[
-                ('id_reclamacion', models.AutoField(primary_key=True, serialize=False)),
-                ('garantia', models.ForeignKey(
-                    on_delete=django.db.models.deletion.CASCADE,
-                    related_name='reclamaciones',
-                    to='inventory.garantia',
-                )),
-                ('descripcion_problema', models.TextField()),
-                ('fecha_reclamacion', models.DateField(auto_now_add=True)),
-                ('estado', models.CharField(
-                    choices=[
-                        ('pendiente', 'Pendiente'),
-                        ('en_proceso', 'En proceso'),
-                        ('resuelto', 'Resuelto'),
-                        ('rechazado', 'Rechazado'),
-                    ],
-                    default='pendiente',
-                    max_length=20,
-                )),
-                ('resolucion', models.TextField(blank=True, null=True)),
-                ('fecha_resolucion', models.DateField(blank=True, null=True)),
-            ],
-            options={
-                'db_table': 'reclamaciones_garantia',
-                'ordering': ['-fecha_reclamacion'],
-            },
+        # Fase 3: tabla reclamaciones (idempotente con IF NOT EXISTS)
+        migrations.RunSQL(
+            sql="""
+                CREATE TABLE IF NOT EXISTS reclamaciones_garantia (
+                    id_reclamacion      SERIAL PRIMARY KEY,
+                    garantia_id         INTEGER NOT NULL
+                                        REFERENCES garantias(id_garantia)
+                                        ON DELETE CASCADE,
+                    descripcion_problema TEXT NOT NULL,
+                    fecha_reclamacion   DATE NOT NULL DEFAULT CURRENT_DATE,
+                    estado              VARCHAR(20) NOT NULL DEFAULT 'pendiente'
+                                        CHECK (estado IN ('pendiente','en_proceso','resuelto','rechazado')),
+                    resolucion          TEXT,
+                    fecha_resolucion    DATE
+                );
+            """,
+            reverse_sql="DROP TABLE IF EXISTS reclamaciones_garantia;",
         ),
     ]
