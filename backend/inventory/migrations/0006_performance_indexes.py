@@ -23,8 +23,34 @@ INDEXES = [
 ]
 
 
+# La tabla django_migrations (esquema legacy) no tiene secuencia/DEFAULT en
+# su columna id, por lo que registrar CUALQUIER migración nueva falla con
+# "null value in column id". Esta operación lo repara de forma idempotente
+# antes de registrar esta migración (y deja la DB sana para las futuras).
+FIX_DJANGO_MIGRATIONS_SEQ = """
+DO $$
+BEGIN
+    IF pg_get_serial_sequence('django_migrations', 'id') IS NULL THEN
+        CREATE SEQUENCE IF NOT EXISTS django_migrations_id_seq;
+        PERFORM setval(
+            'django_migrations_id_seq',
+            (SELECT COALESCE(MAX(id), 0) FROM django_migrations)
+        );
+        ALTER TABLE django_migrations
+            ALTER COLUMN id SET DEFAULT nextval('django_migrations_id_seq');
+        ALTER SEQUENCE django_migrations_id_seq OWNED BY django_migrations.id;
+    END IF;
+END $$;
+"""
+
+
 def _build_operations():
-    operations = []
+    operations = [
+        migrations.RunSQL(
+            sql=FIX_DJANGO_MIGRATIONS_SEQ,
+            reverse_sql=migrations.RunSQL.noop,
+        )
+    ]
     for name, table, column in INDEXES:
         operations.append(
             migrations.RunSQL(
