@@ -21,12 +21,15 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          // Vendor chunks
+          // Vendor chunks (solo librerías importadas estáticamente).
+          // jspdf, jspdf-autotable y exceljs se cargan vía import() dinámico
+          // (ver utils/exportReportes.js), por lo que Rollup ya los emite como
+          // chunks async bajo demanda — no deben listarse aquí.
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'query-vendor': ['@tanstack/react-query'],
-          'ui-vendor': ['framer-motion', 'recharts'],
+          'motion-vendor': ['framer-motion'],
+          'charts-vendor': ['recharts'],
           'form-vendor': ['axios', 'zustand'],
-          'pdf-vendor': ['jspdf', 'jspdf-autotable', 'papaparse'],
         },
       },
     },
