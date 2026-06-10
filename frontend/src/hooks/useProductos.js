@@ -24,7 +24,7 @@ export const useProducto = (id) => {
 
 export const useProductosStockBajo = () => {
   return useQuery({
-    queryKey: ['productos', 'stock-bajo'],
+    queryKey: ['productos-stock-bajo'],
     queryFn: async () => {
       const response = await productosService.getStockBajo()
       return response.data
@@ -65,13 +65,3 @@ export const useDeleteProducto = () => {
   })
 }
 
-export const useProductoMovimientos = (id) => {
-  return useQuery({
-    queryKey: ['productos', id, 'movimientos'],
-    queryFn: async () => {
-      const response = await productosService.getMovimientos(id)
-      return response.data
-    },
-    enabled: !!id,
-  })
-}

@@ -1,123 +1,84 @@
-import { Badge, Button } from '../ui'
+import { motion } from 'framer-motion'
+import { fadeIn } from '../../utils/animations'
 
-const OrdenVentaDetalle = ({ 
-  orden, 
-  onConfirmar, 
-  onCancelar,
-  isLoading = false 
-}) => {
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('es-NI', {
-      style: 'currency',
-      currency: 'NIO',
-    }).format(value || 0)
-  }
+const OrdenVentaDetalle = ({ orden }) => {
+  const formatCurrency = (v) =>
+    new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  }
+  const formatDate = (d) =>
+    new Date(d).toLocaleDateString('es-NI', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  const getEstadoBadge = (estado) => {
-    const variants = {
-      pendiente: 'warning',
-      confirmada: 'success',
-      entregada: 'info',
-      cancelada: 'danger',
-    }
-    return variants[estado] || 'default'
-  }
-
-  const getEstadoLabel = (estado) => {
-    const labels = {
-      pendiente: 'Pendiente',
-      confirmada: 'Confirmada',
-      entregada: 'Entregada',
-      cancelada: 'Cancelada',
-    }
-    return labels[estado] || estado
-  }
-
-  const handleCancelar = () => {
-    const motivo = prompt('Ingresa el motivo de cancelación:')
-    if (motivo) {
-      onCancelar(motivo)
-    }
-  }
+  const totalItems = orden.productos?.reduce((s, p) => s + (p.cantidad || 1), 0) || 0
+  const subtotal   = orden.productos?.reduce((s, p) => s + (p.subtotal || 0), 0) || 0
+  const descuento  = subtotal - (orden.total || 0)
 
   return (
-    <div className="space-y-6">
-      {/* Información General */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Información de la Venta</h3>
-          <div className="space-y-2">
-            <div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Número de Venta:</span>
-              <p className="text-base font-semibold text-gray-900 dark:text-white">{orden.id_venta}</p>
-            </div>
-            <div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Fecha:</span>
-              <p className="text-base text-gray-900 dark:text-gray-300">{formatDate(orden.fecha)}</p>
-            </div>
-          </div>
-        </div>
+    <div className="space-y-5">
 
+      {/* Header */}
+      <motion.div variants={fadeIn} className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Cliente</h3>
-          <div className="space-y-2">
-            <div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Nombre:</span>
-              <p className="text-base font-semibold text-gray-900 dark:text-white">{orden.cliente_nombre}</p>
-            </div>
-          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-0.5">
+            Orden de Venta
+          </p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">#{orden.id_venta}</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 capitalize">
+            {formatDate(orden.fecha)}
+          </p>
         </div>
-      </div>
+      </motion.div>
+
+      {/* Cliente */}
+      <motion.div variants={fadeIn} className="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center shrink-0">
+          <span className="text-sm font-bold text-primary-600 dark:text-primary-400">
+            {(orden.cliente_nombre || '?')[0].toUpperCase()}
+          </span>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Cliente</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">{orden.cliente_nombre}</p>
+        </div>
+      </motion.div>
 
       {/* Productos */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Productos</h3>
+      <motion.div variants={fadeIn}>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            Productos
+          </p>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {totalItems} unidad{totalItems !== 1 ? 'es' : ''}
+          </span>
+        </div>
+
         {orden.productos && orden.productos.length > 0 ? (
-          <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900">
+              <thead className="bg-gray-50 dark:bg-gray-900/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Código
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Producto
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Cantidad
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Precio Unitario
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                    Subtotal
-                  </th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Producto</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-20">Cant.</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-32">Precio unit.</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-32">Subtotal</th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {orden.productos.map((producto, index) => (
-                  <tr key={index}>
-                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-300">
-                      {producto.sku}
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+                {orden.productos.map((producto, i) => (
+                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{producto.nombre}</p>
+                      {producto.sku && (
+                        <span className="text-xs font-mono text-gray-400 dark:text-gray-500">{producto.sku}</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                      {producto.nombre}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-300 text-right">
+                    <td className="px-4 py-3 text-right text-sm text-gray-700 dark:text-gray-300 font-medium">
                       {producto.cantidad}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-300 text-right">
+                    <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">
                       {formatCurrency(producto.precio_unitario)}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white text-right">
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-white">
                       {formatCurrency(producto.subtotal)}
                     </td>
                   </tr>
@@ -126,80 +87,45 @@ const OrdenVentaDetalle = ({
             </table>
           </div>
         ) : (
-          <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-center text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
+          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
             No hay productos en esta venta
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Totales */}
-      <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div className="flex justify-between items-center">
-          <span className="text-lg font-semibold text-gray-900 dark:text-white">Total:</span>
-          <span className="text-xl font-bold text-primary-600 dark:text-primary-400">
-            {formatCurrency(orden.total)}
-          </span>
+      <motion.div variants={fadeIn} className="space-y-1">
+        {descuento > 0 && (
+          <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+            <span>Subtotal</span>
+            <span>{formatCurrency(subtotal)}</span>
+          </div>
+        )}
+        {descuento > 0 && (
+          <div className="flex items-center justify-between px-4 py-2 text-sm text-green-600 dark:text-green-400">
+            <span>Descuento aplicado</span>
+            <span>−{formatCurrency(descuento)}</span>
+          </div>
+        )}
+        <div className="bg-gray-900 dark:bg-gray-700 rounded-xl px-5 py-4 flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-300">Total de la venta</span>
+          <span className="text-2xl font-bold text-white">{formatCurrency(orden.total)}</span>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Botones de Acción */}
-      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        {orden.estado === 'pendiente' && (
-          <>
-            <Button
-              variant="danger"
-              onClick={handleCancelar}
-              disabled={isLoading}
-            >
-              Cancelar Orden
-            </Button>
-            <Button
-              onClick={onConfirmar}
-              loading={isLoading}
-              disabled={isLoading}
-            >
-              Confirmar Orden
-            </Button>
-          </>
-        )}
-        
-        {orden.estado === 'confirmada' && (
-          <>
-            <Button
-              variant="danger"
-              onClick={handleCancelar}
-              disabled={isLoading}
-            >
-              Cancelar Orden
-            </Button>
-            <div className="text-sm text-green-600 font-medium flex items-center">
-              <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              Orden confirmada y stock actualizado
-            </div>
-          </>
-        )}
-
-        {orden.estado === 'entregada' && (
-          <div className="text-sm text-blue-600 font-medium flex items-center">
-            <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0015 7h-1z" />
-            </svg>
-            Orden entregada
+      {/* Notas */}
+      {orden.notas && (
+        <motion.div variants={fadeIn} className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 flex gap-3">
+          <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          <div>
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Notas</p>
+            <p className="text-sm text-amber-800 dark:text-amber-300">{orden.notas}</p>
           </div>
-        )}
+        </motion.div>
+      )}
 
-        {orden.estado === 'cancelada' && (
-          <div className="text-sm text-red-600 font-medium flex items-center">
-            <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            Orden cancelada
-          </div>
-        )}
-      </div>
     </div>
   )
 }

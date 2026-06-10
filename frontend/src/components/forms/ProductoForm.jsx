@@ -35,11 +35,7 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
-    // Clear error when user types
+    setFormData(prev => ({ ...prev, [name]: value }))
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
@@ -47,183 +43,232 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
 
   const validate = () => {
     const newErrors = {}
-
     if (!formData.sku_producto.trim()) newErrors.sku_producto = 'El código SKU es requerido'
     if (!formData.nombre.trim()) newErrors.nombre = 'El nombre es requerido'
-    if (!formData.precio_compra_unitario || parseFloat(formData.precio_compra_unitario) <= 0) {
+    if (!formData.precio_compra_unitario || parseFloat(formData.precio_compra_unitario) <= 0)
       newErrors.precio_compra_unitario = 'El precio de compra debe ser mayor a 0'
-    }
-    if (!formData.precio_final || parseFloat(formData.precio_final) <= 0) {
+    if (!formData.precio_final || parseFloat(formData.precio_final) <= 0)
       newErrors.precio_final = 'El precio final debe ser mayor a 0'
-    }
-    if (!formData.cantidad_minima || parseInt(formData.cantidad_minima) < 0) {
+    if (formData.cantidad_minima === '' || parseInt(formData.cantidad_minima) < 0)
       newErrors.cantidad_minima = 'La cantidad mínima no puede ser negativa'
-    }
-    if (!formData.cantidad_actual || parseInt(formData.cantidad_actual) < 0) {
+    if (formData.cantidad_actual === '' || parseInt(formData.cantidad_actual) < 0)
       newErrors.cantidad_actual = 'La cantidad actual no puede ser negativa'
-    }
-    if (!formData.cantidad_total || parseInt(formData.cantidad_total) < 0) {
+    if (formData.cantidad_total === '' || parseInt(formData.cantidad_total) < 0)
       newErrors.cantidad_total = 'La cantidad total no puede ser negativa'
-    }
-
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (validate()) {
-      onSubmit(formData)
-    }
+    if (validate()) onSubmit(formData)
   }
 
   const formatCurrency = (value) => {
-    return new Intl.NumberFormat('es-NI', {
-      style: 'currency',
-      currency: 'NIO',
-    }).format(value || 0)
+    return new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(value || 0)
   }
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input
-          label="Código SKU *"
-          name="sku_producto"
-          value={formData.sku_producto}
-          onChange={handleChange}
-          error={errors.sku_producto}
-          placeholder="Ej: OIL-CAST-20W50"
-          disabled={!!producto}
-        />
+  const compra = parseFloat(formData.precio_compra_unitario) || 0
+  const venta = parseFloat(formData.precio_final) || 0
+  const margen = venta - compra
+  const margenPct = compra > 0 ? ((margen / compra) * 100).toFixed(1) : null
+  const margenPositivo = margen > 0
 
-        <Input
-          label="Nombre *"
-          name="nombre"
-          value={formData.nombre}
-          onChange={handleChange}
-          error={errors.nombre}
-          placeholder="Nombre del producto"
-        />
+  const stockActual = parseInt(formData.cantidad_actual) || 0
+  const stockMinimo = parseInt(formData.cantidad_minima) || 0
+  const stockBajo = formData.cantidad_actual !== '' && formData.cantidad_minima !== '' && stockActual <= stockMinimo
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Identificación */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-primary-600 dark:text-primary-400">1</span>
+          </div>
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Identificación</h4>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Input
+              label="Código SKU *"
+              name="sku_producto"
+              value={formData.sku_producto}
+              onChange={handleChange}
+              error={errors.sku_producto}
+              placeholder="Ej: OIL-CAST-20W50"
+              disabled={!!producto}
+            />
+            {producto && (
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">El SKU no puede modificarse</p>
+            )}
+          </div>
+          <Input
+            label="Nombre del producto *"
+            name="nombre"
+            value={formData.nombre}
+            onChange={handleChange}
+            error={errors.nombre}
+            placeholder="Nombre descriptivo"
+          />
+        </div>
       </div>
 
+      {/* Proveedor */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Proveedor
-        </label>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-primary-600 dark:text-primary-400">2</span>
+          </div>
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Proveedor</h4>
+        </div>
         <select
           name="id_proveedor"
           value={formData.id_proveedor}
           onChange={handleChange}
-          className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-            errors.id_proveedor ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
-          }`}
+          className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600 transition-colors"
         >
           <option value="">Sin proveedor asignado</option>
-          {proveedores.map(proveedor => (
-            <option key={proveedor.id_proveedor} value={proveedor.id_proveedor}>
-              {proveedor.nombre_empresa}
-            </option>
+          {proveedores.map(p => (
+            <option key={p.id_proveedor} value={p.id_proveedor}>{p.nombre_empresa}</option>
           ))}
         </select>
-        {errors.id_proveedor && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.id_proveedor}</p>
-        )}
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Selecciona el proveedor principal de este producto
-        </p>
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3">Precios</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Precio de Compra Unitario *"
-            name="precio_compra_unitario"
-            type="number"
-            step="1"
-            value={formData.precio_compra_unitario}
-            onChange={handleChange}
-            error={errors.precio_compra_unitario}
-            placeholder="0"
-          />
-
-          <Input
-            label="Precio Final (Venta) *"
-            name="precio_final"
-            type="number"
-            step="0.01"
-            value={formData.precio_final}
-            onChange={handleChange}
-            error={errors.precio_final}
-            placeholder="0.00"
-          />
-        </div>
-        {formData.precio_compra_unitario && formData.precio_final && (
-          <div className="mt-3 text-sm text-blue-700 dark:text-blue-400">
-            <p>Margen de ganancia: {formatCurrency(parseFloat(formData.precio_final) - parseFloat(formData.precio_compra_unitario))}</p>
+      {/* Precios */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-primary-600 dark:text-primary-400">3</span>
           </div>
-        )}
-      </div>
-
-      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-        <h4 className="text-sm font-semibold text-green-900 dark:text-green-300 mb-3">Inventario</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Input
-            label="Cantidad Mínima *"
-            name="cantidad_minima"
-            type="number"
-            value={formData.cantidad_minima}
-            onChange={handleChange}
-            error={errors.cantidad_minima}
-            placeholder="0"
-          />
-
-          <Input
-            label="Cantidad Actual *"
-            name="cantidad_actual"
-            type="number"
-            value={formData.cantidad_actual}
-            onChange={handleChange}
-            error={errors.cantidad_actual}
-            placeholder="0"
-          />
-
-          <Input
-            label="Cantidad Total *"
-            name="cantidad_total"
-            type="number"
-            value={formData.cantidad_total}
-            onChange={handleChange}
-            error={errors.cantidad_total}
-            placeholder="0"
-          />
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Precios</h4>
         </div>
-        {formData.cantidad_actual && formData.cantidad_minima && parseInt(formData.cantidad_actual) <= parseInt(formData.cantidad_minima) && (
-          <div className="mt-3 flex items-center text-sm text-red-600 dark:text-red-400">
-            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            Advertencia: La cantidad actual está por debajo del mínimo
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Precio de Compra *"
+              name="precio_compra_unitario"
+              type="number"
+              step="1"
+              min="0"
+              value={formData.precio_compra_unitario}
+              onChange={handleChange}
+              error={errors.precio_compra_unitario}
+              placeholder="0"
+            />
+            <Input
+              label="Precio de Venta *"
+              name="precio_final"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.precio_final}
+              onChange={handleChange}
+              error={errors.precio_final}
+              placeholder="0.00"
+            />
           </div>
-        )}
+
+          {compra > 0 && venta > 0 && (
+            <div className={`rounded-lg px-3 py-2.5 flex items-center gap-3 ${
+              margenPositivo
+                ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
+            }`}>
+              <svg className={`w-4 h-4 shrink-0 ${margenPositivo ? 'text-green-500' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={margenPositivo
+                  ? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                  : "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"} />
+              </svg>
+              <div className="text-sm">
+                <span className={`font-semibold ${margenPositivo ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                  Margen: {formatCurrency(margen)}
+                </span>
+                {margenPct && (
+                  <span className={`ml-2 text-xs ${margenPositivo ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                    ({margenPct}%)
+                  </span>
+                )}
+                {!margenPositivo && (
+                  <span className="ml-2 text-xs text-red-600 dark:text-red-400">— precio de venta menor al de compra</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onCancel}
-          disabled={isLoading}
-        >
+      {/* Inventario */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-primary-600 dark:text-primary-400">4</span>
+          </div>
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Inventario</h4>
+        </div>
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-xl p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <Input
+                label="Cantidad Mínima *"
+                name="cantidad_minima"
+                type="number"
+                min="0"
+                value={formData.cantidad_minima}
+                onChange={handleChange}
+                error={errors.cantidad_minima}
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Umbral de alerta de stock bajo</p>
+            </div>
+            <div>
+              <Input
+                label="Cantidad Actual *"
+                name="cantidad_actual"
+                type="number"
+                min="0"
+                value={formData.cantidad_actual}
+                onChange={handleChange}
+                error={errors.cantidad_actual}
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Unidades disponibles hoy</p>
+            </div>
+            <div>
+              <Input
+                label="Cantidad Total *"
+                name="cantidad_total"
+                type="number"
+                min="0"
+                value={formData.cantidad_total}
+                onChange={handleChange}
+                error={errors.cantidad_total}
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Total histórico ingresado</p>
+            </div>
+          </div>
+
+          {stockBajo && (
+            <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+              <svg className="w-4 h-4 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <p className="text-xs text-red-700 dark:text-red-300">
+                La cantidad actual ({stockActual}) está por debajo del mínimo ({stockMinimo})
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Acciones */}
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
           Cancelar
         </Button>
-        <Button
-          type="submit"
-          loading={isLoading}
-          disabled={isLoading}
-        >
-          {producto ? 'Actualizar' : 'Crear'} Producto
+        <Button type="submit" loading={isLoading} disabled={isLoading}>
+          {producto ? 'Guardar cambios' : 'Crear Producto'}
         </Button>
       </div>
     </form>

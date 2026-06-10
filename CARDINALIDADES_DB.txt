@@ -1,0 +1,311 @@
+================================================================================
+         INVENTRIX - CARDINALIDADES DE LA BASE DE DATOS
+         Sistema de Gestión de Inventario, Ventas y Servicios
+================================================================================
+Versión: 1.0
+Fecha: 2026-05-28
+Proyecto: Inventrix
+Base de datos: PostgreSQL 16
+Nota: Se omiten las tablas internas de Django (auth_*, django_*)
+================================================================================
+
+
+================================================================================
+1. TABLAS DEL SISTEMA (13 entidades)
+================================================================================
+
+  Tabla                    Descripción
+  ──────────────────────────────────────────────────────────────────────────────
+  categorias               Clasificación de productos
+  marcas                   Marcas comerciales de productos
+  proveedores              Empresas o personas que suministran productos
+  productos                Catálogo de artículos del inventario
+  cliente                  Personas o empresas compradoras
+  motos                    Motocicletas registradas por cliente
+  servicios                Catálogo de servicios técnicos disponibles
+  servicio_motos           Registro de servicios realizados a motos
+  bitacora_servicio        Etapas documentadas de un servicio (4 módulos)
+  orden_compra             Pedidos realizados a proveedores
+  detalles_orden_compra    Líneas de producto dentro de una orden de compra
+  ventas                   Órdenes de venta registradas a clientes
+  detalles_orden_venta     Líneas de producto dentro de una venta
+  movimientos_inventario   Historial de cambios de stock (entradas/salidas)
+  auditoria_productos      Registro inmutable de cambios en productos (trigger)
+
+
+================================================================================
+2. CARDINALIDADES — RELACIONES DIRECTAS (CLAVES FORÁNEAS)
+================================================================================
+
+  Las siguientes relaciones están implementadas como Foreign Key (FK) explícitas
+  en el modelo de datos del sistema.
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.1 productos → categorias
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    productos.categoria_id  →  categorias.id
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un producto pertenece a una sola categoría.
+               Una categoría puede clasificar muchos productos.
+  Obligatorio: Sí — todo producto debe tener categoría asignada.
+  ON DELETE:   PROTECT (no se puede eliminar una categoría con productos).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.2 productos → marcas
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    productos.marca_id  →  marcas.id
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un producto está asociado a una sola marca.
+               Una marca puede estar asociada a muchos productos.
+  Obligatorio: Sí — todo producto debe tener marca asignada.
+  ON DELETE:   PROTECT (no se puede eliminar una marca con productos).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.3 productos → proveedores
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    productos.id_proveedor  →  proveedores.id_proveedor
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un producto puede estar asociado a un proveedor principal.
+               Un proveedor puede tener muchos productos asociados.
+  Obligatorio: No — la relación es opcional (NULL permitido).
+  ON DELETE:   SET NULL (al eliminar el proveedor, el campo queda en NULL).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.4 motos → cliente
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    motos.id_cliente  →  cliente.id_cliente
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Una moto pertenece a un solo cliente propietario.
+               Un cliente puede tener registradas muchas motos.
+  Obligatorio: Sí — toda moto debe estar asociada a un cliente.
+  ON DELETE:   CASCADE (al eliminar el cliente se eliminan sus motos).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.5 servicio_motos → motos
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    servicio_motos.id_moto  →  motos.id_moto
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un registro de servicio corresponde a una sola moto.
+               Una moto puede tener muchos servicios registrados a lo largo
+               del tiempo.
+  Obligatorio: Sí.
+  ON DELETE:   CASCADE (al eliminar la moto se eliminan sus servicios).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.6 bitacora_servicio → servicio_motos
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    bitacora_servicio.id_servicio  →  servicio_motos.id_servicio
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Una entrada de bitácora corresponde a un servicio específico.
+               Un servicio puede tener hasta 4 entradas de bitácora (una por
+               módulo: recepción, diagnóstico, reparación y entrega).
+  Obligatorio: Sí.
+  ON DELETE:   CASCADE (al eliminar el servicio se elimina su bitácora).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.7 bitacora_servicio → motos
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    bitacora_servicio.id_moto  →  motos.id_moto
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Cada entrada de bitácora referencia directamente la moto
+               atendida, permitiendo consultas de bitácora sin pasar por
+               el servicio.
+  Obligatorio: Sí.
+  ON DELETE:   CASCADE.
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.8 orden_compra → proveedores
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    orden_compra.id_proveedor  →  proveedores.id_proveedor
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Una orden de compra está dirigida a un solo proveedor.
+               Un proveedor puede tener muchas órdenes de compra asociadas.
+  Obligatorio: Sí — toda orden de compra requiere un proveedor.
+  ON DELETE:   PROTECT.
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.9 detalles_orden_compra → orden_compra
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    detalles_orden_compra.orden_compra_id  →  orden_compra.id_orden
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un detalle (línea de ítem) pertenece a una sola orden de compra.
+               Una orden de compra puede contener muchas líneas de detalle.
+  Obligatorio: Sí.
+  ON DELETE:   CASCADE (al eliminar la orden se eliminan sus detalles).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.10 detalles_orden_compra → productos
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    detalles_orden_compra.producto_id  →  productos.id_producto
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un detalle de compra referencia un único producto.
+               Un producto puede aparecer en muchos detalles de órdenes de
+               compra distintas.
+  Obligatorio: Sí.
+  ON DELETE:   PROTECT (no se puede eliminar un producto con detalles de
+               compra registrados).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.11 ventas → cliente
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    ventas.id_cliente  →  cliente.id_cliente
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Una venta está asociada a un solo cliente.
+               Un cliente puede tener muchas ventas registradas.
+  Obligatorio: Sí.
+  ON DELETE:   PROTECT.
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.12 detalles_orden_venta → ventas
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    detalles_orden_venta.orden_venta_id  →  ventas.id_venta
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un detalle de venta pertenece a una sola orden de venta.
+               Una venta puede contener muchos detalles (múltiples productos).
+  Obligatorio: Sí.
+  ON DELETE:   CASCADE (al eliminar la venta se eliminan sus detalles).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.13 detalles_orden_venta → productos
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    detalles_orden_venta.producto_id  →  productos.id_producto
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un detalle de venta referencia un único producto.
+               Un producto puede aparecer en muchos detalles de ventas
+               distintas.
+  Obligatorio: Sí.
+  ON DELETE:   PROTECT (no se puede eliminar un producto con ventas
+               registradas).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.14 movimientos_inventario → productos
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    movimientos_inventario.producto_id  →  productos.id_producto
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un movimiento de inventario corresponde a un solo producto.
+               Un producto puede tener muchos movimientos registrados
+               (entradas, salidas, ajustes).
+  Obligatorio: Sí.
+  ON DELETE:   PROTECT (los movimientos son históricos e inmutables).
+
+  ──────────────────────────────────────────────────────────────────────────────
+  2.15 auditoria_productos → productos  [relación lógica, sin FK explícita]
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Relación:    auditoria_productos.id_producto  →  productos.id_producto
+  Cardinalidad: MUCHOS A UNO (N:1)
+  Lectura:     Un registro de auditoría corresponde a un solo producto.
+               Un producto puede acumular muchos registros de auditoría,
+               uno por cada operación INSERT, UPDATE o DELETE que lo afecte.
+  Nota:        La relación es lógica (por valor de id_producto). La tabla
+               auditoria_productos es gestionada exclusivamente por un trigger
+               de PostgreSQL y no define FK explícita para garantizar que los
+               registros persistan incluso si el producto es eliminado.
+               Comportamiento de trigger: INSERT / UPDATE / DELETE en productos
+               genera automáticamente una fila en auditoria_productos.
+
+
+================================================================================
+3. RELACIONES DERIVADAS (MUCHOS A MUCHOS IMPLÍCITOS)
+================================================================================
+
+  Las siguientes relaciones de muchos a muchos se implementan mediante tablas
+  de detalle intermedias (patrón de tabla de unión).
+
+  ┌─────────────────┐   ┌──────────────────────────┐   ┌──────────────┐
+  │  orden_compra   │──<│  detalles_orden_compra   │>──│  productos   │
+  └─────────────────┘   └──────────────────────────┘   └──────────────┘
+  Cardinalidad:   N:M
+  Lectura:        Una orden de compra incluye muchos productos.
+                  Un producto puede estar en muchas órdenes de compra.
+  Atributos de la tabla intermedia: cantidad, precio_unitario, subtotal.
+
+  ┌─────────────────┐   ┌──────────────────────────┐   ┌──────────────┐
+  │     ventas      │──<│   detalles_orden_venta   │>──│  productos   │
+  └─────────────────┘   └──────────────────────────┘   └──────────────┘
+  Cardinalidad:   N:M
+  Lectura:        Una venta incluye muchos productos.
+                  Un producto puede aparecer en muchas ventas distintas.
+  Atributos de la tabla intermedia: cantidad, precio_unitario, subtotal.
+
+
+================================================================================
+4. DIAGRAMA DE CARDINALIDADES (NOTACIÓN CHEN SIMPLIFICADA)
+================================================================================
+
+  [categorias] ────────── 1 ──── N ──── [productos]
+  [marcas]     ────────── 1 ──── N ──── [productos]
+  [proveedores]────────── 1 ──── N ──── [productos]        (opcional, NULL)
+  [proveedores]────────── 1 ──── N ──── [orden_compra]
+  [cliente]    ────────── 1 ──── N ──── [ventas]
+  [cliente]    ────────── 1 ──── N ──── [motos]
+  [motos]      ────────── 1 ──── N ──── [servicio_motos]
+  [motos]      ────────── 1 ──── N ──── [bitacora_servicio]
+  [servicio_motos] ─────── 1 ──── N ──── [bitacora_servicio]
+  [orden_compra] ───────── 1 ──── N ──── [detalles_orden_compra]
+  [ventas]     ────────── 1 ──── N ──── [detalles_orden_venta]
+  [productos]  ────────── 1 ──── N ──── [detalles_orden_compra]
+  [productos]  ────────── 1 ──── N ──── [detalles_orden_venta]
+  [productos]  ────────── 1 ──── N ──── [movimientos_inventario]
+  [productos]  ────────── 1 ──── N ──── [auditoria_productos]   (via trigger)
+  [servicios]            (catálogo independiente, sin FK activa)
+
+
+================================================================================
+5. TABLA RESUMEN DE CARDINALIDADES
+================================================================================
+
+  #   Tabla origen              Tabla destino              Tipo   Obligatorio
+  ──────────────────────────────────────────────────────────────────────────────
+  1   productos                 categorias                 N:1    Sí
+  2   productos                 marcas                     N:1    Sí
+  3   productos                 proveedores                N:1    No (NULL)
+  4   motos                     cliente                    N:1    Sí
+  5   servicio_motos            motos                      N:1    Sí
+  6   bitacora_servicio         servicio_motos             N:1    Sí
+  7   bitacora_servicio         motos                      N:1    Sí
+  8   orden_compra              proveedores                N:1    Sí
+  9   detalles_orden_compra     orden_compra               N:1    Sí
+  10  detalles_orden_compra     productos                  N:1    Sí
+  11  ventas                    cliente                    N:1    Sí
+  12  detalles_orden_venta      ventas                     N:1    Sí
+  13  detalles_orden_venta      productos                  N:1    Sí
+  14  movimientos_inventario    productos                  N:1    Sí
+  15  auditoria_productos       productos                  N:1*   Sí (trigger)
+  ──────────────────────────────────────────────────────────────────────────────
+  * Relación lógica sin FK declarada (gestionada por trigger PostgreSQL).
+
+  Relaciones N:M implementadas mediante tabla intermedia:
+  ──────────────────────────────────────────────────────────────────────────────
+  A   orden_compra  ←──→  productos    via detalles_orden_compra
+  B   ventas        ←──→  productos    via detalles_orden_venta
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Tablas sin relaciones externas (catálogos raíz):
+  ──────────────────────────────────────────────────────────────────────────────
+  -   categorias       Solo recibe referencias, no tiene FK salientes.
+  -   marcas           Solo recibe referencias, no tiene FK salientes.
+  -   proveedores      Solo recibe referencias, no tiene FK salientes.
+  -   cliente          Solo recibe referencias, no tiene FK salientes.
+  -   servicios        Catálogo independiente. No tiene FK activa hacia otras
+                       tablas en la versión actual del sistema.
+  ──────────────────────────────────────────────────────────────────────────────
+
+
+================================================================================
+                          FIN DEL DOCUMENTO
+================================================================================

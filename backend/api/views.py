@@ -54,6 +54,20 @@ class ProveedorViewSet(viewsets.ModelViewSet):
             cursor.execute("DELETE FROM proveedores WHERE id_proveedor = %s", [instance.id_proveedor])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=['get'])
+    def productos(self, request, pk=None):
+        proveedor = self.get_object()
+        productos = proveedor.productos.all().order_by('nombre')
+        serializer = ProductoListSerializer(productos, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def ordenes(self, request, pk=None):
+        proveedor = self.get_object()
+        ordenes = OrdenCompra.objects.filter(id_proveedor=proveedor).order_by('-fecha')
+        serializer = OrdenCompraListSerializer(ordenes, many=True)
+        return Response(serializer.data)
+
 
 class MarcaViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de marcas"""
@@ -126,7 +140,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre', 'telefono', 'email']
-    ordering_fields = ['nombre']
+    ordering_fields = ['nombre', 'id_cliente']
     ordering = ['nombre']
 
     def get_serializer_class(self):
@@ -163,11 +177,10 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         # Filtro por estado
         estado = self.request.query_params.get('estado', None)
         if estado:
-            # Mapear el nombre del estado al ID
             estados_map = {
-                'cancelado': 1,
+                'cancelado': 1, 'cancelada': 1,
                 'pendiente': 2,
-                'completado': 3
+                'confirmada': 3, 'recibida': 3, 'completado': 3,
             }
             estado_id = estados_map.get(estado.lower())
             if estado_id:
@@ -191,17 +204,40 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         return queryset
 
     @action(detail=True, methods=['post'])
-    def recibir(self, request, pk=None):
-        """Marca una orden de compra como recibida y actualiza el inventario"""
+    def confirmar(self, request, pk=None):
+        """Confirma una orden de compra (pendiente → recibida/completada)"""
         try:
             orden = self.get_object()
-            OrdenCompraService.recibir_orden(orden.id)
-            return Response({'status': 'Orden recibida exitosamente'})
-        except InvalidOrderStateException as e:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE orden_compra SET id_estado = 3 WHERE id_orden = %s AND id_estado = 2",
+                    [orden.id_orden]
+                )
+                if cursor.rowcount == 0:
+                    return Response(
+                        {'error': 'La orden no está en estado pendiente o no existe'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            return Response({'status': 'Orden confirmada exitosamente'})
+        except Exception as e:
             return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'Error al confirmar orden: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=True, methods=['post'])
+    def recibir(self, request, pk=None):
+        """Marca una orden de compra como recibida"""
+        try:
+            orden = self.get_object()
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE orden_compra SET id_estado = 3 WHERE id_orden = %s AND id_estado IN (2, 3)",
+                    [orden.id_orden]
+                )
+            return Response({'status': 'Orden recibida exitosamente'})
         except Exception as e:
             return Response(
                 {'error': f'Error al recibir orden: {str(e)}'},
@@ -213,12 +249,22 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         """Cancela una orden de compra"""
         try:
             orden = self.get_object()
-            OrdenCompraService.cancelar_orden(orden.id)
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE orden_compra SET id_estado = 1 WHERE id_orden = %s AND id_estado != 3",
+                    [orden.id_orden]
+                )
+                if cursor.rowcount == 0:
+                    return Response(
+                        {'error': 'La orden ya fue recibida y no puede cancelarse'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
             return Response({'status': 'Orden cancelada exitosamente'})
-        except InvalidOrderStateException as e:
+        except Exception as e:
             return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'Error al cancelar orden: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 

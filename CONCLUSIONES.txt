@@ -1,0 +1,204 @@
+================================================================================
+         INVENTRIX - CONCLUSIONES
+         Sistema de Gestión de Inventario, Ventas y Servicios
+================================================================================
+Versión: 1.0
+Fecha: 2026-05-28
+Proyecto: Inventrix
+Tipo de documento: Conclusiones — Monografía de Desarrollo de Software
+================================================================================
+
+
+CAPÍTULO VI: CONCLUSIONES
+═══════════════════════════════════════════════════════════════════════════════
+
+  El presente capítulo consolida los hallazgos derivados del proceso de
+  investigación, diseño y desarrollo del sistema Inventrix, un sistema web de
+  gestión de inventario, ventas y servicios orientado a pequeñas y medianas
+  empresas de Nicaragua, con énfasis en talleres de motocicletas. Las
+  conclusiones se organizan en correspondencia con los objetivos planteados
+  al inicio del proyecto y con las dimensiones analizadas a lo largo del
+  estudio: técnica, económica y funcional.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6.1 CONCLUSIONES SOBRE LA FACTIBILIDAD TÉCNICA
+═══════════════════════════════════════════════════════════════════════════════
+
+  El estudio de factibilidad técnica confirmó que el desarrollo del sistema
+  Inventrix es plenamente viable desde el punto de vista tecnológico. El stack
+  seleccionado — Django 6.0 con Django REST Framework en el backend, React 19
+  con Vite 7 y TailwindCSS 4 en el frontend, y PostgreSQL 16 como motor de
+  base de datos — está compuesto exclusivamente por tecnologías de código
+  abierto, maduras y ampliamente adoptadas en la industria del software a nivel
+  mundial. Ninguna de estas herramientas representa un costo de licenciamiento
+  para el cliente ni genera dependencia de un proveedor propietario.
+
+  La arquitectura de tres capas desacopladas implementada (frontend SPA
+  alojado en Vercel, backend Django en servidor VPS con Gunicorn, y
+  almacenamiento de imágenes en Cloudflare R2) demostró ser adecuada para
+  el perfil de uso proyectado. Cada capa puede actualizarse, escalarse o
+  migrarse de forma independiente, lo que otorga al sistema una vida útil
+  proyectada significativamente mayor que las soluciones monolíticas.
+
+  Se concluye que la infraestructura requerida para operar el sistema en
+  producción es accesible para una PyME nicaragüense, con costos mensuales
+  de entre $33 y $45 USD para un negocio de tamaño mediano. El umbral técnico
+  de entrada es bajo: el cliente únicamente necesita una computadora con
+  navegador web y conexión a internet, sin requerir instalación de ningún
+  software especializado en sus equipos locales.
+
+  La principal limitación técnica identificada fue la ausencia de un módulo
+  de autenticación de usuarios en la versión 1.0 del sistema. Este elemento,
+  contemplado en el roadmap del proyecto para la versión 2.1, representa el
+  riesgo de seguridad más significativo antes del despliegue en un entorno
+  productivo con datos reales del negocio.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6.2 CONCLUSIONES SOBRE LA FACTIBILIDAD ECONÓMICA
+═══════════════════════════════════════════════════════════════════════════════
+
+  El análisis económico del proyecto demostró que la inversión en el desarrollo
+  del sistema Inventrix es justificada desde una perspectiva financiera de
+  mediano y largo plazo. El costo de desarrollo, estimado entre $5,000 y
+  $10,000 USD dependiendo del perfil del equipo contratado, se recupera en
+  un horizonte temporal de 30 a 59 meses a través del ahorro en tiempo
+  operativo, reducción de errores en el manejo de inventario y eliminación
+  del costo de suscripciones a sistemas comerciales alternativos.
+
+  La comparación del costo total de propiedad (TCO) a cinco años evidencia
+  que, a partir del año cinco de operación, Inventrix resulta económicamente
+  más ventajoso que cualquier alternativa de suscripción mensual equivalente
+  ($50/mes), y a partir del año siete supera incluso los escenarios de mayor
+  inversión inicial. Esta ventaja se vuelve permanente en el tiempo, ya que
+  los costos operativos del sistema desarrollado a medida no escalan con
+  el número de años de uso como sí lo hacen las suscripciones de terceros.
+
+  Se concluye que el modelo de pago por hitos, propuesto en el estudio de
+  factibilidad económica, representa la estrategia más adecuada para mitigar
+  el riesgo financiero del cliente al contratar el desarrollo a un equipo
+  externo. Este modelo alinea los incentivos del equipo de desarrollo con la
+  entrega de funcionalidades verificables, distribuyendo el riesgo de
+  incumplimiento a lo largo del ciclo de desarrollo en lugar de concentrarlo
+  en el momento del pago total.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6.3 CONCLUSIONES SOBRE EL CUMPLIMIENTO DE REQUERIMIENTOS
+═══════════════════════════════════════════════════════════════════════════════
+
+  El proceso de desarrollo, organizado en cinco sprints iterativos entre
+  noviembre de 2025 y mayo de 2026, resultó en la implementación completa de
+  los 17 módulos funcionales (RF-01 al RF-17) definidos en el documento de
+  requerimientos del sistema, versión 1.1. Los 12 grupos de requerimientos
+  no funcionales (RNF-01 al RNF-12) fueron satisfechos en su totalidad en
+  los aspectos de rendimiento, escalabilidad, mantenibilidad, usabilidad,
+  compatibilidad, portabilidad, validación de datos, exportación de formatos,
+  localización e idioma, y trazabilidad.
+
+  El sprint 1 estableció la base técnica del proyecto con los módulos nucleares
+  de gestión de inventario. El sprint 2 completó el ciclo operativo de
+  compras y ventas con actualización automática de stock. El sprint 3 incorporó
+  la diferenciación más significativa del sistema frente a las alternativas
+  comerciales: el módulo de bitácora de servicios con cuatro etapas secuenciales
+  y almacenamiento fotográfico en Cloudflare R2. El sprint 4 fortaleció la
+  trazabilidad del sistema mediante triggers de PostgreSQL para la auditoría
+  inmutable de productos. El sprint 5 completó el ciclo de calidad con la
+  implementación de validaciones en tres capas, la búsqueda global y los
+  ajustes manuales de inventario.
+
+  Con 23 commits en el repositorio y aproximadamente 340 horas de desarrollo
+  estimadas, el proyecto alcanzó el nivel de madurez definido para la versión
+  1.0 dentro del plazo establecido.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6.4 CONCLUSIONES SOBRE LA PROPUESTA DE VALOR DEL SISTEMA
+═══════════════════════════════════════════════════════════════════════════════
+
+  El sistema Inventrix responde a una necesidad concreta y no atendida por las
+  soluciones de software disponibles en el mercado para PyMEs nicaragüenses:
+  la gestión integral de un taller de motocicletas, que combina el control de
+  inventario de repuestos con el seguimiento fotográfico y documentado de cada
+  servicio técnico realizado. Ninguno de los sistemas analizados en el estudio
+  de factibilidad (Bind ERP, Alegra, Siigo, Odoo) incluye esta funcionalidad
+  de forma nativa sin un desarrollo adicional de costo elevado.
+
+  La decisión de utilizar una arquitectura SPA con API REST desacoplada
+  garantiza que el sistema pueda extenderse en el futuro con aplicaciones
+  móviles nativas, integraciones con terceros o nuevos módulos sin necesidad
+  de reescribir la lógica de negocio existente. Esta característica posiciona
+  a Inventrix no como un sistema terminado, sino como una plataforma base sobre
+  la cual el negocio puede continuar invirtiendo de forma incremental.
+
+  La interfaz de usuario, desarrollada con React 19 y TailwindCSS 4, ofrece
+  una experiencia responsiva compatible con dispositivos móviles, tabletas y
+  computadoras de escritorio, con soporte completo de modo oscuro y animaciones
+  de transición que mejoran la percepción de calidad del producto por parte
+  del usuario final. Estas características, junto con la localización completa
+  en español latinoamericano y el formato de teléfono nicaragüense (+505),
+  reflejan un diseño orientado específicamente al contexto cultural y operativo
+  del usuario objetivo.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6.5 CONCLUSIONES SOBRE LA METODOLOGÍA DE DESARROLLO
+═══════════════════════════════════════════════════════════════════════════════
+
+  La metodología de desarrollo iterativo e incremental, organizada en sprints
+  temáticos de alcance acotado, demostró ser adecuada para el perfil del
+  proyecto. Cada sprint entregó funcionalidades completas y desplegables,
+  lo que permitió obtener retroalimentación temprana sobre los módulos
+  principales antes de avanzar hacia los más complejos. La arquitectura de
+  base de datos con modelos relacionales bien definidos desde el sprint 1
+  facilitó la incorporación de nuevas entidades en sprints posteriores sin
+  refactorización destructiva del esquema existente.
+
+  La separación de responsabilidades entre capas — modelos, serializers,
+  vistas y servicios en el backend; páginas, componentes, hooks y servicios
+  en el frontend — redujo el acoplamiento entre módulos y facilitó el
+  mantenimiento del código a lo largo de los cinco sprints del proyecto.
+  Este patrón arquitectónico, documentado en el documento de requerimientos
+  no funcionales (RNF-05), constituye una de las fortalezas más relevantes
+  del sistema para su mantenimiento y extensión futura por parte de equipos
+  de desarrollo distintos al original.
+
+  El uso de Docker Compose para el entorno de desarrollo local garantizó la
+  reproducibilidad del ambiente de trabajo y eliminó problemas de
+  configuración entre máquinas de desarrollo, una decisión que demostró su
+  valor durante la integración de componentes como PostgreSQL, Cloudflare R2
+  y Gunicorn en las etapas de despliegue.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6.6 CONCLUSIÓN GENERAL
+═══════════════════════════════════════════════════════════════════════════════
+
+  El sistema Inventrix v1.0 constituye una solución tecnológica completa,
+  funcional y técnicamente sólida para la gestión de inventario, ventas,
+  compras y servicios técnicos en pequeñas y medianas empresas de Nicaragua.
+  Su desarrollo demuestra que es posible construir, con tecnologías de código
+  abierto y un equipo de desarrollo reducido, un sistema de gestión empresarial
+  especializado que supera en funcionalidad a las alternativas comerciales
+  disponibles para el segmento de talleres de motocicletas en el mercado
+  centroamericano.
+
+  Los objetivos técnicos, funcionales y económicos del proyecto fueron
+  alcanzados satisfactoriamente. El sistema se encuentra en condiciones de ser
+  desplegado en un entorno de producción una vez implementado el módulo de
+  autenticación de usuarios, condición que fue identificada como prioritaria
+  tanto en el estudio de factibilidad técnica como en los criterios de
+  aceptación del sistema.
+
+  El alcance del presente trabajo sienta las bases para una línea de desarrollo
+  sostenida hacia versiones futuras (v2.0 y v2.1), que incorporen autenticación
+  y control de acceso por roles, soporte multi-sucursal, aplicación móvil nativa
+  e integración con sistemas de facturación electrónica, consolidando a Inventrix
+  como una plataforma escalable de gestión empresarial adaptada a las necesidades
+  reales del tejido empresarial nicaragüense.
+
+
+================================================================================
+                          FIN DEL DOCUMENTO
+================================================================================

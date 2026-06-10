@@ -14,6 +14,7 @@ import { fadeIn, staggerContainer } from '../utils/animations'
 
 const Clientes = () => {
   const [search, setSearch] = useState('')
+  const [ordering, setOrdering] = useState('')
   const [page, setPage] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDetalleModalOpen, setIsDetalleModalOpen] = useState(false)
@@ -28,6 +29,7 @@ const Clientes = () => {
 
   const { data, isLoading, error } = useClientes({
     search: debouncedSearch,
+    ordering: ordering || undefined,
     page,
   })
 
@@ -127,13 +129,43 @@ const Clientes = () => {
         </Button>
       </div>
 
-      {/* Search */}
-      <Card className="p-6">
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Buscar por nombre, teléfono o email..."
-        />
+      {/* Search y filtros */}
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1">
+            <SearchBar
+              value={search}
+              onChange={(val) => { setSearch(val); setPage(1) }}
+              placeholder="Buscar por nombre, teléfono o email..."
+            />
+          </div>
+          <button
+            onClick={() => {
+              setPage(1)
+              setOrdering(prev =>
+                prev === 'id_cliente' ? '-id_cliente' : prev === '-id_cliente' ? '' : 'id_cliente'
+              )
+            }}
+            title="Ordenar por ID"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all shrink-0 ${
+              ordering === 'id_cliente' || ordering === '-id_cliente'
+                ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d={ordering === '-id_cliente'
+                  ? "M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
+                  : "M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4"
+                }
+              />
+            </svg>
+            ID
+            {ordering === 'id_cliente' && <span className="text-xs opacity-70">↑ asc</span>}
+            {ordering === '-id_cliente' && <span className="text-xs opacity-70">↓ desc</span>}
+          </button>
+        </div>
       </Card>
 
       {/* Clientes Table */}
