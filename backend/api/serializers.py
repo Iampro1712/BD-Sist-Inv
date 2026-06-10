@@ -144,33 +144,45 @@ class DetalleOrdenCompraSerializer(serializers.ModelSerializer):
         read_only_fields = ['subtotal']
 
 
+ESTADO_ID_MAP = {
+    1: 'cancelada',
+    2: 'pendiente',
+    3: 'recibida',
+}
+
+ESTADO_LABEL_MAP = {
+    1: 'Cancelada',
+    2: 'Pendiente',
+    3: 'Recibida',
+}
+
+
 class OrdenCompraListSerializer(serializers.ModelSerializer):
     """Serializer para listado de órdenes de compra"""
     proveedor_nombre = serializers.SerializerMethodField()
+    estado = serializers.SerializerMethodField()
     estado_display = serializers.SerializerMethodField()
     total = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = OrdenCompra
         fields = [
-            'id_orden', 'id_proveedor', 'proveedor_nombre', 'id_estado', 
-            'estado_display', 'fecha_creacion', 'total'
+            'id_orden', 'id_proveedor', 'proveedor_nombre', 'id_estado',
+            'estado', 'estado_display', 'fecha_creacion', 'total'
         ]
-    
+
     def get_proveedor_nombre(self, obj):
         try:
             proveedor = Proveedor.objects.get(id_proveedor=obj.id_proveedor)
             return proveedor.nombre_empresa
         except Proveedor.DoesNotExist:
             return 'Proveedor no encontrado'
-    
+
+    def get_estado(self, obj):
+        return ESTADO_ID_MAP.get(obj.id_estado, 'pendiente')
+
     def get_estado_display(self, obj):
-        estados = {
-            1: 'Cancelado',
-            2: 'Pendiente',
-            3: 'Completado'
-        }
-        return estados.get(obj.id_estado, 'Desconocido')
+        return ESTADO_LABEL_MAP.get(obj.id_estado, 'Desconocido')
     
     def get_total(self, obj):
         from django.db import connection
@@ -191,39 +203,50 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
     """Serializer detallado para orden de compra"""
     proveedor_nombre = serializers.SerializerMethodField()
     proveedor_contacto = serializers.SerializerMethodField()
+    estado = serializers.SerializerMethodField()
     estado_display = serializers.SerializerMethodField()
     total = serializers.SerializerMethodField()
     subtotal = serializers.SerializerMethodField()
     productos = serializers.SerializerMethodField()
-    
+    notas = serializers.SerializerMethodField()
+
     class Meta:
         model = OrdenCompra
         fields = [
             'id_orden', 'id_proveedor', 'proveedor_nombre', 'proveedor_contacto',
-            'id_estado', 'estado_display', 'fecha_creacion', 'total', 'subtotal', 'productos'
+            'id_estado', 'estado', 'estado_display', 'fecha_creacion',
+            'total', 'subtotal', 'productos', 'notas'
         ]
-    
+
     def get_proveedor_nombre(self, obj):
         try:
             proveedor = Proveedor.objects.get(id_proveedor=obj.id_proveedor)
             return proveedor.nombre_empresa
         except Proveedor.DoesNotExist:
             return 'Proveedor no encontrado'
-    
+
     def get_proveedor_contacto(self, obj):
         try:
             proveedor = Proveedor.objects.get(id_proveedor=obj.id_proveedor)
             return proveedor.persona_contacto
         except Proveedor.DoesNotExist:
             return None
-    
+
+    def get_estado(self, obj):
+        return ESTADO_ID_MAP.get(obj.id_estado, 'pendiente')
+
     def get_estado_display(self, obj):
-        estados = {
-            1: 'Cancelado',
-            2: 'Pendiente',
-            3: 'Completado'
-        }
-        return estados.get(obj.id_estado, 'Desconocido')
+        return ESTADO_LABEL_MAP.get(obj.id_estado, 'Desconocido')
+
+    def get_notas(self, obj):
+        from django.db import connection, ProgrammingError
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT notas FROM orden_compra WHERE id_orden = %s", [obj.id_orden])
+                row = cursor.fetchone()
+                return row[0] if row and row[0] else None
+        except ProgrammingError:
+            return None
     
     def get_productos(self, obj):
         from django.db import connection

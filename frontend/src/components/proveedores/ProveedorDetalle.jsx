@@ -105,42 +105,39 @@ const ProveedorDetalle = ({
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Código
+                      SKU
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Producto
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Stock
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Precio Compra
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Precio Venta
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {productos.map((producto) => (
-                    <tr key={producto.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {producto.codigo}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{producto.nombre}</div>
-                        <div className="text-sm text-gray-500">{producto.categoria_nombre}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {producto.stock_actual}
+                    <tr key={producto.id_producto} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
+                        {producto.sku_producto}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {formatCurrency(producto.precio_compra)}
+                        {producto.nombre}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge variant={producto.activo ? 'success' : 'default'}>
-                          {producto.activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                        {producto.cantidad_actual}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">
+                        {formatCurrency(producto.precio_compra_unitario)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">
+                        {formatCurrency(producto.precio_final)}
                       </td>
                     </tr>
                   ))}
@@ -205,24 +202,24 @@ const ProveedorDetalle = ({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {ordenes.map((orden) => (
-                    <tr key={orden.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {orden.numero_orden}
+                    <tr key={orden.id_orden} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-medium text-gray-900">
+                        #{orden.id_orden}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(orden.fecha)}
+                        {formatDate(orden.fecha_creacion)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {formatCurrency(orden.total)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge variant={getEstadoBadgeVariant(orden.estado)}>
-                          {orden.estado}
+                          {orden.estado_display}
                         </Badge>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
-                          onClick={() => navigate(`/ordenes-compra/${orden.id}`)}
+                          onClick={() => navigate(`/ordenes-compra/${orden.id_orden}`)}
                           className="text-primary-600 hover:text-primary-900 transition-colors"
                         >
                           Ver Detalle

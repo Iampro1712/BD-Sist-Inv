@@ -1,146 +1,131 @@
 import { motion } from 'framer-motion'
-import { Badge, Loader } from '../ui'
+import { Badge, Button } from '../ui'
 import { fadeIn } from '../../utils/animations'
 
-const ProductoDetalle = ({ producto, movimientos = [], isLoadingMovimientos = false }) => {
+const ProductoDetalle = ({ producto, onEdit }) => {
   const formatCurrency = (value) => {
-    return new Intl.NumberFormat('es-NI', {
-      style: 'currency',
-      currency: 'NIO',
-    }).format(value || 0)
+    return new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(value || 0)
   }
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('es-MX', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
+  const margen = producto.precio_final && producto.precio_compra_unitario
+    ? parseFloat(producto.precio_final) - parseFloat(producto.precio_compra_unitario)
+    : null
+  const margenPct = margen !== null && producto.precio_compra_unitario > 0
+    ? ((margen / parseFloat(producto.precio_compra_unitario)) * 100).toFixed(1)
+    : null
 
-  const getTipoMovimientoBadge = (tipo) => {
-    const variants = {
-      entrada: 'success',
-      salida: 'danger',
-      ajuste: 'warning',
-    }
-    return variants[tipo] || 'default'
-  }
+  const stockRatio = producto.cantidad_minima > 0
+    ? producto.cantidad_actual / producto.cantidad_minima
+    : producto.cantidad_actual > 0 ? 2 : 0
+
+  const stockColor = stockRatio <= 0
+    ? { text: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-100 dark:border-red-800', bar: 'bg-red-500', label: 'Sin stock', badge: 'danger' }
+    : stockRatio <= 1
+    ? { text: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-100 dark:border-red-800', bar: 'bg-red-500', label: 'Stock bajo', badge: 'danger' }
+    : stockRatio <= 1.5
+    ? { text: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-100 dark:border-yellow-800', bar: 'bg-yellow-400', label: 'Stock justo', badge: 'warning' }
+    : { text: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-100 dark:border-green-800', bar: 'bg-green-500', label: 'Stock OK', badge: 'success' }
+
+  const barWidth = Math.min((producto.cantidad_actual / Math.max(producto.cantidad_minima * 2, 1)) * 100, 100)
 
   return (
-    <div className="space-y-6">
-      {/* Información General */}
-      <motion.div variants={fadeIn} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Información General</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Código (SKU)</p>
-            <p className="text-base font-medium text-gray-900 dark:text-white">{producto.sku_producto}</p>
+    <div className="space-y-5">
+      {/* Header del producto */}
+      <motion.div variants={fadeIn} className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 bg-primary-50 dark:bg-primary-900/30 rounded-xl shrink-0">
+            <svg className="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
           </div>
-          <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Nombre</p>
-            <p className="text-base font-medium text-gray-900 dark:text-white">{producto.nombre}</p>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white truncate">{producto.nombre}</h2>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 mt-0.5">
+              {producto.sku_producto}
+            </span>
           </div>
-          <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Stock Mínimo</p>
-            <p className="text-base font-medium text-gray-900 dark:text-white">{producto.cantidad_minima}</p>
+        </div>
+        {onEdit && (
+          <Button variant="secondary" onClick={onEdit} className="shrink-0 text-sm">
+            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Editar
+          </Button>
+        )}
+      </motion.div>
+
+      {/* Info general + proveedor */}
+      <motion.div variants={fadeIn} className="grid grid-cols-2 gap-3">
+        {producto.proveedor_nombre && (
+          <div className="col-span-2 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
+            <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <div>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Proveedor</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">{producto.proveedor_nombre}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Stock Total</p>
-            <p className="text-base font-medium text-gray-900 dark:text-white">{producto.cantidad_total}</p>
-          </div>
+        )}
+        <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+          <p className="text-xs text-gray-400 dark:text-gray-500">Stock mínimo</p>
+          <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">{producto.cantidad_minima}</p>
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+          <p className="text-xs text-gray-400 dark:text-gray-500">Stock total acumulado</p>
+          <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">{producto.cantidad_total}</p>
         </div>
       </motion.div>
 
-      {/* Precios e Inventario */}
-      <motion.div variants={fadeIn} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 border border-blue-100 dark:border-blue-800">
-          <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Precio de Compra Unitario</p>
-          <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">{formatCurrency(producto.precio_compra_unitario)}</p>
+      {/* Precios e inventario */}
+      <motion.div variants={fadeIn} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Precio Compra</p>
+          </div>
+          <p className="text-xl font-bold text-blue-900 dark:text-blue-200">{formatCurrency(producto.precio_compra_unitario)}</p>
         </div>
-        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 border border-green-100 dark:border-green-800">
-          <p className="text-sm text-green-600 dark:text-green-400 mb-1">Precio Final (Venta)</p>
-          <p className="text-2xl font-bold text-green-900 dark:text-green-300">{formatCurrency(producto.precio_final)}</p>
-        </div>
-        <div className={`rounded-lg p-6 border ${producto.cantidad_actual <= producto.cantidad_minima ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'}`}>
-          <p className={`text-sm mb-1 ${producto.cantidad_actual <= producto.cantidad_minima ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>
-            Stock Actual
-          </p>
-          <p className={`text-2xl font-bold ${producto.cantidad_actual <= producto.cantidad_minima ? 'text-red-900 dark:text-red-300' : 'text-gray-900 dark:text-white'}`}>
-            {producto.cantidad_actual}
-            {producto.cantidad_actual <= producto.cantidad_minima && (
-              <span className="text-sm font-normal text-red-600 dark:text-red-400 ml-2">
-                (Mín: {producto.cantidad_minima})
-              </span>
-            )}
-          </p>
-        </div>
-      </motion.div>
 
-      {/* Historial de Movimientos */}
-      <motion.div variants={fadeIn} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Historial de Movimientos</h3>
-        </div>
-        <div className="p-6">
-          {isLoadingMovimientos ? (
-            <div className="flex justify-center py-8">
-              <Loader />
-            </div>
-          ) : movimientos.length === 0 ? (
-            <p className="text-center text-gray-500 dark:text-gray-400 py-8">No hay movimientos registrados</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Fecha
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Tipo
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Cantidad
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Referencia
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Notas
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {movimientos.map((movimiento) => (
-                    <tr key={movimiento.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                        {formatDate(movimiento.fecha)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge variant={getTipoMovimientoBadge(movimiento.tipo)}>
-                          {movimiento.tipo_display}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                        {movimiento.tipo === 'entrada' ? '+' : '-'}{movimiento.cantidad}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {movimiento.referencia || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                        {movimiento.notas || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-100 dark:border-green-800">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-xs font-medium text-green-600 dark:text-green-400">Precio Venta</p>
+          </div>
+          <p className="text-xl font-bold text-green-900 dark:text-green-200">{formatCurrency(producto.precio_final)}</p>
+          {margen !== null && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+              +{formatCurrency(margen)} · {margenPct}% margen
+            </p>
           )}
         </div>
+
+        <div className={`rounded-xl p-4 border ${stockColor.bg} ${stockColor.border}`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <svg className={`w-4 h-4 ${stockColor.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              <p className={`text-xs font-medium ${stockColor.text}`}>Stock Actual</p>
+            </div>
+            <Badge variant={stockColor.badge}>{stockColor.label}</Badge>
+          </div>
+          <p className={`text-xl font-bold ${stockColor.text}`}>{producto.cantidad_actual}</p>
+          <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full transition-all ${stockColor.bar}`}
+              style={{ width: `${barWidth}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">mín. {producto.cantidad_minima}</p>
+        </div>
       </motion.div>
+
     </div>
   )
 }
