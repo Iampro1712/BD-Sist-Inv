@@ -8,6 +8,7 @@ import { useToast } from '../hooks/useToast'
 import SearchBar from '../components/forms/SearchBar'
 import ProductoForm from '../components/forms/ProductoForm'
 import ProductoDetalle from '../components/productos/ProductoDetalle'
+import ImportarProductosModal from '../components/productos/ImportarProductosModal'
 import Modal from '../components/ui/Modal'
 import { Button, Badge, Loader, Card, ConfirmDialog } from '../components/ui'
 import { fadeIn, staggerContainer } from '../utils/animations'
@@ -17,6 +18,7 @@ const Productos = () => {
   const [filters, setFilters] = useState({ bajo_stock: '', proveedor: '', ordering: '' })
   const [page, setPage] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [isDetalleModalOpen, setIsDetalleModalOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [selectedProducto, setSelectedProducto] = useState(null)
@@ -157,12 +159,20 @@ const Productos = () => {
             Gestión y control de inventario
           </p>
         </div>
-        <Button onClick={() => handleOpenModal()} className="shrink-0">
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nuevo Producto
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Importar
+          </Button>
+          <Button onClick={() => handleOpenModal()}>
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nuevo Producto
+          </Button>
+        </div>
       </div>
 
       {/* Stats rápidas */}
@@ -523,6 +533,16 @@ const Productos = () => {
             }}
           />
         )}
+      </Modal>
+
+      {/* Modal de Importación */}
+      <Modal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="Importar Productos"
+        size="lg"
+      >
+        <ImportarProductosModal onClose={() => setIsImportOpen(false)} />
       </Modal>
 
       {/* Confirmar eliminación */}

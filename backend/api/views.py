@@ -143,6 +143,67 @@ class ProductoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(productos, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'], url_path='importar')
+    def importar(self, request):
+        """Importación masiva de productos. Upsert por SKU.
+
+        Body: { "productos": [ {sku_producto, nombre, cantidad_actual?,
+        cantidad_minima?, precio_compra_unitario?, precio_final?, id_proveedor?}, ... ] }
+        """
+        filas = request.data.get('productos')
+        if not isinstance(filas, list) or not filas:
+            return Response(
+                {'error': 'Se requiere una lista no vacía en "productos"'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Campos numéricos opcionales que el serializer aceptará
+        NUM_FIELDS = ['cantidad_actual', 'cantidad_minima', 'cantidad_total',
+                      'precio_compra_unitario', 'precio_final', 'id_proveedor', 'meses_garantia']
+        TEXT_FIELDS = ['tipo_garantia', 'descripcion_garantia']
+
+        creados, actualizados, errores = 0, 0, []
+        for i, fila in enumerate(filas):
+            num = i + 1
+            sku = str(fila.get('sku_producto') or '').strip()
+            nombre = str(fila.get('nombre') or '').strip()
+            if not sku or not nombre:
+                errores.append({'fila': num, 'error': 'sku_producto y nombre son obligatorios'})
+                continue
+
+            data = {'sku_producto': sku, 'nombre': nombre}
+            for f in NUM_FIELDS:
+                v = fila.get(f)
+                if v not in (None, ''):
+                    data[f] = v
+            for f in TEXT_FIELDS:
+                v = fila.get(f)
+                if v not in (None, ''):
+                    data[f] = v
+
+            existente = Producto.objects.filter(sku_producto=sku).first()
+            serializer = ProductoCreateSerializer(
+                instance=existente, data=data, partial=bool(existente)
+            )
+            if serializer.is_valid():
+                try:
+                    serializer.save()
+                    if existente:
+                        actualizados += 1
+                    else:
+                        creados += 1
+                except Exception as e:  # noqa: BLE001
+                    errores.append({'fila': num, 'sku': sku, 'error': str(e)})
+            else:
+                errores.append({'fila': num, 'sku': sku, 'error': serializer.errors})
+
+        return Response({
+            'creados': creados,
+            'actualizados': actualizados,
+            'errores': errores,
+            'total_procesados': len(filas),
+        }, status=status.HTTP_200_OK)
+
 
 class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de clientes"""

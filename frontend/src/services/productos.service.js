@@ -35,4 +35,9 @@ export const productosService = {
   getStockBajo: () => {
     return api.get('/productos/bajo_stock/')
   },
+
+  // Importación masiva (upsert por SKU)
+  importar: (productos) => {
+    return api.post('/productos/importar/', { productos })
+  },
 }

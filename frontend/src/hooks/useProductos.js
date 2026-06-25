@@ -65,3 +65,16 @@ export const useDeleteProducto = () => {
   })
 }
 
+export const useImportarProductos = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (productos) => productosService.importar(productos),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['productos'] })
+      queryClient.invalidateQueries({ queryKey: ['productos-stock-bajo'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
