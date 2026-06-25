@@ -10,13 +10,16 @@ from .views import (
     MovimientoInventarioViewSet, MotoViewSet, ServicioMotoViewSet, ServicioViewSet,
     BitacoraServicioViewSet, ServicioMotoConBitacoraViewSet, AuditoriaProductoViewSet,
     GarantiaViewSet, ReclamacionViewSet,
+    CotizacionViewSet, DevolucionViewSet,
 )
 from .reportes_views import (
     reporte_inventario,
     reporte_ventas,
     reporte_compras,
-    productos_mas_vendidos
+    productos_mas_vendidos,
+    cuentas_por_cobrar,
 )
+from .backup_views import exportar_backup
 
 # Create router instance
 router = DefaultRouter()
@@ -38,6 +41,8 @@ router.register(r'servicios-con-bitacora', ServicioMotoConBitacoraViewSet, basen
 router.register(r'auditoria-productos', AuditoriaProductoViewSet, basename='auditoria-producto')
 router.register(r'garantias', GarantiaViewSet, basename='garantia')
 router.register(r'reclamaciones', ReclamacionViewSet, basename='reclamacion')
+router.register(r'cotizaciones', CotizacionViewSet, basename='cotizacion')
+router.register(r'devoluciones', DevolucionViewSet, basename='devolucion')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -46,4 +51,6 @@ urlpatterns = [
     path('reportes/ventas/', reporte_ventas, name='reporte-ventas'),
     path('reportes/compras/', reporte_compras, name='reporte-compras'),
     path('reportes/productos_mas_vendidos/', productos_mas_vendidos, name='productos-mas-vendidos'),
+    path('reportes/cuentas-por-cobrar/', cuentas_por_cobrar, name='cuentas-por-cobrar'),
+    path('backup/', exportar_backup, name='backup'),
 ]

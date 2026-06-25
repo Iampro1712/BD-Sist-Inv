@@ -593,3 +593,60 @@ class ReclamacionGarantia(models.Model):
     def __str__(self):
         return f"Reclamación #{self.id_reclamacion} - Garantía #{self.garantia_id}"
 
+
+class Cotizacion(models.Model):
+    """Cotización / proforma (tabla cotizaciones). No afecta inventario."""
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('aprobada', 'Aprobada'),
+        ('rechazada', 'Rechazada'),
+        ('convertida', 'Convertida en venta'),
+    ]
+
+    id_cotizacion = models.AutoField(primary_key=True)
+    id_cliente = models.IntegerField()
+    fecha = models.DateField(default=date.today)
+    validez_dias = models.IntegerField(default=15)
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    id_venta = models.IntegerField(null=True, blank=True)
+    notas = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False  # tabla creada por SQL_FILES/create_cotizaciones_devoluciones_tables.sql
+        db_table = 'cotizaciones'
+        verbose_name = 'Cotización'
+        verbose_name_plural = 'Cotizaciones'
+        ordering = ['-fecha', '-id_cotizacion']
+
+    def __str__(self):
+        return f"Cotización #{self.id_cotizacion}"
+
+
+class Devolucion(models.Model):
+    """Devolución / nota de crédito (tabla devoluciones). Reingresa stock."""
+    ESTADO_CHOICES = [
+        ('procesada', 'Procesada'),
+        ('anulada', 'Anulada'),
+    ]
+
+    id_devolucion = models.AutoField(primary_key=True)
+    id_venta = models.IntegerField(null=True, blank=True)
+    id_cliente = models.IntegerField(null=True, blank=True)
+    fecha = models.DateField(default=date.today)
+    motivo = models.TextField(null=True, blank=True)
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='procesada')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False  # tabla creada por SQL_FILES/create_cotizaciones_devoluciones_tables.sql
+        db_table = 'devoluciones'
+        verbose_name = 'Devolución'
+        verbose_name_plural = 'Devoluciones'
+        ordering = ['-fecha', '-id_devolucion']
+
+    def __str__(self):
+        return f"Devolución #{self.id_devolucion}"
+
