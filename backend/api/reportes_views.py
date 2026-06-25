@@ -144,9 +144,49 @@ def reporte_ventas(request):
                 'cliente': row[1],
                 'fecha': str(row[2]),
                 'total': float(row[3]),
-                'estado': 'confirmada'
+                'estado': 'confirmada',
+                'productos': [],
             })
-    
+
+        # Productos vendidos por cada orden (una sola consulta para todo el rango)
+        cursor.execute("""
+            SELECT pv.id_venta, p.nombre, pv.cantidad, pv.precio_unitario,
+                   (pv.cantidad * pv.precio_unitario) AS subtotal
+            FROM producto_venta pv
+            INNER JOIN ventas v ON v.id_venta = pv.id_venta
+            INNER JOIN productos p ON p.id_producto = pv.id_producto
+            WHERE v.fecha BETWEEN %s AND %s
+            ORDER BY pv.id_venta
+        """, [fecha_inicio, fecha_fin])
+
+        items_por_venta = {}
+        for r in cursor.fetchall():
+            items_por_venta.setdefault(r[0], []).append({
+                'nombre': r[1],
+                'cantidad': int(r[2]) if r[2] else 0,
+                'precio_unitario': float(r[3]) if r[3] else 0.0,
+                'subtotal': float(r[4]) if r[4] else 0.0,
+            })
+
+        # Detectar ventas que en realidad son servicios de moto (sin línea de
+        # producto): se cruzan con servicio_motos por fecha + cliente + costo,
+        # igual que en el detalle de la venta.
+        cursor.execute("""
+            SELECT v.id_venta, sm.tipo_servicio
+            FROM ventas v
+            INNER JOIN servicio_motos sm ON sm.fecha_servicio = v.fecha AND sm.costo = v.total
+            INNER JOIN motos m ON m.id_moto = sm.id_moto AND m.id_cliente = v.id_cliente
+            WHERE v.fecha BETWEEN %s AND %s
+        """, [fecha_inicio, fecha_fin])
+        servicios = {row[0]: row[1] for row in cursor.fetchall()}
+
+        for orden in ordenes:
+            orden['productos'] = items_por_venta.get(orden['id'], [])
+            # Es servicio si no tiene productos pero sí un servicio asociado
+            tipo = servicios.get(orden['id'])
+            orden['es_servicio'] = bool(tipo) and not orden['productos']
+            orden['tipo_servicio'] = tipo if orden['es_servicio'] else None
+
     return Response({
         'total_ventas': total_ventas,
         'numero_ordenes': numero_ordenes,
