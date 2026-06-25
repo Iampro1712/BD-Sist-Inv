@@ -2,7 +2,10 @@
 Modelos Django para Inventrix
 Basados en el Modelo Relacional establecido
 """
-from django.db import models
+from datetime import date
+from decimal import Decimal
+
+from django.db import connection, models
 
 
 class Proveedor(models.Model):
@@ -241,10 +244,21 @@ class DetalleOrdenCompra(models.Model):
 
 class OrdenVenta(models.Model):
     """Modelo para órdenes de venta (tabla ventas)"""
+    ESTADO_PAGO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('parcial', 'Pago Parcial'),
+        ('pagado', 'Pagado'),
+    ]
+
     id_venta = models.AutoField(primary_key=True)
     id_cliente = models.IntegerField()
     fecha = models.DateField()
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    monto_pagado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    saldo_pendiente = models.DecimalField(max_digits=10, decimal_places=2, null=True)
+    estado_pago = models.CharField(
+        max_length=20, choices=ESTADO_PAGO_CHOICES, default='pendiente'
+    )
 
     class Meta:
         managed = False  # No modificar tabla existente
@@ -253,8 +267,90 @@ class OrdenVenta(models.Model):
         verbose_name_plural = 'Órdenes de Venta'
         ordering = ['-fecha']
 
+    def calcular_total(self):
+        """Total real de la venta.
+
+        Trampa #1: para ventas de PRODUCTOS el total se calcula sumando
+        producto_venta (precio_unitario * cantidad). La columna ``ventas.total``
+        solo es fiable cuando la venta no tiene productos (p. ej. servicios), por
+        lo que se usa únicamente como respaldo. Esta es la MISMA fuente que usa
+        ``OrdenVentaDetailSerializer.get_total`` para no descuadrar el saldo.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT SUM(pv.precio_unitario * pv.cantidad)
+                FROM producto_venta pv
+                WHERE pv.id_venta = %s
+                """,
+                [self.id_venta],
+            )
+            row = cursor.fetchone()
+        total_productos = row[0] if row and row[0] else None
+        if total_productos:
+            return Decimal(str(total_productos))
+        return Decimal(str(self.total or 0))
+
+    def calcular_saldo(self):
+        """Recalcula monto pagado, saldo pendiente y estado a partir de los pagos.
+
+        Se reconstruye desde el agregado de ``pagos`` (no de forma incremental)
+        para que registrar o eliminar un abono nunca deje descuadres.
+        """
+        pagado = self.pagos.aggregate(total=models.Sum('monto'))['total'] or Decimal('0')
+        total = self.calcular_total()
+
+        self.monto_pagado = pagado
+        self.saldo_pendiente = total - pagado
+
+        if pagado <= 0:
+            self.estado_pago = 'pendiente'
+        elif pagado >= total:
+            self.estado_pago = 'pagado'
+        else:
+            self.estado_pago = 'parcial'
+
+        self.save(update_fields=['monto_pagado', 'saldo_pendiente', 'estado_pago'])
+
     def __str__(self):
         return f"Venta #{self.id_venta}"
+
+
+class PagoVenta(models.Model):
+    """Pago/abono registrado contra una orden de venta (pago por adelantado)."""
+    METODO_PAGO_CHOICES = [
+        ('efectivo', 'Efectivo'),
+        ('tarjeta', 'Tarjeta'),
+        ('transferencia', 'Transferencia'),
+        ('deposito', 'Depósito'),
+        ('cheque', 'Cheque'),
+    ]
+
+    id_pago = models.AutoField(primary_key=True)
+    id_venta = models.ForeignKey(
+        OrdenVenta,
+        on_delete=models.CASCADE,
+        related_name='pagos',
+        db_column='id_venta',
+    )
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    fecha_pago = models.DateField(default=date.today)
+    metodo_pago = models.CharField(
+        max_length=50, choices=METODO_PAGO_CHOICES, default='efectivo'
+    )
+    referencia = models.CharField(max_length=100, blank=True, null=True)
+    notas = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False  # tabla creada por SQL_FILES/create_pagos_venta_table.sql
+        db_table = 'pagos_venta'
+        verbose_name = 'Pago de Venta'
+        verbose_name_plural = 'Pagos de Ventas'
+        ordering = ['-fecha_pago', '-created_at']
+
+    def __str__(self):
+        return f"Pago #{self.id_pago} - Venta #{self.id_venta_id} - C${self.monto}"
 
 
 class DetalleOrdenVenta(models.Model):

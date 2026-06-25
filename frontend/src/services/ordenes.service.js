@@ -58,4 +58,17 @@ export const ordenesVentaService = {
   aplicarDescuento: (id, descuento) => {
     return api.post(`/ordenes-venta/${id}/aplicar_descuento/`, { descuento })
   },
+
+  // Pagos / abonos (pago por adelantado)
+  getPagos: (idVenta) => {
+    return api.get(`/ordenes-venta/${idVenta}/pagos/`)
+  },
+
+  registrarPago: (idVenta, data) => {
+    return api.post(`/ordenes-venta/${idVenta}/registrar-pago/`, data)
+  },
+
+  eliminarPago: (idVenta, idPago) => {
+    return api.delete(`/ordenes-venta/${idVenta}/pagos/${idPago}/`)
+  },
 }
