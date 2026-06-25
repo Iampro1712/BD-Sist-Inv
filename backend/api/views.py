@@ -12,7 +12,7 @@ from django.views.decorators.cache import cache_page
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio,
-    BitacoraServicio, AuditoriaProducto, Garantia, ReclamacionGarantia
+    BitacoraServicio, AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta
 )
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
@@ -21,6 +21,7 @@ from .serializers import (
     ClienteListSerializer, ClienteDetailSerializer,
     OrdenCompraListSerializer, OrdenCompraDetailSerializer, OrdenCompraCreateSerializer,
     OrdenVentaListSerializer, OrdenVentaDetailSerializer, OrdenVentaCreateSerializer,
+    PagoVentaSerializer, PagoVentaCreateSerializer,
     MovimientoInventarioSerializer, MovimientoInventarioCreateSerializer,
     MotoSerializer, ServicioMotoSerializer, ClienteConMotosSerializer, ServicioSerializer,
     BitacoraServicioSerializer, BitacoraServicioCreateSerializer,
@@ -318,7 +319,11 @@ class OrdenVentaViewSet(viewsets.ModelViewSet):
         fecha_fin = self.request.query_params.get('fecha_fin', None)
         if fecha_fin:
             queryset = queryset.filter(fecha__lte=fecha_fin)
-        
+
+        estado_pago = self.request.query_params.get('estado_pago', None)
+        if estado_pago:
+            queryset = queryset.filter(estado_pago=estado_pago)
+
         return queryset
 
     @action(detail=True, methods=['post'])
@@ -351,6 +356,65 @@ class OrdenVentaViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    # ------------------------------------------------------------------
+    # Pago por adelantado / abonos
+    # ------------------------------------------------------------------
+    @action(detail=True, methods=['get'], url_path='pagos')
+    def pagos(self, request, pk=None):
+        """Lista los pagos/abonos de una venta (más reciente primero)."""
+        orden = self.get_object()
+        serializer = PagoVentaSerializer(orden.pagos.all(), many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='registrar-pago')
+    def registrar_pago(self, request, pk=None):
+        """Registra un pago/abono y recalcula el saldo de la venta."""
+        from django.db import transaction
+        with transaction.atomic():
+            # Bloquea la fila de la venta para evitar descuadres con pagos simultáneos
+            orden = OrdenVenta.objects.select_for_update().get(pk=pk)
+
+            if orden.estado_pago == 'pagado':
+                return Response(
+                    {'error': 'Esta venta ya está completamente pagada'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            serializer = PagoVentaCreateSerializer(
+                data=request.data, context={'venta': orden}
+            )
+            serializer.is_valid(raise_exception=True)
+            pago = serializer.save()
+
+        return Response(PagoVentaSerializer(pago).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path=r'pagos/(?P<id_pago>[^/.]+)')
+    def eliminar_pago(self, request, pk=None, id_pago=None):
+        """Elimina un pago (solo el último registrado) y recalcula el saldo."""
+        from django.db import transaction
+        with transaction.atomic():
+            orden = OrdenVenta.objects.select_for_update().get(pk=pk)
+
+            try:
+                pago = orden.pagos.get(pk=id_pago)
+            except PagoVenta.DoesNotExist:
+                return Response(
+                    {'error': 'Pago no encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            ultimo = orden.pagos.order_by('-created_at', '-id_pago').first()
+            if ultimo and pago.id_pago != ultimo.id_pago:
+                return Response(
+                    {'error': 'Solo se puede eliminar el último pago registrado'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            pago.delete()
+            orden.calcular_saldo()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MovimientoInventarioViewSet(viewsets.ModelViewSet):
