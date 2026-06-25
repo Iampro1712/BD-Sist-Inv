@@ -18,6 +18,8 @@ from .reportes_views import (
     reporte_compras,
     productos_mas_vendidos,
     cuentas_por_cobrar,
+    reporte_rentabilidad,
+    reporte_stock_muerto,
 )
 from .backup_views import exportar_backup
 
@@ -52,5 +54,7 @@ urlpatterns = [
     path('reportes/compras/', reporte_compras, name='reporte-compras'),
     path('reportes/productos_mas_vendidos/', productos_mas_vendidos, name='productos-mas-vendidos'),
     path('reportes/cuentas-por-cobrar/', cuentas_por_cobrar, name='cuentas-por-cobrar'),
+    path('reportes/rentabilidad/', reporte_rentabilidad, name='reporte-rentabilidad'),
+    path('reportes/stock-muerto/', reporte_stock_muerto, name='reporte-stock-muerto'),
     path('backup/', exportar_backup, name='backup'),
 ]
