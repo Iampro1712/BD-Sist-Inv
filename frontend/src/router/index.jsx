@@ -17,6 +17,10 @@ const Reportes = lazy(() => import('../pages/Reportes'))
 const Categorias = lazy(() => import('../pages/Categorias'))
 const LogsAuditoria = lazy(() => import('../pages/LogsAuditoria'))
 const Garantias = lazy(() => import('../pages/Garantias'))
+const CuentasCobrar = lazy(() => import('../pages/CuentasCobrar'))
+const Cotizaciones = lazy(() => import('../pages/Cotizaciones'))
+const Devoluciones = lazy(() => import('../pages/Devoluciones'))
+const Respaldos = lazy(() => import('../pages/Respaldos'))
 const NotFound = lazy(() => import('../pages/NotFound'))
 
 const router = createBrowserRouter([
@@ -109,6 +113,38 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageLoader />}>
             <Garantias />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'cuentas-cobrar',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <CuentasCobrar />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'cotizaciones',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Cotizaciones />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'devoluciones',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Devoluciones />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'respaldos',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Respaldos />
           </Suspense>
         ),
       },
