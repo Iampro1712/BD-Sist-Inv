@@ -689,6 +689,8 @@ const Reportes = () => {
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Orden</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cliente</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tipo</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Productos</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Fecha</th>
                         <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total</th>
                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Estado</th>
@@ -697,15 +699,35 @@ const Reportes = () => {
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {reporteVentas.ordenes?.map((orden) => (
                         <tr key={orden.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-300">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-300 align-top">
                             {orden.numero_orden}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{orden.cliente}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{orden.fecha}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-600 dark:text-green-400">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white align-top">{orden.cliente}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center align-top">
+                            <Badge variant={orden.es_servicio ? 'warning' : 'secondary'}>
+                              {orden.es_servicio ? 'Servicio' : 'Producto'}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300 align-top">
+                            {orden.productos && orden.productos.length > 0 ? (
+                              <ul className="space-y-0.5">
+                                {orden.productos.map((p, i) => (
+                                  <li key={i}>
+                                    <span className="font-medium text-gray-900 dark:text-gray-200">{p.cantidad}×</span> {p.nombre}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : orden.es_servicio ? (
+                              <span className="text-amber-600 dark:text-amber-400">Servicio{orden.tipo_servicio ? `: ${orden.tipo_servicio}` : ''}</span>
+                            ) : (
+                              <span className="text-gray-400 dark:text-gray-500">—</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 align-top">{orden.fecha}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-600 dark:text-green-400 align-top">
                             {formatCurrency(orden.total)}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <td className="px-6 py-4 whitespace-nowrap text-center align-top">
                             <Badge variant={orden.estado === 'confirmada' ? 'success' : 'info'}>{orden.estado}</Badge>
                           </td>
                         </tr>

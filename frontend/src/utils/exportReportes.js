@@ -264,6 +264,8 @@ export const exportarVentasPDF = async (reporte, filtros) => {
   const tableData = reporte.ordenes?.map((o) => [
     o.numero_orden,
     o.cliente,
+    _tipoVenta(o),
+    _detalleVentaTexto(o, '\n'),
     o.fecha,
     formatCurrency(o.total),
     o.estado,
@@ -271,10 +273,11 @@ export const exportarVentasPDF = async (reporte, filtros) => {
 
   autoTable(doc, {
     startY: y + 60,
-    head: [['Orden', 'Cliente', 'Fecha', 'Total', 'Estado']],
+    head: [['Orden', 'Cliente', 'Tipo', 'Productos', 'Fecha', 'Total', 'Estado']],
     body: tableData,
     theme: 'grid',
-    styles: { fontSize: 8 },
+    styles: { fontSize: 8, cellWidth: 'wrap' },
+    columnStyles: { 3: { cellWidth: 55 } },
     headStyles: { fillColor: [16, 185, 129] },
   })
 
@@ -367,6 +370,22 @@ export const exportarProductosPDF = async (productos, filtros) => {
 
 const _fechaCorta = (d) =>
   d ? new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+/** Resume los productos de una orden como texto: "2× Llanta\n1× Aceite". */
+const _resumenProductos = (productos, sep = ', ') => {
+  if (!productos || !productos.length) return '—'
+  return productos.map((p) => `${p.cantidad}× ${p.nombre}`).join(sep)
+}
+
+/** "Servicio" o "Producto" según el tipo de la orden de venta. */
+const _tipoVenta = (o) => (o.es_servicio ? 'Servicio' : 'Producto')
+
+/** Texto de detalle: productos, o el servicio si la orden es de servicio. */
+const _detalleVentaTexto = (o, sep = ', ') => {
+  if (o.productos && o.productos.length) return _resumenProductos(o.productos, sep)
+  if (o.es_servicio) return `Servicio${o.tipo_servicio ? `: ${o.tipo_servicio}` : ''}`
+  return '—'
+}
 
 /** Recibo de venta con detalle de productos y estado de pago. */
 export const generarReciboVentaPDF = async (venta) => {
@@ -553,14 +572,16 @@ export const exportarVentasCSV = async (reporte, filtros) => {
   const ws = wb.addWorksheet('Ventas')
 
   ws.columns = [
-    { key: 'Orden',   width: 16 },
-    { key: 'Cliente', width: 32 },
-    { key: 'Fecha',   width: 14 },
-    { key: 'Total',   width: 18 },
-    { key: 'Estado',  width: 14 },
+    { key: 'Orden',     width: 16 },
+    { key: 'Cliente',   width: 28 },
+    { key: 'Tipo',      width: 12 },
+    { key: 'Productos', width: 44 },
+    { key: 'Fecha',     width: 14 },
+    { key: 'Total',     width: 18 },
+    { key: 'Estado',    width: 14 },
   ]
 
-  _encabezadoExcel(ws, 5, 'Reporte de Ventas', {
+  _encabezadoExcel(ws, 7, 'Reporte de Ventas', {
     filtros,
     resumen: [
       { label: 'Total Ventas',       valor: formatCurrency(reporte.total_ventas) },
@@ -569,17 +590,20 @@ export const exportarVentasCSV = async (reporte, filtros) => {
     ],
   })
 
-  const headerRow = ws.addRow(['Orden', 'Cliente', 'Fecha', 'Total', 'Estado'])
+  const headerRow = ws.addRow(['Orden', 'Cliente', 'Tipo', 'Productos', 'Fecha', 'Total', 'Estado'])
   _estilarEncabezado(headerRow, '10B981')
 
   reporte.ordenes?.forEach((o) => {
     const row = ws.addRow({
-      'Orden':   o.numero_orden,
-      'Cliente': o.cliente,
-      'Fecha':   o.fecha,
-      'Total':   formatCurrency(o.total),
-      'Estado':  o.estado,
+      'Orden':     o.numero_orden,
+      'Cliente':   o.cliente,
+      'Tipo':      _tipoVenta(o),
+      'Productos': _detalleVentaTexto(o, '\n'),
+      'Fecha':     o.fecha,
+      'Total':     formatCurrency(o.total),
+      'Estado':    o.estado,
     })
+    row.getCell('Productos').alignment = { wrapText: true, vertical: 'top' }
     _estilarFila(row)
   })
 
