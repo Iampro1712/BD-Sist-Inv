@@ -362,6 +362,141 @@ export const exportarProductosPDF = async (productos, filtros) => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RECIBOS / COMPROBANTES / COTIZACIONES (PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _fechaCorta = (d) =>
+  d ? new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+/** Recibo de venta con detalle de productos y estado de pago. */
+export const generarReciboVentaPDF = async (venta) => {
+  const { jsPDF, autoTable } = await loadPdf()
+  const doc = new jsPDF()
+  let y = _encabezadoPDF(doc)
+
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Recibo de Venta', 14, y + 6)
+  doc.setFont(undefined, 'normal')
+
+  doc.setFontSize(10)
+  doc.text(`N° Venta: #${venta.id_venta}`, 14, y + 14)
+  doc.text(`Fecha: ${_fechaCorta(venta.fecha)}`, 14, y + 20)
+  doc.text(`Cliente: ${venta.cliente_nombre || '—'}`, 14, y + 26)
+
+  const body = (venta.productos || []).map((p) => [
+    p.nombre,
+    p.cantidad,
+    formatCurrency(p.precio_unitario),
+    formatCurrency(p.subtotal),
+  ])
+
+  autoTable(doc, {
+    startY: y + 32,
+    head: [['Producto', 'Cant.', 'Precio Unit.', 'Subtotal']],
+    body,
+    theme: 'grid',
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [16, 185, 129] },
+  })
+
+  let fy = doc.lastAutoTable.finalY + 8
+  doc.setFontSize(11)
+  doc.setFont(undefined, 'bold')
+  doc.text(`Total: ${formatCurrency(venta.total)}`, 14, fy)
+  if (venta.monto_pagado !== undefined) {
+    doc.setFont(undefined, 'normal')
+    doc.setFontSize(10)
+    doc.text(`Pagado: ${formatCurrency(venta.monto_pagado)}`, 14, fy + 6)
+    doc.text(`Saldo pendiente: ${formatCurrency(venta.saldo_pendiente)}`, 14, fy + 12)
+    doc.text(`Estado de pago: ${venta.estado_pago_display || venta.estado_pago || ''}`, 14, fy + 18)
+  }
+
+  doc.save(`recibo-venta-${venta.id_venta}.pdf`)
+}
+
+/** Comprobante de un abono / pago individual sobre una venta. */
+export const generarReciboPagoPDF = async (venta, pago) => {
+  const { jsPDF, autoTable } = await loadPdf()
+  const doc = new jsPDF()
+  let y = _encabezadoPDF(doc)
+
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Comprobante de Pago', 14, y + 6)
+  doc.setFont(undefined, 'normal')
+
+  doc.setFontSize(10)
+  doc.text(`Recibo de pago N° ${pago.id_pago}`, 14, y + 14)
+  doc.text(`Venta asociada: #${venta.id_venta}`, 14, y + 20)
+  doc.text(`Cliente: ${venta.cliente_nombre || '—'}`, 14, y + 26)
+  doc.text(`Fecha de pago: ${_fechaCorta(pago.fecha_pago)}`, 14, y + 32)
+
+  autoTable(doc, {
+    startY: y + 38,
+    head: [['Concepto', 'Detalle']],
+    body: [
+      ['Monto recibido', formatCurrency(pago.monto)],
+      ['Método de pago', pago.metodo_pago_display || pago.metodo_pago || '—'],
+      ['Referencia', pago.referencia || '—'],
+      ['Total de la venta', formatCurrency(venta.total)],
+      ['Saldo pendiente', formatCurrency(venta.saldo_pendiente)],
+    ],
+    theme: 'grid',
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [34, 197, 94] },
+  })
+
+  doc.save(`comprobante-pago-${pago.id_pago}.pdf`)
+}
+
+/** Cotización / proforma imprimible. */
+export const generarCotizacionPDF = async (cot) => {
+  const { jsPDF, autoTable } = await loadPdf()
+  const doc = new jsPDF()
+  let y = _encabezadoPDF(doc)
+
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Cotización / Proforma', 14, y + 6)
+  doc.setFont(undefined, 'normal')
+
+  doc.setFontSize(10)
+  doc.text(`N° Cotización: #${cot.id_cotizacion}`, 14, y + 14)
+  doc.text(`Fecha: ${_fechaCorta(cot.fecha)}`, 14, y + 20)
+  doc.text(`Cliente: ${cot.cliente_nombre || '—'}`, 14, y + 26)
+  doc.text(`Válida por: ${cot.validez_dias} día(s)`, 14, y + 32)
+
+  const body = (cot.productos || []).map((p) => [
+    p.nombre,
+    p.cantidad,
+    formatCurrency(p.precio_unitario),
+    formatCurrency(p.subtotal),
+  ])
+
+  autoTable(doc, {
+    startY: y + 38,
+    head: [['Producto', 'Cant.', 'Precio Unit.', 'Subtotal']],
+    body,
+    theme: 'grid',
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [99, 102, 241] },
+  })
+
+  let fy = doc.lastAutoTable.finalY + 8
+  doc.setFontSize(12)
+  doc.setFont(undefined, 'bold')
+  doc.text(`Total: ${formatCurrency(cot.total)}`, 14, fy)
+  doc.setFont(undefined, 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(120)
+  doc.text('Documento no fiscal. Precios sujetos a cambio una vez vencida la validez.', 14, fy + 8)
+  doc.setTextColor(0)
+
+  doc.save(`cotizacion-${cot.id_cotizacion}.pdf`)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EXPORTACIONES A EXCEL  (usando ExcelJS)
 // ─────────────────────────────────────────────────────────────────────────────
 

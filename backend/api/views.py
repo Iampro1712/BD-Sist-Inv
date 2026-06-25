@@ -12,7 +12,8 @@ from django.views.decorators.cache import cache_page
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio,
-    BitacoraServicio, AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta
+    BitacoraServicio, AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta,
+    Cotizacion, Devolucion
 )
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
@@ -28,6 +29,8 @@ from .serializers import (
     ServicioMotoConBitacoraSerializer, AuditoriaProductoSerializer,
     GarantiaListSerializer, GarantiaDetailSerializer,
     ReclamacionCreateSerializer, ReclamacionDetailSerializer, ReclamacionListSerializer,
+    CotizacionListSerializer, CotizacionDetailSerializer, CotizacionCreateSerializer,
+    DevolucionListSerializer, DevolucionDetailSerializer, DevolucionCreateSerializer,
 )
 from .services import (
     InventoryService, OrdenCompraService, OrdenVentaService,
@@ -917,4 +920,125 @@ class ReclamacionViewSet(viewsets.ModelViewSet):
         reclamacion.garantia.estado = 'reclamada'
         reclamacion.garantia.save()
         return Response(ReclamacionDetailSerializer(reclamacion).data)
+
+
+class CotizacionViewSet(viewsets.ModelViewSet):
+    """ViewSet de cotizaciones / proformas. No afecta inventario hasta convertir."""
+    queryset = Cotizacion.objects.all()
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['id_cotizacion']
+    ordering_fields = ['fecha', 'total']
+    ordering = ['-fecha']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CotizacionListSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return CotizacionCreateSerializer
+        return CotizacionDetailSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        cliente = self.request.query_params.get('cliente', None)
+        if cliente:
+            try:
+                queryset = queryset.filter(id_cliente=int(cliente))
+            except (ValueError, TypeError):
+                pass
+        estado = self.request.query_params.get('estado', None)
+        if estado:
+            queryset = queryset.filter(estado=estado)
+        return queryset
+
+    @action(detail=True, methods=['post'], url_path='convertir-venta')
+    def convertir_venta(self, request, pk=None):
+        """Convierte la cotización en una orden de venta real."""
+        from django.db import transaction
+        with transaction.atomic():
+            cot = Cotizacion.objects.select_for_update().get(pk=pk)
+            if cot.estado == 'convertida' or cot.id_venta:
+                return Response(
+                    {'error': 'Esta cotización ya fue convertida en venta'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id_producto, cantidad, precio_unitario
+                    FROM producto_cotizacion WHERE id_cotizacion = %s
+                """, [cot.id_cotizacion])
+                items = cursor.fetchall()
+                if not items:
+                    return Response(
+                        {'error': 'La cotización no tiene productos'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                total = sum(float(i[2]) * int(i[1]) for i in items)
+                cursor.execute("""
+                    INSERT INTO ventas (id_cliente, fecha, total)
+                    VALUES (%s, CURRENT_DATE, %s) RETURNING id_venta
+                """, [cot.id_cliente, total])
+                id_venta = cursor.fetchone()[0]
+                for id_producto, cantidad, precio in items:
+                    cursor.execute("""
+                        INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s)
+                    """, [id_venta, id_producto, cantidad, precio])
+                cursor.execute(
+                    "UPDATE cotizaciones SET estado = 'convertida', id_venta = %s WHERE id_cotizacion = %s",
+                    [id_venta, cot.id_cotizacion],
+                )
+        cot.refresh_from_db()
+        return Response(
+            {'id_venta': id_venta, 'cotizacion': CotizacionDetailSerializer(cot).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'])
+    def cambiar_estado(self, request, pk=None):
+        """Cambia el estado de la cotización (aprobada / rechazada / pendiente)."""
+        cot = self.get_object()
+        nuevo = request.data.get('estado')
+        if nuevo not in ('pendiente', 'aprobada', 'rechazada'):
+            return Response({'error': 'Estado inválido'}, status=status.HTTP_400_BAD_REQUEST)
+        if cot.estado == 'convertida':
+            return Response(
+                {'error': 'No se puede cambiar el estado de una cotización convertida'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cot.estado = nuevo
+        cot.save(update_fields=['estado'])
+        return Response(CotizacionDetailSerializer(cot).data)
+
+
+class DevolucionViewSet(viewsets.ModelViewSet):
+    """ViewSet de devoluciones / notas de crédito. Reingresa stock al crear."""
+    queryset = Devolucion.objects.all()
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['id_devolucion']
+    ordering_fields = ['fecha', 'total']
+    ordering = ['-fecha']
+    http_method_names = ['get', 'post', 'head', 'options']  # sin update/delete: las devoluciones no se editan
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return DevolucionListSerializer
+        elif self.action == 'create':
+            return DevolucionCreateSerializer
+        return DevolucionDetailSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        cliente = self.request.query_params.get('cliente', None)
+        if cliente:
+            try:
+                queryset = queryset.filter(id_cliente=int(cliente))
+            except (ValueError, TypeError):
+                pass
+        venta = self.request.query_params.get('venta', None)
+        if venta:
+            try:
+                queryset = queryset.filter(id_venta=int(venta))
+            except (ValueError, TypeError):
+                pass
+        return queryset
 
