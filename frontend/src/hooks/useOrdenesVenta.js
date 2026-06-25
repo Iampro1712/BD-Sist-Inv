@@ -76,3 +76,41 @@ export const useAplicarDescuento = () => {
     },
   })
 }
+
+// ---------------------------------------------------------------------------
+// Pagos / abonos (pago por adelantado)
+// ---------------------------------------------------------------------------
+export const usePagosVenta = (idVenta) => {
+  return useQuery({
+    queryKey: ['pagos-venta', idVenta],
+    queryFn: () => ordenesVentaService.getPagos(idVenta).then(res => res.data),
+    enabled: !!idVenta,
+  })
+}
+
+export const useRegistrarPago = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ idVenta, data }) => ordenesVentaService.registrarPago(idVenta, data),
+    onSuccess: (_, variables) => {
+      // ['ordenes-venta'] cubre tanto el listado como el detalle (mismo prefijo)
+      queryClient.invalidateQueries({ queryKey: ['ordenes-venta'] })
+      queryClient.invalidateQueries({ queryKey: ['pagos-venta', variables.idVenta] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export const useEliminarPago = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ idVenta, idPago }) => ordenesVentaService.eliminarPago(idVenta, idPago),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes-venta'] })
+      queryClient.invalidateQueries({ queryKey: ['pagos-venta', variables.idVenta] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
