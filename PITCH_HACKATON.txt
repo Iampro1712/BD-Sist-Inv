@@ -1,0 +1,84 @@
+================================================================================
+                  INVENTRIX — PITCH DE HACKATÓN
+     El sistema que digitaliza al pequeño negocio latinoamericano
+================================================================================
+
+
+🎤 GANCHO (10 segundos)
+--------------------------------------------------------------------------------
+"Levanten la mano los que conocen una tienda o taller que todavía lleva las
+cuentas en un cuaderno... Eso es plata que se pierde todos los días.
+Nosotros lo arreglamos. Esto es Inventrix."
+
+
+😖 EL PROBLEMA
+--------------------------------------------------------------------------------
+El pequeño negocio latinoamericano vuela a ciegas:
+  - No sabe cuánto gana realmente.
+  - Le deben y nadie cobra.
+  - Compra mercadería que se queda estancada.
+  - Si pierde sus datos, lo pierde todo.
+
+El software serio es caro, complejo y en inglés. Nadie lo hizo PARA ellos.
+
+
+💡 LA SOLUCIÓN
+--------------------------------------------------------------------------------
+Inventrix: gestión de inventario, ventas y cobranza, en español, en córdobas,
+desde el teléfono. Simple para el dueño, potente por dentro.
+
+
+🚀 DEMO EN VIVO (el recorrido de 2 minutos)
+--------------------------------------------------------------------------------
+  1. PUNTO DE VENTA: escaneamos un código de barras con la cámara, agregamos al
+     carrito y cobramos en segundos. (¡Wow inmediato!)
+  2. COBRANZA: pantalla de "quién me debe" con antigüedad de la deuda y botón de
+     recordatorio por WhatsApp pre-armado.
+  3. INTELIGENCIA: reporte de rentabilidad por producto y alerta de stock muerto
+     (capital dormido).
+  4. PROFESIONALISMO: generamos una cotización y un recibo en PDF al instante.
+  5. TRANQUILIDAD: respaldo completo de la base de datos con un clic.
+
+
+🛠️ LO QUE CONSTRUIMOS (y la técnica detrás)
+--------------------------------------------------------------------------------
+Producto REAL, funcional end-to-end, no un mockup:
+
+  Frontend : React 19 + Vite + TailwindCSS + React Query (PWA, modo oscuro).
+  Backend  : Django 5 + Django REST Framework.
+  Datos    : PostgreSQL (triggers de auditoría, JSONB, vistas, funciones PL/pgSQL).
+  Extras   : escáner de código de barras (cámara), generación de PDF y Excel,
+             etiquetas con código de barras imprimibles, almacenamiento de
+             imágenes en la nube (Cloudflare R2).
+
+Módulos ya operativos: inventario, POS, ventas, compras, clientes, proveedores,
+abonos, cuentas por cobrar, cotizaciones, devoluciones, rentabilidad, etiquetas,
+respaldos y bitácora de servicios para taller de motos.
+
+
+✨ POR QUÉ ES DIFERENTE
+--------------------------------------------------------------------------------
+  - Hecho PARA LATAM: idioma, moneda y flujos locales (no un genérico traducido).
+  - WhatsApp como canal de cobranza, donde de verdad están los clientes.
+  - De la venta al cobro al análisis: el ciclo completo, no una pieza suelta.
+  - Funciona en el celular del dueño, sin equipo de IT.
+
+
+🌎 IMPACTO
+--------------------------------------------------------------------------------
+Millones de micronegocios podrían dejar el cuaderno y empezar a decidir con datos.
+Más control = menos pérdidas = negocios que sobreviven y crecen. Digitalización
+real, para quien más la necesita.
+
+
+🔭 ¿QUÉ SIGUE?
+--------------------------------------------------------------------------------
+  - Multi-sucursal y multi-usuario.
+  - Facturación electrónica e integración de pasarelas de pago.
+  - Respaldos automáticos en la nube y app móvil nativa.
+
+
+--------------------------------------------------------------------------------
+   INVENTRIX — Del cuaderno a la nube. Vende más, pierde menos, crece con datos.
+                       ¡Gracias! 🏍️📦📈
+--------------------------------------------------------------------------------
