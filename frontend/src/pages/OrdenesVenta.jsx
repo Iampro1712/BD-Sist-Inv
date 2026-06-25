@@ -195,6 +195,7 @@ const OrdenesVenta = () => {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28"># Venta</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-64">Cliente</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-36">Fecha</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-32">Estado Pago</th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-36">Total</th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Acciones</th>
                 </tr>
@@ -226,10 +227,27 @@ const OrdenesVenta = () => {
                     <td className="px-6 py-5 whitespace-nowrap text-base text-gray-500 dark:text-gray-400">
                       {formatDate(orden.fecha)}
                     </td>
+                    <td className="px-6 py-5 whitespace-nowrap text-center">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        orden.estado_pago === 'pagado'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : orden.estado_pago === 'parcial'
+                          ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                      }`}>
+                        {orden.estado_pago === 'pagado' ? 'Pagado' :
+                         orden.estado_pago === 'parcial' ? 'Parcial' : 'Pendiente'}
+                      </span>
+                    </td>
                     <td className="px-6 py-5 whitespace-nowrap text-right">
                       <span className="text-base font-bold text-gray-900 dark:text-white">
                         {formatCurrency(orden.total)}
                       </span>
+                      {orden.estado_pago === 'parcial' && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                          Saldo: {formatCurrency(orden.saldo_pendiente)}
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-5 whitespace-nowrap text-right">
                       <button

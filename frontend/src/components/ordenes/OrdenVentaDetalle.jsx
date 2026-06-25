@@ -1,12 +1,52 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { fadeIn } from '../../utils/animations'
+import { useRegistrarPago, useEliminarPago } from '../../hooks/useOrdenesVenta'
+import { useToast } from '../../hooks/useToast'
+import { Button, Modal, ConfirmDialog } from '../ui'
+import PagoForm from '../forms/PagoForm'
 
 const OrdenVentaDetalle = ({ orden }) => {
+  const [isPagoModalOpen, setIsPagoModalOpen] = useState(false)
+  const [pagoToDelete, setPagoToDelete] = useState(null)
+  const toast = useToast()
+
+  const registrarPagoMutation = useRegistrarPago()
+  const eliminarPagoMutation = useEliminarPago()
+
+  const pagos = orden.pagos || []
+  const montoPagado = orden.monto_pagado || 0
+  const saldoPendiente = orden.saldo_pendiente ?? orden.total ?? 0
+
   const formatCurrency = (v) =>
     new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 
   const formatDate = (d) =>
     new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+  const handleRegistrarPago = async (data) => {
+    try {
+      await registrarPagoMutation.mutateAsync({ idVenta: orden.id_venta, data })
+      setIsPagoModalOpen(false)
+      toast.success('Pago registrado exitosamente')
+    } catch (err) {
+      const msg = err.response?.data?.monto || err.response?.data?.error || 'Error al registrar el pago'
+      toast.error(Array.isArray(msg) ? msg[0] : msg)
+    }
+  }
+
+  const handleConfirmarEliminar = async () => {
+    if (!pagoToDelete) return
+    try {
+      await eliminarPagoMutation.mutateAsync({ idVenta: orden.id_venta, idPago: pagoToDelete.id_pago })
+      toast.success('Pago eliminado exitosamente')
+      setPagoToDelete(null)
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Error al eliminar el pago'
+      toast.error(msg)
+      setPagoToDelete(null)
+    }
+  }
 
   const totalItems = orden.productos?.reduce((s, p) => s + (p.cantidad || 1), 0) || 0
   const subtotal   = orden.productos?.reduce((s, p) => s + (p.subtotal || 0), 0) || 0
@@ -113,6 +153,113 @@ const OrdenVentaDetalle = ({ orden }) => {
         </div>
       </motion.div>
 
+      {/* Estado de pago */}
+      <motion.div variants={fadeIn} className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            Estado de pago
+          </p>
+          {orden.estado_pago !== 'pagado' && (
+            <Button size="sm" onClick={() => setIsPagoModalOpen(true)}>
+              + Registrar pago
+            </Button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Total</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(orden.total)}</p>
+          </div>
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 p-3">
+            <p className="text-xs text-green-600 dark:text-green-400 mb-1">Pagado</p>
+            <p className="text-lg font-bold text-green-700 dark:text-green-300">{formatCurrency(montoPagado)}</p>
+          </div>
+          <div className={`rounded-lg border p-3 ${
+            saldoPendiente > 0
+              ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+              : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700'
+          }`}>
+            <p className={`text-xs mb-1 ${saldoPendiente > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+              Saldo pendiente
+            </p>
+            <p className={`text-lg font-bold ${saldoPendiente > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-gray-500 dark:text-gray-400'}`}>
+              {formatCurrency(saldoPendiente)}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+            orden.estado_pago === 'pagado'
+              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+              : orden.estado_pago === 'parcial'
+              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+          }`}>
+            {orden.estado_pago === 'pagado' ? '✓ Pagado completo' :
+             orden.estado_pago === 'parcial' ? '◐ Pago parcial' : '○ Pendiente de pago'}
+          </span>
+        </div>
+      </motion.div>
+
+      {/* Historial de pagos */}
+      {pagos.length > 0 && (
+        <motion.div variants={fadeIn}>
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+            Historial de pagos ({pagos.length})
+          </p>
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900/50">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Método</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Monto</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Referencia</th>
+                  <th className="px-4 py-2.5 w-12" />
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+                {pagos.map((pago, i) => (
+                  <tr key={pago.id_pago} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                      {new Date(pago.fecha_pago).toLocaleDateString('es-NI', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{pago.metodo_pago_display}</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-green-600 dark:text-green-400">
+                      {formatCurrency(pago.monto)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 font-mono">{pago.referencia || '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      {i === 0 && (
+                        <button
+                          onClick={() => setPagoToDelete(pago)}
+                          disabled={eliminarPagoMutation.isPending}
+                          className="p-1 rounded text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Eliminar pago"
+                        >
+                          {eliminarPagoMutation.isPending && pagoToDelete?.id_pago === pago.id_pago ? (
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      )}
+
       {/* Notas */}
       {orden.notas && (
         <motion.div variants={fadeIn} className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 flex gap-3">
@@ -125,6 +272,37 @@ const OrdenVentaDetalle = ({ orden }) => {
           </div>
         </motion.div>
       )}
+
+      {/* Modal registrar pago */}
+      <Modal
+        isOpen={isPagoModalOpen}
+        onClose={() => setIsPagoModalOpen(false)}
+        title="Registrar Pago"
+        size="md"
+      >
+        <PagoForm
+          orden={orden}
+          onSubmit={handleRegistrarPago}
+          onCancel={() => setIsPagoModalOpen(false)}
+          isLoading={registrarPagoMutation.isPending}
+        />
+      </Modal>
+
+      {/* Confirmación eliminar pago */}
+      <ConfirmDialog
+        isOpen={!!pagoToDelete}
+        onClose={() => setPagoToDelete(null)}
+        onConfirm={handleConfirmarEliminar}
+        closeOnConfirm={false}
+        loading={eliminarPagoMutation.isPending}
+        title="Eliminar pago"
+        message={pagoToDelete
+          ? `¿Estás seguro de eliminar el pago de ${formatCurrency(pagoToDelete.monto)}? Esta acción no se puede deshacer.`
+          : ''}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        type="danger"
+      />
 
     </div>
   )

@@ -1,12 +1,17 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from './index'
 
-const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', type = 'danger' }) => {
+const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', type = 'danger', loading = false, closeOnConfirm = true }) => {
   if (!isOpen) return null
 
   const handleConfirm = () => {
     onConfirm()
-    onClose()
+    // closeOnConfirm=false deja que el padre controle el cierre tras una acción async
+    if (closeOnConfirm) onClose()
+  }
+
+  const handleClose = () => {
+    if (!loading) onClose()
   }
 
   return (
@@ -18,7 +23,7 @@ const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={handleClose}
             className="fixed inset-0 bg-black bg-opacity-50 z-50"
           />
 
@@ -59,13 +64,16 @@ const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText
               <div className="bg-gray-50 dark:bg-gray-900 px-6 py-3 flex justify-end space-x-3">
                 <Button
                   variant="secondary"
-                  onClick={onClose}
+                  onClick={handleClose}
+                  disabled={loading}
                 >
                   {cancelText}
                 </Button>
                 <Button
                   variant={type === 'danger' ? 'danger' : 'primary'}
                   onClick={handleConfirm}
+                  loading={loading}
+                  disabled={loading}
                 >
                   {confirmText}
                 </Button>

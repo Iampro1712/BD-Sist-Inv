@@ -7,7 +7,7 @@ from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
     MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio,
-    AuditoriaProducto, Garantia, ReclamacionGarantia
+    AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta
 )
 
 
@@ -400,16 +400,67 @@ class DetalleOrdenVentaSerializer(serializers.ModelSerializer):
         read_only_fields = ['subtotal']
 
 
+class PagoVentaSerializer(serializers.ModelSerializer):
+    """Serializer de lectura para un pago/abono de venta."""
+    metodo_pago_display = serializers.CharField(source='get_metodo_pago_display', read_only=True)
+    id_venta = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = PagoVenta
+        fields = [
+            'id_pago', 'id_venta', 'monto', 'fecha_pago',
+            'metodo_pago', 'metodo_pago_display', 'referencia',
+            'notas', 'created_at'
+        ]
+        read_only_fields = ['created_at']
+
+
+class PagoVentaCreateSerializer(serializers.ModelSerializer):
+    """Serializer para registrar un pago/abono.
+
+    Recibe la venta desde la vista (no del body). Valida monto > 0 y que no
+    exceda el saldo pendiente calculado con la MISMA fuente que el detalle.
+    """
+    class Meta:
+        model = PagoVenta
+        fields = ['monto', 'fecha_pago', 'metodo_pago', 'referencia', 'notas']
+
+    def validate_monto(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('El monto debe ser mayor a cero')
+        return value
+
+    def validate(self, data):
+        from django.db.models import Sum
+        venta = self.context['venta']
+        total = venta.calcular_total()
+        pagado = venta.pagos.aggregate(total=Sum('monto'))['total'] or 0
+        saldo = total - pagado
+        if data['monto'] > saldo:
+            raise serializers.ValidationError({
+                'monto': f'El monto excede el saldo pendiente de C${saldo:.2f}'
+            })
+        return data
+
+    def create(self, validated_data):
+        venta = self.context['venta']
+        pago = PagoVenta.objects.create(id_venta=venta, **validated_data)
+        venta.calcular_saldo()
+        return pago
+
+
 class OrdenVentaListSerializer(serializers.ModelSerializer):
     """Serializer para listado de órdenes de venta"""
     cliente_nombre = serializers.SerializerMethodField()
     estado_display = serializers.SerializerMethodField()
-    
+    estado_pago_display = serializers.CharField(source='get_estado_pago_display', read_only=True)
+
     class Meta:
         model = OrdenVenta
         fields = [
             'id_venta', 'id_cliente', 'cliente_nombre',
-            'fecha', 'estado_display', 'total'
+            'fecha', 'estado_display', 'total',
+            'monto_pagado', 'saldo_pendiente', 'estado_pago', 'estado_pago_display'
         ]
     
     def get_cliente_nombre(self, obj):
@@ -436,13 +487,21 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
     estado_display = serializers.SerializerMethodField()
     productos = serializers.SerializerMethodField()
     total = serializers.SerializerMethodField()
-    
+    pagos = serializers.SerializerMethodField()
+    estado_pago_display = serializers.CharField(source='get_estado_pago_display', read_only=True)
+
     class Meta:
         model = OrdenVenta
         fields = [
             'id_venta', 'id_cliente', 'cliente_nombre',
-            'fecha', 'estado_display', 'total', 'productos'
+            'fecha', 'estado_display', 'total', 'productos',
+            'monto_pagado', 'saldo_pendiente', 'estado_pago', 'estado_pago_display',
+            'pagos'
         ]
+
+    def get_pagos(self, obj):
+        pagos = obj.pagos.all()
+        return PagoVentaSerializer(pagos, many=True).data
     
     def get_cliente_nombre(self, obj):
         try:
@@ -455,23 +514,10 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
         return 'Completado'
     
     def get_total(self, obj):
-        """Calcula el total sumando los subtotales de producto_venta o usando el total de la venta"""
-        from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT SUM(pv.precio_unitario * pv.cantidad) as total
-                FROM producto_venta pv
-                WHERE pv.id_venta = %s
-            """, [obj.id_venta])
-            result = cursor.fetchone()
-            total_productos = float(result[0]) if result and result[0] else 0.0
-            
-            # Si no hay productos, usar el total de la venta (puede ser un servicio)
-            if total_productos == 0.0:
-                return float(obj.total) if obj.total else 0.0
-            
-            return total_productos
-    
+        """Total real de la venta. Reutiliza OrdenVenta.calcular_total() para que el
+        total mostrado y el saldo de pagos provengan de la misma fuente (Trampa #1)."""
+        return float(obj.calcular_total())
+
     def get_productos(self, obj):
         from django.db import connection
         with connection.cursor() as cursor:

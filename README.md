@@ -128,6 +128,21 @@ Inventrix nació observando las dificultades que enfrentan los negocios locales 
 - 👤 Asociación con clientes para historial
 - 📊 Análisis de ventas y tendencias
 
+### 💵 Pago por Adelantado (Abonos)
+
+<img src="https://img.shields.io/badge/Módulo-Pagos-22C55E?style=flat-square" alt="Pagos"/> <img src="https://img.shields.io/badge/NUEVO-Abonos-F59E0B?style=flat-square" alt="Nuevo"/>
+
+- 💰 **Pagos parciales (abonos)** sobre una orden de venta antes de la entrega final
+- 🔁 **Múltiples abonos** hasta cubrir el total de la venta
+- 📊 **Estado de pago** automático por venta: `Pendiente`, `Parcial` o `Pagado`
+- 🧮 **Saldo pendiente** calculado desde el total real de la venta (productos o servicio)
+- 🧾 **Historial de pagos** por orden con monto, fecha, método y referencia
+- 💳 **Métodos de pago**: efectivo, tarjeta, transferencia, depósito o cheque
+- 🔒 **Validaciones de negocio**: el abono no puede exceder el saldo y solo se elimina el último pago registrado
+- ⚙️ **Concurrencia segura**: registro de pagos con transacción atómica y bloqueo de fila
+- 🔍 **Filtro y badges** de estado de pago en el listado de ventas
+- 📖 [Ver documento de implementación](./PAGO_ADELANTADO_IMPLEMENTACION.md)
+
 ### 📊 Reportes y Análisis Avanzados
 
 <img src="https://img.shields.io/badge/Módulo-Reportes-06B6D4?style=flat-square" alt="Reportes"/>
@@ -487,6 +502,7 @@ python manage.py loaddata fixtures/demo_data.json
 | [🚀 Deployment Guide](./DEPLOYMENT.md) | Guía detallada de despliegue en producción |
 | [🤝 Contributing Guide](./CONTRIBUTING.md) | Cómo contribuir al proyecto |
 | [📝 Bitácora README](./BITACORA_README.md) | Documentación del sistema de bitácora de servicios |
+| [💵 Pago por Adelantado](./PAGO_ADELANTADO_IMPLEMENTACION.md) | Implementación de abonos / pagos parciales en órdenes de venta |
 | [📅 Validación de Fechas en Órdenes](./VALIDACION_FECHAS_ORDENES.md) | Validación de fechas futuras en órdenes de compra y venta |
 | [📅 Validación de Fechas en Reportes](./VALIDACION_FECHAS_REPORTES.md) | Validación de fechas futuras y rangos en reportes |
 | [📱 Validación de Teléfono](./VALIDACION_TELEFONO_CLIENTES.md) | Validación y formateo automático de números telefónicos |
@@ -526,6 +542,20 @@ python manage.py loaddata fixtures/demo_data.json
 5. Revisa el total calculado automáticamente
 6. ✅ Verifica que la fecha no sea futura (validación automática)
 7. Haz clic en **Guardar**
+
+</details>
+
+<details>
+<summary>💵 Cómo registrar un Pago por Adelantado (Abono)</summary>
+
+1. Ve a **Ventas** y abre el **detalle** de una venta
+2. En la sección **Estado de pago**, haz clic en **+ Registrar pago**
+3. Ingresa el monto del abono (no puede exceder el saldo pendiente)
+4. Selecciona la fecha y el método de pago (efectivo, tarjeta, transferencia, depósito o cheque)
+5. (Opcional) Agrega una referencia o notas
+6. Haz clic en **Registrar pago**
+7. El estado cambia automáticamente a **Parcial** o **Pagado** según el saldo
+8. Para corregir, puedes **eliminar el último pago** registrado (recalcula el saldo)
 
 </details>
 
@@ -766,6 +796,7 @@ El sistema ha sido sometido a una **revisión técnica exhaustiva** que verific�
 ✅ Validación robusta de fechas en órdenes y reportes  
 ✅ Validación y formateo automático de teléfonos  
 ✅ Validación de rangos de fechas en reportes  
+✅ Pago por adelantado (abonos / pagos parciales) con estado de pago y saldo  
 
 ### 🚀 Versión 3.1 (Q9 2026)
 
