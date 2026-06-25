@@ -7,7 +7,8 @@ from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
     MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio,
-    AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta
+    AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta,
+    Cotizacion, Devolucion
 )
 
 
@@ -990,3 +991,222 @@ class ReclamacionDetailSerializer(serializers.ModelSerializer):
             'producto': obj.garantia.id_producto.nombre,
             'cliente_id': obj.garantia.id_cliente,
         }
+
+
+# ============================================================================
+# COTIZACIONES / PROFORMAS
+# ============================================================================
+
+def _items_cotizacion(id_cotizacion):
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT p.id_producto, p.nombre, p.sku_producto,
+                   pc.cantidad, pc.precio_unitario,
+                   (pc.cantidad * pc.precio_unitario) AS subtotal
+            FROM producto_cotizacion pc
+            INNER JOIN productos p ON p.id_producto = pc.id_producto
+            WHERE pc.id_cotizacion = %s
+        """, [id_cotizacion])
+        return [{
+            'id_producto': r[0], 'nombre': r[1], 'sku': r[2],
+            'cantidad': int(r[3]), 'precio_unitario': float(r[4]),
+            'subtotal': float(r[5]),
+        } for r in cursor.fetchall()]
+
+
+class CotizacionListSerializer(serializers.ModelSerializer):
+    cliente_nombre = serializers.SerializerMethodField()
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    class Meta:
+        model = Cotizacion
+        fields = [
+            'id_cotizacion', 'id_cliente', 'cliente_nombre', 'fecha',
+            'validez_dias', 'total', 'estado', 'estado_display', 'id_venta',
+        ]
+
+    def get_cliente_nombre(self, obj):
+        cache = _batch_cache(self, '_cot_cliente_nombre', _build_cliente_nombre_map)
+        return cache.get(obj.id_cliente, 'Cliente no encontrado')
+
+
+class CotizacionDetailSerializer(serializers.ModelSerializer):
+    cliente_nombre = serializers.SerializerMethodField()
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    productos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Cotizacion
+        fields = [
+            'id_cotizacion', 'id_cliente', 'cliente_nombre', 'fecha',
+            'validez_dias', 'total', 'estado', 'estado_display', 'id_venta',
+            'notas', 'productos',
+        ]
+
+    def get_cliente_nombre(self, obj):
+        try:
+            return Cliente.objects.get(id_cliente=obj.id_cliente).nombre
+        except Cliente.DoesNotExist:
+            return 'Cliente no encontrado'
+
+    def get_productos(self, obj):
+        return _items_cotizacion(obj.id_cotizacion)
+
+
+class CotizacionCreateSerializer(serializers.Serializer):
+    cliente = serializers.IntegerField(required=True, source='id_cliente')
+    fecha = serializers.DateField(required=True)
+    validez_dias = serializers.IntegerField(required=False, default=15)
+    notas = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    detalles = serializers.ListField(child=serializers.DictField(), required=True, write_only=True)
+
+    def validate_detalles(self, value):
+        if not value:
+            raise serializers.ValidationError('Agrega al menos un producto')
+        return value
+
+    def create(self, validated_data):
+        from django.db import transaction
+        detalles = validated_data.pop('detalles')
+        total = sum(float(d['precio_unitario']) * int(d['cantidad']) for d in detalles)
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO cotizaciones (id_cliente, fecha, validez_dias, total, estado, notas)
+                    VALUES (%s, %s, %s, %s, 'pendiente', %s)
+                    RETURNING id_cotizacion
+                """, [
+                    validated_data['id_cliente'], validated_data['fecha'],
+                    validated_data.get('validez_dias', 15), total,
+                    validated_data.get('notas') or None,
+                ])
+                id_cotizacion = cursor.fetchone()[0]
+                for d in detalles:
+                    cursor.execute("""
+                        INSERT INTO producto_cotizacion (id_cotizacion, id_producto, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s)
+                    """, [id_cotizacion, d['producto'], d['cantidad'], d['precio_unitario']])
+        return Cotizacion.objects.get(id_cotizacion=id_cotizacion)
+
+    def to_representation(self, instance):
+        return CotizacionDetailSerializer(instance).data
+
+
+# ============================================================================
+# DEVOLUCIONES / NOTAS DE CRÉDITO
+# ============================================================================
+
+def _items_devolucion(id_devolucion):
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT p.id_producto, p.nombre, p.sku_producto,
+                   pd.cantidad, pd.precio_unitario,
+                   (pd.cantidad * pd.precio_unitario) AS subtotal
+            FROM producto_devolucion pd
+            INNER JOIN productos p ON p.id_producto = pd.id_producto
+            WHERE pd.id_devolucion = %s
+        """, [id_devolucion])
+        return [{
+            'id_producto': r[0], 'nombre': r[1], 'sku': r[2],
+            'cantidad': int(r[3]), 'precio_unitario': float(r[4]),
+            'subtotal': float(r[5]),
+        } for r in cursor.fetchall()]
+
+
+class DevolucionListSerializer(serializers.ModelSerializer):
+    cliente_nombre = serializers.SerializerMethodField()
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    class Meta:
+        model = Devolucion
+        fields = [
+            'id_devolucion', 'id_venta', 'id_cliente', 'cliente_nombre',
+            'fecha', 'motivo', 'total', 'estado', 'estado_display',
+        ]
+
+    def get_cliente_nombre(self, obj):
+        if not obj.id_cliente:
+            return '—'
+        cache = _batch_cache(self, '_dev_cliente_nombre', _build_cliente_nombre_map)
+        return cache.get(obj.id_cliente, 'Cliente no encontrado')
+
+
+class DevolucionDetailSerializer(serializers.ModelSerializer):
+    cliente_nombre = serializers.SerializerMethodField()
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    productos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Devolucion
+        fields = [
+            'id_devolucion', 'id_venta', 'id_cliente', 'cliente_nombre',
+            'fecha', 'motivo', 'total', 'estado', 'estado_display', 'productos',
+        ]
+
+    def get_cliente_nombre(self, obj):
+        if not obj.id_cliente:
+            return '—'
+        try:
+            return Cliente.objects.get(id_cliente=obj.id_cliente).nombre
+        except Cliente.DoesNotExist:
+            return 'Cliente no encontrado'
+
+    def get_productos(self, obj):
+        return _items_devolucion(obj.id_devolucion)
+
+
+class DevolucionCreateSerializer(serializers.Serializer):
+    venta = serializers.IntegerField(required=False, allow_null=True, source='id_venta')
+    cliente = serializers.IntegerField(required=False, allow_null=True, source='id_cliente')
+    fecha = serializers.DateField(required=True)
+    motivo = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    detalles = serializers.ListField(child=serializers.DictField(), required=True, write_only=True)
+
+    def validate_detalles(self, value):
+        if not value:
+            raise serializers.ValidationError('Agrega al menos un producto a devolver')
+        for d in value:
+            if int(d.get('cantidad', 0)) <= 0:
+                raise serializers.ValidationError('La cantidad a devolver debe ser mayor a cero')
+        return value
+
+    def create(self, validated_data):
+        from django.db import transaction
+        detalles = validated_data.pop('detalles')
+        total = sum(float(d['precio_unitario']) * int(d['cantidad']) for d in detalles)
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO devoluciones (id_venta, id_cliente, fecha, motivo, total, estado)
+                    VALUES (%s, %s, %s, %s, %s, 'procesada')
+                    RETURNING id_devolucion
+                """, [
+                    validated_data.get('id_venta') or None,
+                    validated_data.get('id_cliente') or None,
+                    validated_data['fecha'],
+                    validated_data.get('motivo') or None,
+                    total,
+                ])
+                id_devolucion = cursor.fetchone()[0]
+                for d in detalles:
+                    cursor.execute("""
+                        INSERT INTO producto_devolucion (id_devolucion, id_producto, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s)
+                    """, [id_devolucion, d['producto'], d['cantidad'], d['precio_unitario']])
+                    # Reingresar stock + registrar movimiento de inventario
+                    cursor.execute(
+                        "UPDATE productos SET cantidad_actual = cantidad_actual + %s WHERE id_producto = %s",
+                        [d['cantidad'], d['producto']],
+                    )
+                    cursor.execute("""
+                        INSERT INTO movimientos_inventario
+                            (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                        VALUES (%s, 'ENTRADA', %s, NOW(), %s, 'ORDEN_VENTA', %s)
+                    """, [
+                        d['producto'], d['cantidad'], f'DEV-{id_devolucion}',
+                        validated_data.get('motivo') or 'Devolución',
+                    ])
+        return Devolucion.objects.get(id_devolucion=id_devolucion)
+
+    def to_representation(self, instance):
+        return DevolucionDetailSerializer(instance).data

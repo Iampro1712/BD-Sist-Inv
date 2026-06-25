@@ -291,5 +291,68 @@ def productos_mas_vendidos(request):
                 'cantidad_vendida': row[2],
                 'total_ventas': float(row[3]) if row[3] else 0
             })
-    
+
     return Response(productos)
+
+
+@api_view(['GET'])
+def cuentas_por_cobrar(request):
+    """Cuentas por cobrar: ventas con saldo pendiente, con antigüedad (aging).
+
+    No se cachea: debe reflejar de inmediato cualquier pago registrado.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                v.id_venta,
+                v.id_cliente,
+                c.nombre  AS cliente,
+                c.telefono,
+                v.fecha,
+                v.total,
+                v.monto_pagado,
+                v.saldo_pendiente,
+                v.estado_pago,
+                (CURRENT_DATE - v.fecha) AS dias,
+                CASE
+                    WHEN (CURRENT_DATE - v.fecha) <= 30 THEN '0-30'
+                    WHEN (CURRENT_DATE - v.fecha) <= 60 THEN '31-60'
+                    WHEN (CURRENT_DATE - v.fecha) <= 90 THEN '61-90'
+                    ELSE '90+'
+                END AS bucket
+            FROM ventas v
+            INNER JOIN cliente c ON c.id_cliente = v.id_cliente
+            WHERE v.estado_pago IN ('pendiente', 'parcial')
+              AND COALESCE(v.saldo_pendiente, 0) > 0
+            ORDER BY v.fecha ASC
+        """)
+        cuentas = []
+        buckets = {'0-30': 0.0, '31-60': 0.0, '61-90': 0.0, '90+': 0.0}
+        total_por_cobrar = 0.0
+        clientes = set()
+        for r in cursor.fetchall():
+            saldo = float(r[7]) if r[7] else 0.0
+            buckets[r[10]] += saldo
+            total_por_cobrar += saldo
+            clientes.add(r[1])
+            cuentas.append({
+                'id_venta': r[0],
+                'id_cliente': r[1],
+                'cliente': r[2],
+                'telefono': r[3],
+                'fecha': r[4],
+                'total': float(r[5]) if r[5] else 0.0,
+                'monto_pagado': float(r[6]) if r[6] else 0.0,
+                'saldo_pendiente': saldo,
+                'estado_pago': r[8],
+                'dias': int(r[9]) if r[9] is not None else 0,
+                'bucket': r[10],
+            })
+
+    return Response({
+        'total_por_cobrar': round(total_por_cobrar, 2),
+        'num_ventas': len(cuentas),
+        'num_clientes': len(clientes),
+        'aging': {k: round(v, 2) for k, v in buckets.items()},
+        'cuentas': cuentas,
+    })

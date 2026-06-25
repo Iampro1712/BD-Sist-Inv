@@ -143,6 +143,47 @@ Inventrix nació observando las dificultades que enfrentan los negocios locales 
 - 🔍 **Filtro y badges** de estado de pago en el listado de ventas
 - 📖 [Ver documento de implementación](./PAGO_ADELANTADO_IMPLEMENTACION.md)
 
+### 💸 Cuentas por Cobrar
+
+<img src="https://img.shields.io/badge/Módulo-Cobranza-F59E0B?style=flat-square" alt="Cobranza"/> <img src="https://img.shields.io/badge/NUEVO-CxC-22C55E?style=flat-square" alt="Nuevo"/>
+
+- 📋 **Listado de ventas con saldo pendiente** ordenadas por antigüedad de la deuda
+- ⏳ **Antigüedad de saldo (aging)**: tramos 0-30, 31-60, 61-90 y más de 90 días
+- 💰 **Resumen**: total por cobrar, número de ventas con saldo y clientes deudores
+- 💬 **Recordatorio por WhatsApp** con un clic (mensaje pre-armado con el saldo)
+
+### 🧾 Cotizaciones / Proformas
+
+<img src="https://img.shields.io/badge/Módulo-Cotizaciones-6366F1?style=flat-square" alt="Cotizaciones"/> <img src="https://img.shields.io/badge/NUEVO-Proformas-22C55E?style=flat-square" alt="Nuevo"/>
+
+- 📝 Crea **proformas** para tus clientes con varios productos y validez configurable
+- 🔄 **Convierte una cotización en venta** con un clic (genera la orden automáticamente)
+- ✅ Estados: `Pendiente`, `Aprobada`, `Rechazada`, `Convertida`
+- 📄 **Descarga la cotización en PDF** para enviarla al cliente
+
+### ↩️ Devoluciones / Notas de Crédito
+
+<img src="https://img.shields.io/badge/Módulo-Devoluciones-EF4444?style=flat-square" alt="Devoluciones"/> <img src="https://img.shields.io/badge/NUEVO-Notas_de_crédito-22C55E?style=flat-square" alt="Nuevo"/>
+
+- 📦 Registra la **devolución de productos** a partir de una venta existente
+- 🔁 **Reingreso automático de stock** y registro del movimiento de inventario
+- 🧮 Calcula el total de la **nota de crédito** según los productos devueltos
+
+### 📄 Recibos y Comprobantes en PDF
+
+<img src="https://img.shields.io/badge/Feature-Recibos_PDF-3B82F6?style=flat-square" alt="Recibos"/>
+
+- 🧾 **Recibo de venta** en PDF con el detalle de productos y estado de pago
+- 💵 **Comprobante por cada abono** (pago) para entregar al cliente
+
+### 💾 Respaldos (Backup con un clic)
+
+<img src="https://img.shields.io/badge/Módulo-Respaldos-0EA5E9?style=flat-square" alt="Respaldos"/> <img src="https://img.shields.io/badge/NUEVO-Backup-22C55E?style=flat-square" alt="Nuevo"/>
+
+- 💾 **Descarga un respaldo completo** de toda la base de datos en formato JSON
+- 🖱️ **Un solo clic** desde la pantalla de Respaldos; sin conocimientos técnicos
+- 🛡️ Pensado para resguardar tus datos ante pérdidas; ideal para un dueño sin equipo de IT
+
 ### 📊 Reportes y Análisis Avanzados
 
 <img src="https://img.shields.io/badge/Módulo-Reportes-06B6D4?style=flat-square" alt="Reportes"/>
@@ -797,6 +838,11 @@ El sistema ha sido sometido a una **revisión técnica exhaustiva** que verific�
 ✅ Validación y formateo automático de teléfonos  
 ✅ Validación de rangos de fechas en reportes  
 ✅ Pago por adelantado (abonos / pagos parciales) con estado de pago y saldo  
+✅ Cuentas por cobrar con antigüedad de saldo y recordatorio por WhatsApp  
+✅ Cotizaciones / proformas con conversión a venta y PDF  
+✅ Devoluciones / notas de crédito con reingreso de stock  
+✅ Recibos y comprobantes de pago en PDF  
+✅ Respaldo de la base de datos con un clic  
 
 ### 🚀 Versión 3.1 (Q9 2026)
 
