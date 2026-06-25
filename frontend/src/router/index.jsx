@@ -21,6 +21,9 @@ const CuentasCobrar = lazy(() => import('../pages/CuentasCobrar'))
 const Cotizaciones = lazy(() => import('../pages/Cotizaciones'))
 const Devoluciones = lazy(() => import('../pages/Devoluciones'))
 const Respaldos = lazy(() => import('../pages/Respaldos'))
+const Rentabilidad = lazy(() => import('../pages/Rentabilidad'))
+const POS = lazy(() => import('../pages/POS'))
+const Etiquetas = lazy(() => import('../pages/Etiquetas'))
 const NotFound = lazy(() => import('../pages/NotFound'))
 
 const router = createBrowserRouter([
@@ -145,6 +148,30 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageLoader />}>
             <Respaldos />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'rentabilidad',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Rentabilidad />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'pos',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <POS />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'etiquetas',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Etiquetas />
           </Suspense>
         ),
       },

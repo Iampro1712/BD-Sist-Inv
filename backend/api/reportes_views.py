@@ -356,3 +356,124 @@ def cuentas_por_cobrar(request):
         'aging': {k: round(v, 2) for k, v in buckets.items()},
         'cuentas': cuentas,
     })
+
+
+@api_view(['GET'])
+def reporte_rentabilidad(request):
+    """Rentabilidad por producto: margen unitario y utilidad realizada en ventas.
+
+    La utilidad realizada usa el precio al que se vendió (producto_venta) menos el
+    costo de compra del producto.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                p.id_producto,
+                p.nombre,
+                p.sku_producto,
+                COALESCE(p.precio_compra_unitario, 0) AS costo,
+                COALESCE(p.precio_final, 0)           AS precio_venta,
+                COALESCE(p.cantidad_actual, 0)        AS stock,
+                COALESCE(SUM(pv.cantidad), 0)         AS vendidos,
+                COALESCE(SUM(pv.cantidad * (pv.precio_unitario - COALESCE(p.precio_compra_unitario, 0))), 0) AS utilidad
+            FROM productos p
+            LEFT JOIN producto_venta pv ON pv.id_producto = p.id_producto
+            GROUP BY p.id_producto, p.nombre, p.sku_producto, p.precio_compra_unitario, p.precio_final, p.cantidad_actual
+            ORDER BY utilidad DESC
+        """)
+        productos = []
+        valor_costo = 0.0
+        valor_venta = 0.0
+        utilidad_realizada = 0.0
+        for r in cursor.fetchall():
+            costo = float(r[3])
+            precio = float(r[4])
+            stock = int(r[5])
+            margen = precio - costo
+            margen_pct = round((margen / precio) * 100, 1) if precio > 0 else 0.0
+            valor_costo += stock * costo
+            valor_venta += stock * precio
+            utilidad_realizada += float(r[7])
+            productos.append({
+                'id_producto': r[0],
+                'nombre': r[1],
+                'sku': r[2],
+                'costo': costo,
+                'precio_venta': precio,
+                'margen_unitario': round(margen, 2),
+                'margen_pct': margen_pct,
+                'stock': stock,
+                'vendidos': int(r[6]),
+                'utilidad': round(float(r[7]), 2),
+            })
+
+    return Response({
+        'valor_inventario_costo': round(valor_costo, 2),
+        'valor_inventario_venta': round(valor_venta, 2),
+        'utilidad_potencial': round(valor_venta - valor_costo, 2),
+        'utilidad_realizada': round(utilidad_realizada, 2),
+        'num_productos': len(productos),
+        'productos': productos,
+    })
+
+
+@api_view(['GET'])
+def reporte_stock_muerto(request):
+    """Productos con stock que NO se han vendido en los últimos N días (default 90).
+
+    Mide el capital inmovilizado (stock x costo) para detectar mercadería estancada.
+    """
+    try:
+        dias = int(request.GET.get('dias', 90))
+    except (ValueError, TypeError):
+        dias = 90
+    if dias < 1:
+        dias = 90
+
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT
+                p.id_producto,
+                p.nombre,
+                p.sku_producto,
+                COALESCE(p.cantidad_actual, 0)        AS stock,
+                COALESCE(p.precio_compra_unitario, 0) AS costo,
+                COALESCE(p.precio_final, 0)           AS precio_venta,
+                (SELECT MAX(v.fecha)
+                   FROM producto_venta pv
+                   JOIN ventas v ON v.id_venta = pv.id_venta
+                  WHERE pv.id_producto = p.id_producto) AS ultima_venta
+            FROM productos p
+            WHERE COALESCE(p.cantidad_actual, 0) > 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM producto_venta pv
+                  JOIN ventas v ON v.id_venta = pv.id_venta
+                  WHERE pv.id_producto = p.id_producto
+                    AND v.fecha >= CURRENT_DATE - %s::int
+              )
+            ORDER BY (COALESCE(p.cantidad_actual, 0) * COALESCE(p.precio_compra_unitario, 0)) DESC
+        """, [dias])
+        productos = []
+        capital_total = 0.0
+        for r in cursor.fetchall():
+            stock = int(r[3])
+            costo = float(r[4])
+            capital = stock * costo
+            capital_total += capital
+            productos.append({
+                'id_producto': r[0],
+                'nombre': r[1],
+                'sku': r[2],
+                'stock': stock,
+                'costo': costo,
+                'precio_venta': float(r[5]),
+                'ultima_venta': r[6],
+                'capital_inmovilizado': round(capital, 2),
+            })
+
+    return Response({
+        'dias': dias,
+        'num_productos': len(productos),
+        'capital_inmovilizado_total': round(capital_total, 2),
+        'productos': productos,
+    })

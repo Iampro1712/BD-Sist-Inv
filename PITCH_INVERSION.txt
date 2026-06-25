@@ -1,0 +1,103 @@
+================================================================================
+                 INVENTRIX — PITCH DE INVERSIÓN
+        El sistema operativo del pequeño negocio latinoamericano
+================================================================================
+
+
+1. EL PROBLEMA
+--------------------------------------------------------------------------------
+En Latinoamérica, millones de micro y pequeños negocios (talleres, ferreterías,
+farmacias, tiendas) todavía operan con cuadernos, hojas de Excel y memoria.
+
+El resultado es predecible y costoso:
+  - No saben cuánto ganan de verdad.
+  - Pierden dinero en cuentas por cobrar que nadie persigue.
+  - Compran a ciegas y acumulan mercadería que no rota.
+  - No tienen respaldo de su información: un dato perdido es plata perdida.
+
+El software existente o es demasiado caro y complejo (ERPs corporativos), o es
+genérico y en inglés, pensado para otra realidad. El dueño promedio no necesita
+50 módulos: necesita vender rápido, cobrar lo que le deben y saber su ganancia.
+
+
+2. LA SOLUCIÓN
+--------------------------------------------------------------------------------
+Inventrix es un sistema de gestión de inventario, ventas y cobranza diseñado
+específicamente para el pequeño negocio latinoamericano: en español, en moneda
+local, simple de usar y accesible desde el teléfono.
+
+Hace que el dueño:
+  - Venda más rápido (Punto de Venta con escáner de código de barras).
+  - Cobre lo que le deben (cuentas por cobrar con antigüedad y recordatorio
+    automático por WhatsApp).
+  - Tome decisiones con datos (rentabilidad por producto y detección de stock
+    muerto / capital inmovilizado).
+  - Se vea profesional (cotizaciones y recibos en PDF con su marca).
+  - Proteja su información (respaldo completo con un clic).
+
+
+3. PRODUCTO (YA FUNCIONAL)
+--------------------------------------------------------------------------------
+No es una idea en servilleta: es un producto operativo end-to-end.
+
+  • Inventario completo con SKU, stock, mínimos y alertas.
+  • Punto de Venta rápido + escáner de código de barras (cámara o lector).
+  • Ventas, compras y movimientos con trazabilidad.
+  • Pagos por adelantado / abonos con saldo y estado de pago.
+  • Cuentas por cobrar con aging (0-30 / 31-60 / 61-90 / 90+).
+  • Cotizaciones/proformas con conversión a venta en un clic.
+  • Devoluciones / notas de crédito con reingreso automático de stock.
+  • Rentabilidad por producto y reporte de stock muerto.
+  • Recibos, comprobantes y cotizaciones en PDF; exportación a Excel.
+  • Etiquetas con código de barras imprimibles.
+  • Respaldo de datos con un clic.
+  • Caso de uso especializado: taller de motos con bitácora de servicios y fotos.
+
+
+4. MERCADO
+--------------------------------------------------------------------------------
+  - Las micro y pequeñas empresas representan la enorme mayoría de los negocios
+    de la región y un porcentaje altísimo del empleo.
+  - Penetración de software de gestión todavía baja en este segmento: el mercado
+    no está saturado, está desatendido.
+  - Punto de entrada: Nicaragua y Centroamérica (producto ya tropicalizado:
+    idioma, moneda C$, formatos locales), con expansión natural al resto de LATAM.
+
+
+5. MODELO DE NEGOCIO
+--------------------------------------------------------------------------------
+SaaS por suscripción mensual/anual, en planes accesibles para el bolsillo del
+pequeño negocio:
+  - Plan base: gestión de inventario y ventas.
+  - Plan pro: cobranza, reportes de rentabilidad, PDF y respaldos.
+  - Add-ons futuros: facturación electrónica, multi-sucursal, pasarela de pagos.
+
+Ingreso recurrente, costo marginal bajo por cliente y alta retención: una vez
+que el negocio mete su inventario y su operación diaria, el sistema se vuelve
+indispensable (alto costo de cambio = baja fuga).
+
+
+6. POR QUÉ AHORA / POR QUÉ NOSOTROS
+--------------------------------------------------------------------------------
+  - Digitalización acelerada del pequeño comercio + adopción masiva de smartphones.
+  - WhatsApp como canal universal de cobranza y atención (ya integrado).
+  - Producto construido con foco quirúrgico en la realidad local, no un genérico
+    traducido.
+  - Arquitectura moderna y escalable (Django + React + PostgreSQL) lista para
+    crecer en usuarios sin reescribir.
+
+
+7. LA OPORTUNIDAD (EL ASK)
+--------------------------------------------------------------------------------
+Buscamos inversión para:
+  1. Comercialización y adquisición de clientes en Centroamérica.
+  2. Endurecer la plataforma para multi-cliente (seguridad, roles, multi-tenant).
+  3. Construir los add-ons de mayor demanda (facturación electrónica, pagos).
+
+Con un producto ya funcional y un mercado enorme y desatendido, el capital no se
+va en inventar: se va en escalar algo que ya resuelve un dolor real, todos los días.
+
+
+--------------------------------------------------------------------------------
+            INVENTRIX — Vende más. Pierde menos. Crece con datos.
+--------------------------------------------------------------------------------
