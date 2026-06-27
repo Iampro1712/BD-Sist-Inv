@@ -4,8 +4,12 @@ import { lazy, Suspense } from 'react'
 // Layout
 import MainLayout from '../components/layout/MainLayout'
 import PageLoader from '../components/ui/PageLoader'
+import ProtectedRoute from '../components/auth/ProtectedRoute'
+import AdminRoute from '../components/auth/AdminRoute'
 
 // Lazy load pages
+const Login = lazy(() => import('../pages/Login'))
+const Usuarios = lazy(() => import('../pages/Usuarios'))
 const Dashboard = lazy(() => import('../pages/Dashboard'))
 const Productos = lazy(() => import('../pages/Productos'))
 const Proveedores = lazy(() => import('../pages/Proveedores'))
@@ -28,9 +32,21 @@ const NotFound = lazy(() => import('../pages/NotFound'))
 
 const router = createBrowserRouter([
   {
+    path: 'login',
+    element: (
+      <Suspense fallback={<PageLoader />}>
+        <Login />
+      </Suspense>
+    ),
+  },
+  {
     path: '/',
     element: <MainLayout />,
     children: [
+      {
+        // Guard: todas las rutas internas requieren sesión
+        element: <ProtectedRoute />,
+        children: [
       {
         index: true,
         element: (
@@ -174,6 +190,18 @@ const router = createBrowserRouter([
             <Etiquetas />
           </Suspense>
         ),
+      },
+      {
+        path: 'usuarios',
+        element: (
+          <AdminRoute>
+            <Suspense fallback={<PageLoader />}>
+              <Usuarios />
+            </Suspense>
+          </AdminRoute>
+        ),
+      },
+        ],
       },
     ],
   },

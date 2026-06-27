@@ -5,6 +5,11 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.permissions import IsAdminUser
+from rest_framework.exceptions import ValidationError as DRFValidationError
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
 from django.db.models import Q, Sum, F
 from django.utils.decorators import method_decorator
@@ -31,6 +36,7 @@ from .serializers import (
     ReclamacionCreateSerializer, ReclamacionDetailSerializer, ReclamacionListSerializer,
     CotizacionListSerializer, CotizacionDetailSerializer, CotizacionCreateSerializer,
     DevolucionListSerializer, DevolucionDetailSerializer, DevolucionCreateSerializer,
+    UsuarioSerializer,
 )
 from .services import (
     InventoryService, OrdenCompraService, OrdenVentaService,
@@ -1102,4 +1108,43 @@ class DevolucionViewSet(viewsets.ModelViewSet):
             except (ValueError, TypeError):
                 pass
         return queryset
+
+
+class UsuarioViewSet(viewsets.ModelViewSet):
+    """Gestión de usuarios del sistema. Solo administradores (is_staff)."""
+    queryset = User.objects.all().order_by('-is_superuser', 'username')
+    serializer_class = UsuarioSerializer
+    permission_classes = [IsAdminUser]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['username', 'email']
+    ordering_fields = ['username', 'date_joined', 'last_login']
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # No permitir auto-desactivarse
+        if instance == request.user and request.data.get('is_active') is False:
+            raise DRFValidationError('No puedes desactivar tu propio usuario')
+        return super().update(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        if instance == self.request.user:
+            raise DRFValidationError('No puedes eliminar tu propio usuario')
+        if instance.is_staff and User.objects.filter(is_staff=True).count() <= 1:
+            raise DRFValidationError('No puedes eliminar al último administrador')
+        instance.delete()
+
+    @action(detail=True, methods=['post'], url_path='set-password')
+    def set_password(self, request, pk=None):
+        """Cambia la contraseña de un usuario (validada por las políticas de Django)."""
+        user = self.get_object()
+        pwd = request.data.get('password')
+        if not pwd:
+            return Response({'error': 'Se requiere la contraseña'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(pwd, user)
+        except DjangoValidationError as e:
+            return Response({'password': e.messages}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(pwd)
+        user.save(update_fields=['password'])
+        return Response({'status': 'Contraseña actualizada'})
 

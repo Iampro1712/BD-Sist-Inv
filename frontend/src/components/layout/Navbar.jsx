@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import GlobalSearch from './GlobalSearch'
 import { useDarkMode } from '../../hooks/useDarkMode'
+import useAuthStore from '../../hooks/useAuthStore'
+import { authService } from '../../services/auth.service'
+
+// Ítem de gestión de usuarios (solo para administradores)
+const usuariosItem = { name: 'Usuarios', path: '/usuarios', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' }
 
 // Ítems principales (siempre visibles en el nav de escritorio)
 const primaryNav = [
@@ -36,10 +41,25 @@ const Navbar = () => {
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const moreRef = useRef(null)
   const location = useLocation()
+  const navigate = useNavigate()
   const { isDark, toggleDarkMode } = useDarkMode()
+  const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
+
+  const isAdmin = !!user?.is_staff
+  // "Usuarios" solo para administradores
+  const moreItems = isAdmin ? [...moreNav, usuariosItem] : moreNav
+  const mobileItems = isAdmin ? [...navItems, usuariosItem] : navItems
+
+  const handleLogout = async () => {
+    const refresh = localStorage.getItem('auth_refresh')
+    try { if (refresh) await authService.logout(refresh) } catch { /* sesión igual se cierra */ }
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   const isActive = (path) => location.pathname === path
-  const isMoreActive = moreNav.some((i) => isActive(i.path))
+  const isMoreActive = moreItems.some((i) => isActive(i.path))
 
   // Cerrar el dropdown "Más" al hacer clic fuera o al cambiar de ruta
   useEffect(() => { setIsMoreOpen(false) }, [location.pathname])
@@ -119,7 +139,7 @@ const Navbar = () => {
                       transition={{ duration: 0.15 }}
                       className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
                     >
-                      {moreNav.map((item) => (
+                      {moreItems.map((item) => (
                         <Link
                           key={item.path}
                           to={item.path}
@@ -144,6 +164,23 @@ const Navbar = () => {
 
             {/* Dark Mode Toggle & Mobile/Tablet menu button */}
             <div className="flex items-center space-x-2">
+              {/* Usuario + cerrar sesión (desktop) */}
+              {user && (
+                <div className="hidden xl:flex items-center gap-2 mr-1 pl-2 border-l border-gray-200 dark:border-gray-700">
+                  <span className="text-sm text-gray-600 dark:text-gray-300 max-w-[10rem] truncate" title={user.username}>
+                    {user.username}
+                  </span>
+                  <button
+                    onClick={handleLogout}
+                    className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    title="Cerrar sesión"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <button
                 onClick={toggleDarkMode}
                 className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -229,7 +266,7 @@ const Navbar = () => {
 
               {/* Navigation Items */}
               <nav className="p-4 space-y-1">
-                {navItems.map((item) => (
+                {mobileItems.map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}
@@ -268,6 +305,24 @@ const Navbar = () => {
                     </>
                   )}
                 </button>
+
+                {/* Usuario + cerrar sesión (móvil) */}
+                {user && (
+                  <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
+                    <p className="px-4 py-1 text-xs text-gray-400 dark:text-gray-500 truncate">
+                      Sesión: <span className="font-medium text-gray-600 dark:text-gray-300">{user.username}</span>
+                    </p>
+                    <button
+                      onClick={() => { setIsMobileMenuOpen(false); handleLogout() }}
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 w-full"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      <span className="font-medium">Cerrar sesión</span>
+                    </button>
+                  </div>
+                )}
               </nav>
             </motion.div>
           </>

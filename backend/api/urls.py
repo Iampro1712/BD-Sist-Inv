@@ -11,7 +11,10 @@ from .views import (
     BitacoraServicioViewSet, ServicioMotoConBitacoraViewSet, AuditoriaProductoViewSet,
     GarantiaViewSet, ReclamacionViewSet,
     CotizacionViewSet, DevolucionViewSet,
+    UsuarioViewSet,
 )
+from .auth_views import LoginView, logout_view, me_view
+from rest_framework_simplejwt.views import TokenRefreshView
 from .reportes_views import (
     reporte_inventario,
     reporte_ventas,
@@ -45,9 +48,15 @@ router.register(r'garantias', GarantiaViewSet, basename='garantia')
 router.register(r'reclamaciones', ReclamacionViewSet, basename='reclamacion')
 router.register(r'cotizaciones', CotizacionViewSet, basename='cotizacion')
 router.register(r'devoluciones', DevolucionViewSet, basename='devolucion')
+router.register(r'usuarios', UsuarioViewSet, basename='usuario')
 
 urlpatterns = [
     path('', include(router.urls)),
+    # Autenticación (JWT)
+    path('auth/login/', LoginView.as_view(), name='auth-login'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='auth-refresh'),
+    path('auth/logout/', logout_view, name='auth-logout'),
+    path('auth/me/', me_view, name='auth-me'),
     # Reportes endpoints
     path('reportes/inventario/', reporte_inventario, name='reporte-inventario'),
     path('reportes/ventas/', reporte_ventas, name='reporte-ventas'),

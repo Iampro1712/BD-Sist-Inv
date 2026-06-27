@@ -53,12 +53,16 @@ from django.contrib.auth import get_user_model
 import os
 User = get_user_model()
 
-# Obtener credenciales de variables de entorno o usar defaults
-admin_username = os.getenv('DJANGO_SUPERUSER_USERNAME', 'admin')
-admin_email = os.getenv('DJANGO_SUPERUSER_EMAIL', 'admin@inventrix.com')
-admin_password = os.getenv('DJANGO_SUPERUSER_PASSWORD', 'admin123')
+# Credenciales desde variables de entorno. Usuario y contraseña son OBLIGATORIOS:
+# NO se usa el usuario 'admin' por defecto (evita el usuario/clave típicos).
+admin_username = os.getenv('DJANGO_SUPERUSER_USERNAME')
+admin_email = os.getenv('DJANGO_SUPERUSER_EMAIL', 'owner@inventrix.com')
+admin_password = os.getenv('DJANGO_SUPERUSER_PASSWORD')
 
-if not User.objects.filter(username=admin_username).exists():
+if not admin_username or not admin_password:
+    print('⚠️  Define DJANGO_SUPERUSER_USERNAME y DJANGO_SUPERUSER_PASSWORD para crear el usuario dueño.')
+    print('    Se omite la creación del superusuario (no se crea "admin" por defecto).')
+elif not User.objects.filter(username=admin_username).exists():
     User.objects.create_superuser(admin_username, admin_email, admin_password)
     print(f'✅ Superuser created (username: {admin_username})')
     print('⚠️  IMPORTANTE: Cambia la contraseña después del primer login!')

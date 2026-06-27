@@ -31,6 +31,14 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'change-this-in-production-use-env-file')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
+# Los JWT se firman con SECRET_KEY: en producción no se permite el valor de ejemplo
+# (de lo contrario un atacante podría forjar tokens válidos).
+if not DEBUG and SECRET_KEY in ('', 'change-this-in-production-use-env-file'):
+    raise RuntimeError(
+        'SECRET_KEY inseguro o ausente. Define una SECRET_KEY fuerte por variable de '
+        'entorno antes de ejecutar en producción.'
+    )
+
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
@@ -46,8 +54,10 @@ INSTALLED_APPS = [
     
     # Third party apps
     'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
-    
+
     # Local apps
     'api',
     'inventory',
@@ -199,6 +209,34 @@ REST_FRAMEWORK = {
     ],
     'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
     'DATE_FORMAT': '%Y-%m-%d',
+    # Autenticación JWT — toda la API exige usuario autenticado
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    # Rate limiting (anti fuerza bruta en login + límite general)
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',
+        'user': '1000/min',
+        'login': '5/min',
+    },
+}
+
+from datetime import timedelta  # noqa: E402
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 # CORS Configuration

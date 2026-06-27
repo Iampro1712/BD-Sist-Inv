@@ -3,6 +3,8 @@ Serializers para la API de Inventrix
 """
 from rest_framework import serializers
 from django.db import connection
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
@@ -1210,3 +1212,59 @@ class DevolucionCreateSerializer(serializers.Serializer):
 
     def to_representation(self, instance):
         return DevolucionDetailSerializer(instance).data
+
+
+# ============================================================================
+# USUARIOS (gestión de cuentas / login)
+# ============================================================================
+
+class UsuarioSerializer(serializers.ModelSerializer):
+    """Crear/editar/leer usuarios. Hashea la contraseña y aplica guardas de rol."""
+    password = serializers.CharField(
+        write_only=True, required=False, allow_blank=False,
+        style={'input_type': 'password'}
+    )
+    rol = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'password',
+            'is_active', 'is_staff', 'is_superuser', 'rol',
+            'last_login', 'date_joined',
+        ]
+        read_only_fields = ['last_login', 'date_joined', 'rol']
+
+    def get_rol(self, obj):
+        return 'Administrador' if obj.is_staff else 'Usuario'
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
+
+    def validate(self, data):
+        # Anti escalación: solo un superusuario puede otorgar is_staff/is_superuser
+        request = self.context.get('request')
+        actor = getattr(request, 'user', None)
+        if not (actor and actor.is_superuser):
+            data.pop('is_superuser', None)
+            data.pop('is_staff', None)
+        return data
+
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        if not password:
+            raise serializers.ValidationError({'password': 'La contraseña es requerida'})
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
