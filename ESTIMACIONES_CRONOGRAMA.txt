@@ -1,0 +1,243 @@
+================================================================================
+       11.5 ESTIMACIONES DE COSTOS  ·  11.6 CRONOGRAMA — INVENTRIX
+================================================================================
+Sistema:  Inventrix — Gestión de Inventario, Ventas y Servicios
+Fecha:    2026-06-28
+Contexto: Taller / tienda de motos (JC Motoshop), Nicaragua
+Moneda:   Dólar estadounidense (USD) referenciado a tipo de cambio ~36.5 C$/USD
+================================================================================
+
+
+================================================================================
+11.5 ESTIMACIONES DE COSTOS
+================================================================================
+
+Los costos se dividen en dos categorías: costos de desarrollo (inversión única)
+y costos de operación (recurrentes mensuales/anuales).
+
+────────────────────────────────────────────────────────────────────────────────
+11.5.1 COSTOS DE DESARROLLO (Inversión única)
+────────────────────────────────────────────────────────────────────────────────
+
+  El sistema fue desarrollado por un equipo de desarrollo propio (sin
+  contratación externa), por lo que el costo de desarrollo refleja el tiempo
+  invertido expresado en horas/hombre estimadas.
+
+  Referencia de tarifas de desarrollo freelance en Latinoamérica/Nicaragua:
+  → https://www.workana.com/en/jobs?country=NI
+  → https://arc.dev/employer-blog/freelance-developers-cost/
+
+  +-------------------------------------------+----------+--------+------------+
+  | Módulo / Componente                        | Hrs/Hom  | C/H    | Costo USD  |
+  +-------------------------------------------+----------+--------+------------+
+  | Configuración inicial (infra, BD, deploy)  |    12    | $15    |   $180     |
+  | Inventario (productos, stock, alertas)     |    16    | $15    |   $240     |
+  | Ventas y órdenes de compra                 |    20    | $15    |   $300     |
+  | Clientes y proveedores                     |    10    | $15    |   $150     |
+  | Bitácora de servicios de moto + R2         |    24    | $15    |   $360     |
+  | Auditoría de productos (triggers PgSQL)    |    12    | $15    |   $180     |
+  | Garantías y reclamaciones                  |    14    | $15    |   $210     |
+  | Reportes (PDF, Excel, gráficos)            |    18    | $15    |   $270     |
+  | Pago por adelantado / abonos               |    16    | $15    |   $240     |
+  | Cuentas por Cobrar, Cotizaciones,          |          |        |            |
+  |   Devoluciones, Recibos PDF, Respaldos     |    32    | $15    |   $480     |
+  | POS + escáner de código de barras          |    14    | $15    |   $210     |
+  | Etiquetas con código de barras             |    8     | $15    |   $120     |
+  | Rentabilidad e importación masiva          |    12    | $15    |   $180     |
+  | Login / Autenticación JWT + gestión        |          |        |            |
+  |   de usuarios + seguridad                  |    28    | $15    |   $420     |
+  | Correcciones, pruebas y despliegue         |    20    | $15    |   $300     |
+  +-------------------------------------------+----------+--------+------------+
+  | TOTAL DESARROLLO                           |   256    |        | $3,840     |
+  +-------------------------------------------+----------+--------+------------+
+
+  Nota: El costo/hora de $15 USD corresponde a una estimación de desarrollo
+  local (Nicaragua). Un desarrollador freelance regional cobra entre $12–$20/h.
+
+
+────────────────────────────────────────────────────────────────────────────────
+11.5.2 COSTOS DE INFRAESTRUCTURA Y OPERACIÓN (Recurrentes)
+────────────────────────────────────────────────────────────────────────────────
+
+  +----------------------------------+------------------+--------+-------------+
+  | Servicio                         | Plan             | /Mes   | /Año        |
+  +----------------------------------+------------------+--------+-------------+
+  | Servidor backend (Dokploy VPS)   | VPS básico       | $15.00 | $180.00     |
+  | Base de datos PostgreSQL         | Incluida en VPS  | $0.00  | $0.00       |
+  | Frontend (Vercel)                | Hobby (gratuito) | $0.00  | $0.00       |
+  | Almacenamiento fotos (CF R2)     | ~5 GB/mes        | $0.15  | $1.80       |
+  | Dominio (eclipze.dev)            | Anual            | $1.25  | $15.00      |
+  | SSL / HTTPS                      | Let's Encrypt    | $0.00  | $0.00       |
+  +----------------------------------+------------------+--------+-------------+
+  | TOTAL OPERACIÓN                  |                  | $16.40 | $196.80     |
+  +----------------------------------+------------------+--------+-------------+
+
+  URLs de referencia de precios (consultadas jun 2026):
+    • Dokploy (VPS + orquestación)  → https://dokploy.com/pricing
+    • Vercel (frontend hosting)     → https://vercel.com/pricing
+    • Cloudflare R2 (storage fotos) → https://developers.cloudflare.com/r2/pricing/
+    • Namecheap (dominio .dev)      → https://www.namecheap.com/domains/registration/gtld/dev/
+    • Let's Encrypt (SSL gratuito)  → https://letsencrypt.org/
+
+  Resumen de costos estimados:
+  ┌──────────────────────────────────────────┬────────────┐
+  │ Concepto                                 │ Costo USD  │
+  ├──────────────────────────────────────────┼────────────┤
+  │ Desarrollo (inversión única)             │ $3,840.00  │
+  │ Operación año 1                          │   $196.80  │
+  │ Operación año 2 en adelante              │   $196.80  │
+  ├──────────────────────────────────────────┼────────────┤
+  │ COSTO TOTAL AÑO 1                        │ $4,036.80  │
+  └──────────────────────────────────────────┴────────────┘
+
+  Equivalencia en córdobas (C$36.5/USD):
+    • Desarrollo     : C$140,160
+    • Operación/año  : C$  7,183
+    • Total año 1    : C$147,343
+
+
+────────────────────────────────────────────────────────────────────────────────
+11.5.3 COSTOS FUTUROS (Funcionalidades planificadas — Versión 3.1+)
+────────────────────────────────────────────────────────────────────────────────
+
+  +------------------------------------------+----------+--------+------------+
+  | Módulo futuro                            | Hrs/Hom  | C/H    | Costo USD  |
+  +------------------------------------------+----------+--------+------------+
+  | Caja diaria + módulo de gastos           |    20    | $15    |   $300     |
+  | Cuentas por pagar a proveedores          |    12    | $15    |   $180     |
+  | Recordatorios de mantenimiento de motos  |    10    | $15    |   $150     |
+  | App móvil nativa (iOS / Android)         |    80    | $15    |  $1,200    |
+  | Facturación electrónica                  |    40    | $15    |   $600     |
+  | Multi-sucursal                           |    60    | $15    |   $900     |
+  +------------------------------------------+----------+--------+------------+
+  | TOTAL ESTIMADO FUTURO                    |   222    |        |  $3,330    |
+  +------------------------------------------+----------+--------+------------+
+
+
+================================================================================
+11.6 CRONOGRAMA
+================================================================================
+
+El desarrollo de Inventrix se realizó en fases iterativas desde noviembre 2025
+hasta junio 2026 (7 meses). A continuación se presenta el cronograma real de
+desarrollo y el plan proyectado de versiones futuras.
+
+────────────────────────────────────────────────────────────────────────────────
+11.6.1 CRONOGRAMA DE DESARROLLO REAL (nov 2025 – jun 2026)
+────────────────────────────────────────────────────────────────────────────────
+
+  FASE 1 — Fundamentos del sistema                       Nov 2025
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Inicialización del proyecto (Django + React + PostgreSQL)              │
+  │ • Configuración de despliegue (Vercel, Dokploy)                          │
+  │ • Módulo de inventario base (productos, stock)                           │
+  │ • Modo oscuro y navegación responsiva                                    │
+  │ • Migración de Netlify a Vercel                                          │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  FASE 2 — Operaciones principales                   Dic 2025 – Mar 2026
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Ventas y órdenes de compra con serializers avanzados                   │
+  │ • Integración de bitácora de servicios con almacenamiento R2             │
+  │   (Cloudflare): fotos en recepción, diagnóstico, reparación y entrega    │
+  │ • Actualización de dependencias (react-router-dom v7)                    │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  FASE 3 — Enriquecimiento y auditoría               Abr – May 2026
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Dashboard rediseñado                                                    │
+  │ • Sistema de auditoría con triggers PL/pgSQL en PostgreSQL               │
+  │ • Logs de auditoría en la UI                                             │
+  │ • Filtros de proveedores y ordenamiento en productos                     │
+  │ • Sistema completo de garantías y reclamaciones (3 fases)                │
+  │ • Optimización de carga (queries N+1, caché, code splitting)             │
+  │ • Corrección de migraciones en producción (502 repair)                   │
+  │ • Gestión de proveedores en productos; órdenes de compra mejoradas       │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  FASE 4 — Módulos financieros y operativos          Jun 2026 (semana 1-2)
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Pago por adelantado / abonos con estado de pago y saldo pendiente      │
+  │ • Cuentas por Cobrar con aging y recordatorio WhatsApp                   │
+  │ • Cotizaciones / proformas con conversión a venta y PDF                  │
+  │ • Devoluciones / notas de crédito con reingreso de stock                 │
+  │ • Recibos y comprobantes de pago en PDF                                  │
+  │ • Módulo de Respaldos con un clic                                        │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  FASE 5 — POS, análisis e importación               Jun 2026 (semana 3)
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Punto de Venta (POS) con escáner de código de barras (cámara)          │
+  │ • Etiquetas con código de barras imprimibles (jsbarcode)                 │
+  │ • Reporte de rentabilidad por producto y stock muerto                    │
+  │ • Importación masiva de productos desde CSV/XLSX                         │
+  │ • Fix del reporte de ventas: productos y tipo (servicio/producto)        │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  FASE 6 — Autenticación y seguridad                 Jun 2026 (semana 4)
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Login con JWT (djangorestframework-simplejwt + token_blacklist)        │
+  │ • API protegida globalmente con IsAuthenticated                          │
+  │ • Gestión de usuarios (roles: Administrador / Usuario)                   │
+  │ • Throttling anti fuerza bruta (5 intentos/min en login)                 │
+  │ • Cabeceras de seguridad (CSP, HSTS, X-Frame-Options) en Vercel          │
+  │ • Purga de secretos del historial git (git filter-repo)                  │
+  │ • Auditoría de seguridad completa con plan de remediación (Scrum)        │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+11.6.2 CRONOGRAMA PROYECTADO — VERSIONES FUTURAS
+────────────────────────────────────────────────────────────────────────────────
+
+  VERSIÓN 3.1                                         Q3 2026 (Jul – Sep)
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Correcciones de seguridad Sprint 1-2 (FIXES_SEGURIDAD.md)              │
+  │   - IsAdminUser en backup, reportes y auditoría                          │
+  │   - Segregación de funciones por rol                                     │
+  │   - Defaults seguros en docker-compose                                   │
+  │   - Flags SECURE_* / HSTS / cookies seguras                              │
+  │ • Caja diaria + módulo de gastos → utilidad neta                         │
+  │ • Recordatorios automáticos de mantenimiento de motos                    │
+  │ • Cuentas por Pagar a proveedores                                        │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  VERSIÓN 3.5                                         Q4 2026 (Oct – Dic)
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • Facturación electrónica (integración fiscal)                           │
+  │ • Pasarela de pagos (en línea)                                           │
+  │ • Gestión de lotes y números de serie                                    │
+  │ • PWA instalable + modo offline básico                                   │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  VERSIÓN 4.0                                         2027
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ • App móvil nativa (iOS y Android)                                       │
+  │ • Multi-sucursal / multi-almacén                                         │
+  │ • Módulo de producción (Bill of Materials)                               │
+  │ • Inteligencia artificial (predicción de demanda, optimización)          │
+  │ • API pública + webhooks para integraciones externas                     │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+11.6.3 DIAGRAMA DE GANTT SIMPLIFICADO (nov 2025 – sep 2026)
+────────────────────────────────────────────────────────────────────────────────
+
+  Fase / Módulo                N25 D25 E26 F26 M26 A26 M26 J26 J26 A26 S26
+  ─────────────────────────────────────────────────────────────────────────
+  F1 Fundamentos                [===]
+  F2 Operaciones principales          [===][===][===][===]
+  F3 Enriquecimiento y auditoría                     [===][===]
+  F4 Módulos financieros/operativos                            [==]
+  F5 POS, análisis, importación                                [==]
+  F6 Autenticación y seguridad                                     [=]
+  ─────────────────────────────────────────────────────────────────────────
+  V3.1 Seguridad + nuevos módulos                                   [===][===]
+  V3.5 Facturación, pagos, PWA                                               [=
+  ─────────────────────────────────────────────────────────────────────────
+  Leyenda: [===] fase completada · [=] fase en progreso / planificada
+
+================================================================================
+                         FIN DEL DOCUMENTO
+================================================================================

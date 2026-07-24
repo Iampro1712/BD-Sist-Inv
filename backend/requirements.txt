@@ -10,3 +10,4 @@ dj-database-url
 django-redis
 boto3
 Pillow
+cryptography

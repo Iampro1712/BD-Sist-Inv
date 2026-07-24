@@ -3,7 +3,9 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"C:\\\\ProyectosKIRO\\\\inventrix-db\" -Force)",
       "Bash(Select-Object Name, PSIsContainer)",
-      "Bash(Format-Table -AutoSize)"
-    ]
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell"
+    ],
+    "defaultMode": "auto"
   }
 }

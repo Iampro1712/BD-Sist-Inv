@@ -15,6 +15,23 @@ class R2Storage:
     """Cliente para interactuar con Cloudflare R2"""
     
     def __init__(self):
+        # boto3.client() no valida credenciales al crearse (son perezosas),
+        # así que se comprueba explícitamente aquí para no fallar en silencio
+        # recién en el primer upload.
+        faltantes = [
+            nombre for nombre, valor in {
+                'R2_ACCESS_URI': settings.R2_ACCESS_URI,
+                'R2_ACCESS_KEY_ID': settings.R2_ACCESS_KEY_ID,
+                'R2_SECRET_ACCESS_KEY': settings.R2_SECRET_ACCESS_KEY,
+                'R2_BUCKET_NAME': settings.R2_BUCKET_NAME,
+                'R2_PUBLIC_URL': settings.R2_PUBLIC_URL,
+            }.items() if not valor
+        ]
+        if faltantes:
+            logger.error(f"R2 Storage deshabilitado: faltan variables {faltantes}")
+            self.enabled = False
+            return
+
         try:
             self.client = boto3.client(
                 's3',
@@ -26,7 +43,7 @@ class R2Storage:
             self.bucket_name = settings.R2_BUCKET_NAME
             self.public_url = settings.R2_PUBLIC_URL
             self.enabled = True
-            logger.info(f"R2 Storage inicializado correctamente")
+            logger.info("R2 Storage inicializado correctamente")
         except Exception as e:
             logger.error(f"Error al inicializar R2 Storage: {str(e)}")
             self.enabled = False

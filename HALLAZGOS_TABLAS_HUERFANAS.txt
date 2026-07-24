@@ -1,0 +1,159 @@
+================================================================================
+        HALLAZGOS: FUNCION Y TABLAS "HUERFANAS" — INVENTRIX
+================================================================================
+Sistema:   Inventrix (gestion de inventario y ventas para PYMEs)
+Fecha:     2026-07-24
+Proposito: Documentar con evidencia exacta el estado real de una funcion de
+           base de datos y cuatro tablas que parecian huerfanas durante el
+           trabajo de mitigacion de R03 (ver RIESGOS_SISTEMA.txt). Ninguna
+           esta realmente vacia — cada una tiene datos historicos reales y
+           su propia razon de haber quedado desconectada de la app actual.
+           No se modifico nada en la base de datos: este documento es solo
+           para decidir con mas contexto en el futuro.
+
+
+================================================================================
+1. FUNCION: auditar_y_ajustar_precio()
+================================================================================
+
+Que hacia: trigger que, al guardar un producto con precio_final entre 100 y
+500, lo subia automaticamente un 15% y registraba el cambio en la tabla
+auditoria_precios (distinta de auditoria_productos, que si sigue activa).
+
+Estado actual: confirmado con pg_trigger que NO esta adjunta a ningun
+trigger hoy (solo existen 2 triggers en toda la base: trg_auditoria_productos
+sobre productos, y trigger_update_producto_proveedor_timestamp sobre
+producto_proveedor). Ninguna otra funcion referencia auditoria_precios.
+
+Evidencia de que SI estuvo activa: auditoria_precios tiene 4 filas reales,
+con fue_ajuste_automatico = true, fechadas entre el 23 y 29 de abril de 2026
+(hace ~3 meses). Alguien la desactivo despues de esa fecha — probablemente
+porque subir precios automaticamente no era el comportamiento deseado.
+
+Conclusion: codigo muerto hoy, pero con evidencia de haber funcionado y
+haber sido desactivado a proposito (no un descuido de una migracion vieja).
+
+
+================================================================================
+2. TABLA: estado (3 filas)
+================================================================================
+
+Contenido: id_estado, cancelado (varchar), pendiente (varchar) — 3 filas que
+codifican exactamente los 3 estados de una orden de compra:
+  1 = cancelado=SI, pendiente=NO   (cancelada)
+  2 = cancelado=NO, pendiente=SI   (pendiente)
+  3 = cancelado=NO, pendiente=NO   (recibida)
+
+Estado del FK: orden_compra.id_estado la referencia con una foreign key real
+(orden_compra_id_estado_fkey, ON DELETE SET NULL), y esta poblada en las 55
+ordenes de compra existentes, incluidas las mas recientes (id_orden 55, 54,
+53...). NO es un dato huerfano ni desconectado por FK.
+
+Lo que si esta desconectado: el codigo Python (api/views.py,
+OrdenCompraViewSet) nunca hace JOIN contra esta tabla. En su lugar duplica
+la misma logica con un diccionario hardcodeado:
+    ESTADO_ID_MAP = {1: 'cancelada', 2: 'pendiente', 3: 'recibida'}
+
+Conclusion: la tabla esta viva y referenciada activamente (dato real, FK
+real), pero su CONTENIDO nunca se lee — es una fuente de verdad duplicada
+en el codigo. No se puede borrar sin antes quitar la FK de orden_compra.
+
+
+================================================================================
+3. TABLA: empleados (10 filas)
+================================================================================
+
+Contenido: 10 empleados reales con nombre, apellido, cargo (Mecanico
+Senior/Junior, Vendedor, Administrador, Tecnico, Recepcionista) y salario.
+No existe ningun modelo Django, endpoint ni pantalla para "empleados" en la
+app actual — el dato vive solo en la base de datos.
+
+Hallazgo clave (columnas que SI referencian empleados):
+  - servicios.id_empleado: poblado en las 100 filas del catalogo de
+    servicios (servicios es de solo lectura via API — ReadOnlyModelViewSet
+    — nunca crece, por lo que este dato quedo congelado desde el inicio).
+  - ventas.id_empleado: poblado en las primeras 150 ventas (datos
+    historicos/semilla), pero las 10 ventas MAS RECIENTES (id_venta 176 a
+    185, creadas con la app Django actual) tienen id_empleado en NULL.
+
+Conclusion: la atribucion de "que empleado hizo la venta" dejo de
+funcionar silenciosamente cuando el sistema se migro a Django/React — el
+esquema y los datos historicos siguen ahi, pero la funcionalidad ya no
+existe en el codigo actual. Es una feature perdida, no basura.
+
+
+================================================================================
+4. TABLA: ingresos (150 filas)
+================================================================================
+
+Contenido: un renglon de "ingreso" por cada venta, con monto, tipo y
+descripcion ("Ingreso generado por venta #N"). Referencia ventas.id_venta
+via FK real (ingresos_id_venta_fkey).
+
+Hallazgo clave: hay 185 ventas hoy, pero ingresos solo cubre las ventas 1 a
+150 (coincide exactamente con el mismo corte que empleados). Las ultimas 35
+ventas (151 a 185), todas creadas con la app Django actual, NO tienen
+ninguna fila correspondiente en ingresos. No existe trigger ni codigo que
+siga escribiendo en esta tabla.
+
+Conclusion: es un libro de ingresos historico, congelado en el momento
+exacto en que el sistema se migro a Django. Los reportes actuales
+(reportes_views.py) calculan el ingreso directamente desde ventas/
+producto_venta, sin tocar esta tabla — es informacion redundante y sin
+mantenimiento activo, no una tabla vacia.
+
+
+================================================================================
+5. TABLA: servicio_moto (singular, 100 filas)
+================================================================================
+
+Contenido: tabla de enlace (id_moto, id_servicio, fecha_realizacion) entre
+motos y el catalogo de servicios. Coincide en cantidad (100 filas) con el
+catalogo servicios — parecen haberse sembrado juntas en el mismo momento.
+
+Diferencia clave con servicios (catalogo): servicios SI se usa hoy (endpoint
+/api/servicios/, consumido por ServicioMotoForm.jsx como dropdown de tipo de
+servicio con precio sugerido). servicio_moto (esta tabla, singular) tiene
+CERO referencias en todo el codigo (grep exhaustivo en backend/ sin
+resultados).
+
+La app actual registra servicios realizados en servicio_motos (PLURAL, tabla
+distinta, con su propio fecha_servicio/tipo_servicio/descripcion/costo),
+que hoy tiene 34 filas y sigue creciendo con el uso normal de la app.
+
+Conclusion: de las 5 tablas/funcion revisadas, esta es la unica que es
+huerfana sin matices — datos historicos reales, pero genuinamente sin
+ningun lector ni escritor en el codigo actual, y reemplazada por otra tabla
+que si esta en uso.
+
+
+================================================================================
+6. RESUMEN Y DECISION PENDIENTE
+================================================================================
+
+  Elemento                  | Datos reales | FK activa hoy | Codigo la usa
+  ---------------------------|:-----------:|:-------------:|:-------------:
+  auditar_y_ajustar_precio  |   Si (4)     |      No       |      No
+  estado                    |   Si (3)     |   Si (activa) |  No (duplicado)
+  empleados                 |   Si (10)    | Parcial*      |      No
+  ingresos                  |   Si (150)   |   Si (pasiva) |      No
+  servicio_moto (singular)  |   Si (100)   |   Si (pasiva) |      No
+
+  * empleados: la FK desde servicios/ventas existe y tiene datos antiguos,
+    pero las filas nuevas (post-Django) ya no la llenan.
+
+Ninguna se toco en este pase — el dueno del negocio decidio solo
+documentar por ahora. Antes de borrar o mantener cualquiera de estas,
+conviene decidir con contexto de negocio:
+  - Si se quiere recuperar "que empleado atendio esta venta/servicio"
+    como feature real en la app (reactivar empleados + ventas.id_empleado).
+  - Si el trigger de ajuste automatico de precio (auditar_y_ajustar_precio)
+    fue un error de diseno a descartar definitivamente, o si se penso
+    revivir con otra logica.
+  - Si ingresos debe formalizarse como libro contable real (alimentado por
+    la app) o eliminarse por completo junto con estado/servicio_moto una
+    vez respaldados.
+
+================================================================================
+                              FIN DEL DOCUMENTO
+================================================================================

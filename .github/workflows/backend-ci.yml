@@ -1,0 +1,87 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, master, master-with-auth]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      DB_NAME: inventrix_ci
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DEBUG: 'True'
+      SECRET_KEY: ci-only-secret-key-not-for-production
+      FIELD_ENCRYPTION_KEY: 'XharDPifhjHrp2paJtKCBla1VNQYHjp-L9r6zfBkHz4='
+      ALLOWED_HOSTS: localhost,127.0.0.1
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Bootstrap del esquema hibrido en la base de datos de tests
+        working-directory: backend
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # La suite de Django usa "test_<DB_NAME>" por convencion. Se crea y
+          # bootstrapea directamente esa base para que --keepdb la reutilice
+          # sin intentar recrearla solo con migraciones (ver comentarios en
+          # SQL_FILES/000_base_schema_snapshot.sql).
+          psql -h localhost -U postgres -c "CREATE DATABASE test_${DB_NAME};"
+          psql -h localhost -U postgres -d "test_${DB_NAME}" -f SQL_FILES/000_base_schema_snapshot.sql
+
+      - name: Aplicar migraciones sobre la base de tests
+        working-directory: backend
+        env:
+          DB_NAME: test_inventrix_ci
+        run: |
+          # 0001-0004 crean un esquema antiguo que ya no existe en la BD real;
+          # se marcan aplicadas sin ejecutarse. 0005 en adelante sí son reales
+          # o SeparateDatabaseAndState de solo-estado (ver R03, migraciones
+          # 0007-0012 en inventory/migrations/).
+          python manage.py migrate inventory 0004 --fake --noinput
+          python manage.py migrate --noinput
+
+      - name: Ejecutar tests
+        working-directory: backend
+        run: python manage.py test --keepdb
+
+      - name: Django check
+        working-directory: backend
+        run: python manage.py check
+
+      - name: Verificar que no falten migraciones
+        working-directory: backend
+        run: python manage.py makemigrations --check --dry-run

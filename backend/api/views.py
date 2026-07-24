@@ -5,8 +5,9 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from .permissions import IsAdminOrReadOnly
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -38,10 +39,6 @@ from .serializers import (
     DevolucionListSerializer, DevolucionDetailSerializer, DevolucionCreateSerializer,
     UsuarioSerializer,
 )
-from .services import (
-    InventoryService, OrdenCompraService, OrdenVentaService,
-    InsufficientStockException, InvalidOrderStateException
-)
 
 # MasterDev
 # ============================================================================
@@ -52,9 +49,18 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de proveedores"""
     queryset = Proveedor.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['nombre_empresa', 'persona_contacto', 'email', 'telefono']
+    # telefono/email quedaron fuera: se cifran en reposo (R06) y el texto
+    # cifrado no admite búsqueda por substring (ILIKE).
+    search_fields = ['nombre_empresa', 'persona_contacto']
     ordering_fields = ['nombre_empresa']
     ordering = ['nombre_empresa']
+
+    def get_permissions(self):
+        # Un usuario no-admin puede crear/editar proveedores (los necesita al
+        # operar), pero solo un admin puede borrarlos (US-04).
+        if self.action == 'destroy':
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -104,7 +110,12 @@ class CategoriaViewSet(viewsets.ModelViewSet):
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de productos"""
+    """ViewSet para gestión de productos.
+
+    Lectura para cualquier usuario (POS/ventas la necesitan); crear, editar,
+    borrar e importar productos son acciones de administrador (US-04).
+    """
+    permission_classes = [IsAdminOrReadOnly]
     queryset = Producto.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['sku_producto', 'nombre']
@@ -215,9 +226,18 @@ class ClienteViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de clientes"""
     queryset = Cliente.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['nombre', 'telefono', 'email']
+    # telefono/email quedaron fuera: se cifran en reposo (R06) y el texto
+    # cifrado no admite búsqueda por substring (ILIKE).
+    search_fields = ['nombre']
     ordering_fields = ['nombre', 'id_cliente']
     ordering = ['nombre']
+
+    def get_permissions(self):
+        # Un usuario no-admin puede crear/editar clientes (los da de alta al
+        # vender), pero solo un admin puede borrarlos (US-04).
+        if self.action == 'destroy':
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -233,7 +253,12 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
 
 class OrdenCompraViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de órdenes de compra"""
+    """ViewSet para gestión de órdenes de compra.
+
+    Comprar mercancía (crear/confirmar/recibir/cancelar órdenes de compra) es
+    una función de administrador; los usuarios solo pueden consultarlas (US-04).
+    """
+    permission_classes = [IsAdminOrReadOnly]
     queryset = OrdenCompra.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['id_orden']
@@ -397,35 +422,48 @@ class OrdenVentaViewSet(viewsets.ModelViewSet):
         return queryset
 
     @action(detail=True, methods=['post'])
-    def completar(self, request, pk=None):
-        """Marca una orden de venta como completada y actualiza el inventario"""
-        try:
-            orden = self.get_object()
-            OrdenVentaService.completar_orden(orden.id)
-            return Response({'status': 'Orden completada exitosamente'})
-        except (InvalidOrderStateException, InsufficientStockException) as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception as e:
-            return Response(
-                {'error': f'Error al completar orden: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    @action(detail=True, methods=['post'])
     def cancelar(self, request, pk=None):
-        """Cancela una orden de venta"""
-        try:
-            orden = self.get_object()
-            OrdenVentaService.cancelar_orden(orden.id)
-            return Response({'status': 'Orden cancelada exitosamente'})
-        except InvalidOrderStateException as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        """Cancela una orden de venta: restituye el stock vendido y elimina la venta.
+
+        No hay un estado de orden más allá del pago (ver estado_pago), así que
+        cancelar significa anular la venta completa: se revierte el stock de
+        cada producto vendido (con su movimiento de inventario), se eliminan
+        los pagos/abonos asociados y se borra la venta.
+        """
+        from django.db import connection, transaction
+
+        motivo = request.data.get('motivo') or 'Cancelación de venta'
+
+        with transaction.atomic():
+            orden = OrdenVenta.objects.select_for_update().get(pk=self.get_object().pk)
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id_producto, cantidad FROM producto_venta WHERE id_venta = %s",
+                    [orden.id_venta],
+                )
+                items = cursor.fetchall()
+
+                for id_producto, cantidad in items:
+                    cursor.execute(
+                        "UPDATE productos SET cantidad_actual = cantidad_actual + %s WHERE id_producto = %s",
+                        [cantidad, id_producto],
+                    )
+                    cursor.execute("""
+                        INSERT INTO movimientos_inventario
+                            (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                        VALUES (%s, 'ENTRADA', %s, NOW(), %s, 'ORDEN_VENTA', %s)
+                    """, [id_producto, cantidad, f'CANCEL-{orden.id_venta}', motivo])
+
+                cursor.execute("DELETE FROM producto_venta WHERE id_venta = %s", [orden.id_venta])
+
+                # Se borra por SQL directo (no orden.delete()): los detalles
+                # de la venta viven en producto_venta (ya borrados arriba),
+                # no en una tabla "detalles_orden_venta" separada.
+                cursor.execute("DELETE FROM pagos_venta WHERE id_venta = %s", [orden.id_venta])
+                cursor.execute("DELETE FROM ventas WHERE id_venta = %s", [orden.id_venta])
+
+        return Response({'status': 'Orden cancelada exitosamente, stock restituido'})
 
     # ------------------------------------------------------------------
     # Pago por adelantado / abonos
@@ -488,7 +526,14 @@ class OrdenVentaViewSet(viewsets.ModelViewSet):
 
 
 class MovimientoInventarioViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de movimientos de inventario"""
+    """ViewSet para gestión de movimientos de inventario.
+
+    Ajustar stock manualmente (acción `ajuste`) o crear movimientos es función
+    de administrador; los usuarios solo pueden consultar el historial (US-04).
+    Las salidas por venta no pasan por aquí (las hace OrdenVentaCreateSerializer),
+    así que restringir esto no bloquea el POS.
+    """
+    permission_classes = [IsAdminOrReadOnly]
     queryset = MovimientoInventario.objects.select_related('producto').all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['producto__nombre', 'producto__codigo', 'referencia']
@@ -816,7 +861,11 @@ class ServicioMotoConBitacoraViewSet(viewsets.ReadOnlyModelViewSet):
 # ============================================================================
 
 class AuditoriaProductoViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet de solo lectura para auditoría de productos"""
+    """ViewSet de solo lectura para auditoría de productos.
+
+    Solo admin: expone historial de precios/costos, usuario e IP.
+    """
+    permission_classes = [IsAdminUser]
     queryset = AuditoriaProducto.objects.all()
     serializer_class = AuditoriaProductoSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -1124,6 +1173,21 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         # No permitir auto-desactivarse
         if instance == request.user and request.data.get('is_active') is False:
             raise DRFValidationError('No puedes desactivar tu propio usuario')
+
+        # No dejar el sistema sin administradores activos: si este es el último
+        # admin activo, no se le puede quitar is_staff ni is_active (US-08).
+        if instance.is_staff and instance.is_active:
+            quita_staff = request.data.get('is_staff') is False
+            quita_activo = request.data.get('is_active') is False
+            if quita_staff or quita_activo:
+                hay_otro_admin = User.objects.filter(
+                    is_staff=True, is_active=True
+                ).exclude(pk=instance.pk).exists()
+                if not hay_otro_admin:
+                    raise DRFValidationError(
+                        'No puedes dejar el sistema sin administradores activos'
+                    )
+
         return super().update(request, *args, **kwargs)
 
     def perform_destroy(self, instance):

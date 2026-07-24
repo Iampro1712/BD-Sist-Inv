@@ -36,6 +36,12 @@ services:
       DB_PORT: 5432
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      REDIS_URL: ${REDIS_URL}
+      R2_ACCESS_URI: ${R2_ACCESS_URI}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
     volumes:
       - backend_static:/app/staticfiles
       - backend_media:/app/media
@@ -43,6 +49,42 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - inventrix-network
+    restart: unless-stopped
+
+  # Respaldo automático programado (JSON diario, con retención y subida a R2)
+  backup:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inventrix-backup-prod
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "while true; do python manage.py backup_db; sleep 86400; done"
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      REDIS_URL: ${REDIS_URL}
+      R2_ACCESS_URI: ${R2_ACCESS_URI}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      BACKUP_RETENER: ${BACKUP_RETENER:-30}
+    volumes:
+      - backend_backups:/app/backups
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
     networks:
       - inventrix-network
     restart: unless-stopped
@@ -55,8 +97,8 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL}
     container_name: inventrix-frontend-prod
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       - backend
     networks:
@@ -90,6 +132,8 @@ volumes:
     name: inventrix_backend_media_prod
   backend_logs:
     name: inventrix_backend_logs_prod
+  backend_backups:
+    name: inventrix_backend_backups_prod
 
 networks:
   inventrix-network:

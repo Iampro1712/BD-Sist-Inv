@@ -1,0 +1,185 @@
+================================================================================
+            3. DIAGNÓSTICO DEL SISTEMA ACTUAL — INVENTRIX
+================================================================================
+Sistema:  Inventrix — Gestión de Inventario, Ventas y Servicios
+Fecha:    2026-06-28
+Contexto: Taller / tienda de motos (JC Motoshop), Nicaragua
+================================================================================
+
+
+3.1 DESCRIPCIÓN DEL SISTEMA ACTUAL
+================================================================================
+
+Inventrix es una aplicación web diseñada para pequeñas y medianas empresas,
+específicamente adaptada para un negocio de venta y servicio de motos en
+Nicaragua. Opera con un único usuario (el dueño del negocio) y cubre los
+siguientes módulos funcionales:
+
+  • Gestión de inventario (productos, stock, alertas de mínimos)
+  • Ventas y órdenes de compra con trazabilidad
+  • Clientes y proveedores
+  • Pagos por adelantado y abonos con estado de deuda
+  • Cuentas por cobrar con antigüedad de saldo (aging)
+  • Cotizaciones / proformas con conversión a venta
+  • Devoluciones y notas de crédito con reingreso de stock
+  • Bitácora de servicios de motos (4 fases + fotos en la nube)
+  • Reportes (inventario, ventas, compras, rentabilidad, stock muerto)
+  • Punto de Venta (POS) con escáner de código de barras
+  • Etiquetas con código de barras imprimibles
+  • Respaldo de datos con un clic
+
+Datos actuales del sistema (al 2026-06-28):
+  - Productos registrados :  75
+  - Clientes              :  32
+  - Ventas registradas    : 185
+  - Proveedores           :   9
+  - Moneda de operación   : Córdoba nicaragüense (C$)
+
+Tecnologías: Django 5.2 + Django REST Framework (backend), React 19 + Vite
+(frontend), PostgreSQL 16 (base de datos), Cloudflare R2 (almacenamiento de
+imágenes), desplegado en Dokploy + Vercel.
+
+
+3.2 PROCESOS ACTUALES
+================================================================================
+
+Los procesos principales del negocio ya cubiertos por el sistema son:
+
+  a) PROCESO DE VENTA
+     - El dueño registra una venta seleccionando cliente y productos.
+     - El sistema descuenta el stock automáticamente.
+     - Se puede registrar pago completo o abonos parciales.
+     - El sistema actualiza el estado de pago (Pendiente / Parcial / Pagado)
+       y el saldo por cobrar en tiempo real.
+
+  b) PROCESO DE COMPRA
+     - Se crea una orden de compra al proveedor.
+     - Al recibirla, el inventario se incrementa automáticamente.
+
+  c) PROCESO DE SERVICIO DE MOTO
+     - Se registra el vehículo del cliente.
+     - La bitácora documenta 4 fases: Recepción, Diagnóstico, Reparación,
+       Entrega; con fotos en cada etapa almacenadas en la nube.
+
+  d) PROCESO DE COBRANZA
+     - La pantalla "Cuentas por Cobrar" muestra quién debe, cuánto y hace
+       cuántos días (tramos: 0-30 / 31-60 / 61-90 / más de 90 días).
+     - Desde la misma pantalla se genera un recordatorio por WhatsApp.
+
+  e) PROCESO DE REPORTES
+     - El dueño genera reportes de ventas, compras, rentabilidad por producto
+       y stock muerto, exportables a PDF y Excel.
+
+  f) PUNTO DE VENTA (POS)
+     - Escaneo de código de barras por cámara o lector físico.
+     - Carrito de compra con cobro inmediato y registro de pago.
+
+
+3.3 PROBLEMAS IDENTIFICADOS
+================================================================================
+
+A continuación se listan los problemas detectados durante el diagnóstico,
+organizados en las cinco categorías solicitadas:
+
+────────────────────────────────────────────────────────────────────────────────
+3.3.1 PROCESOS MANUALES
+────────────────────────────────────────────────────────────────────────────────
+
+  PROBLEMA: Respaldo de datos manual.
+  El sistema ofrece un botón de respaldo (descarga un JSON), pero depende de
+  que el dueño lo active periódicamente. No existe un respaldo automático
+  programado en la nube; si el dueño olvida hacerlo, los datos quedan
+  desprotegidos.
+
+  PROBLEMA: Conteo físico de inventario sin módulo dedicado.
+  El ajuste de stock se realiza mediante un módulo de movimientos, pero no
+  existe una pantalla de "toma física" que permita comparar el inventario del
+  sistema con el real y generar el ajuste de diferencias en un solo paso.
+
+  PROBLEMA: Seguimiento de mantenimientos de motos manual.
+  No existe un módulo de recordatorios automáticos de mantenimiento (cambio
+  de aceite, revisión por kilómetros). El dueño debe recordarlo o registrarlo
+  manualmente fuera del sistema.
+
+────────────────────────────────────────────────────────────────────────────────
+3.3.2 DUPLICIDAD DE INFORMACIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+  PROBLEMA: Productos sin código único estandarizado.
+  El campo SKU existe pero no se valida su unicidad de forma estricta en la
+  UI; un producto puede registrarse dos veces con nombres distintos y el mismo
+  código, generando duplicados en el catálogo y en reportes de ventas.
+
+  PROBLEMA: Ventas de servicios y ventas de productos en la misma tabla.
+  Las ventas de servicio de moto (costo del servicio) y las ventas de productos
+  se almacenan en la misma tabla `ventas`; la diferenciación se hace por
+  inferencia (cruzando con `servicio_motos`), lo que puede generar registros
+  ambiguos o duplicados si un servicio también lleva repuestos.
+
+────────────────────────────────────────────────────────────────────────────────
+3.3.3 RETRASOS
+────────────────────────────────────────────────────────────────────────────────
+
+  PROBLEMA: Esquema de base de datos híbrido (tablas manuales + migraciones).
+  Las tablas de negocio se crearon con scripts SQL externos (managed=False),
+  fuera del sistema de migraciones de Django. Esto ya causó caídas de
+  producción (errores 502) al intentar aplicar cambios de esquema, generando
+  tiempos de inactividad del sistema.
+
+  PROBLEMA: Sin caché compartida entre workers en producción.
+  Redis es opcional: si no está configurado, cada worker de Gunicorn usa su
+  propia caché en memoria (LocMemCache), lo que hace que las mismas consultas
+  pesadas (reportes) se recalculen múltiples veces, ralentizando el sistema.
+
+  PROBLEMA: Respaldos de datos de la BD tardan.
+  El endpoint `/api/backup/` descarga todas las tablas sin paginación ni
+  compresión. A medida que la base de datos crezca, la descarga se volverá
+  más lenta e incluso puede agotar el tiempo de espera del navegador.
+
+────────────────────────────────────────────────────────────────────────────────
+3.3.4 ERRORES HUMANOS
+────────────────────────────────────────────────────────────────────────────────
+
+  PROBLEMA: Sin validación de cantidades en devoluciones.
+  El módulo de devoluciones no verifica que la cantidad devuelta no supere lo
+  originalmente vendido. Un error de digitación puede reingresar más stock del
+  que salió, descuadrando el inventario.
+
+  PROBLEMA: Credenciales de la base de datos expuestas en documentación.
+  Las claves de Cloudflare R2 fueron commitadas accidentalmente en el historial
+  del repositorio, lo cual requirió purgar el historial completo. Indica
+  ausencia de un proceso de revisión de secretos antes de subir cambios.
+
+  PROBLEMA: Sin pruebas automatizadas (tests).
+  Los archivos de prueba están vacíos (`tests.py`). Cualquier cambio en el
+  sistema se verifica solo de forma manual, aumentando la probabilidad de
+  introducir errores inadvertidamente al modificar el código.
+
+────────────────────────────────────────────────────────────────────────────────
+3.3.5 FALTA DE REPORTES
+────────────────────────────────────────────────────────────────────────────────
+
+  PROBLEMA: Sin caja diaria ni módulo de gastos.
+  El sistema registra ventas y compras, pero no hay un módulo de gastos
+  operativos (alquiler, electricidad, insumos). Por lo tanto, el dueño no
+  puede calcular la utilidad neta real del negocio; solo ve el ingreso bruto
+  por ventas.
+
+  PROBLEMA: Sin reporte de cuentas por pagar a proveedores.
+  Existe un módulo de "Cuentas por Cobrar" (lo que le deben al negocio), pero
+  no su espejo: "Cuentas por Pagar" (lo que el negocio debe a proveedores),
+  impidiendo una visión completa del flujo de caja.
+
+  PROBLEMA: Sin análisis de tendencias históricas.
+  Los reportes muestran datos de un período seleccionado, pero no hay gráficos
+  de tendencia mes a mes (ventas, compras, rentabilidad) que permitan al dueño
+  identificar estacionalidades o comparar el desempeño entre períodos.
+
+  PROBLEMA: Sin reporte de clientes frecuentes / ranking de clientes.
+  No existe un reporte que identifique qué clientes generan más ingresos, cuál
+  es el ticket promedio por cliente o con qué frecuencia compran, información
+  valiosa para fidelización.
+
+================================================================================
+                        FIN DEL DIAGNÓSTICO
+================================================================================

@@ -1,19 +1,22 @@
 """
 Vistas para reportes del sistema
 """
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from django.db import connection
-from django.views.decorators.cache import cache_page
 from decimal import Decimal
 
-# TTL de caché para reportes (segundos). Tolera datos ligeramente añejos a
-# cambio de evitar recomputar consultas pesadas en cada carga.
-REPORTE_CACHE_TTL = 60
+from inventory.encryption import decrypt_value
+
+# Nota: antes estos reportes usaban @cache_page, pero cachea por URL sin
+# distinguir usuario — servía la respuesta cacheada de un admin a un no-admin,
+# saltándose el permiso IsAdminUser. Se eliminó el cache para que el permiso
+# se evalúe siempre (los reportes son consultas baratas en este dataset).
 
 
-@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
+@permission_classes([IsAdminUser])
 def reporte_inventario(request):
     """Genera reporte del estado actual del inventario"""
     with connection.cursor() as cursor:
@@ -80,8 +83,8 @@ def reporte_inventario(request):
     })
 
 
-@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
+@permission_classes([IsAdminUser])
 def reporte_ventas(request):
     """Genera reporte de ventas por rango de fechas"""
     fecha_inicio = request.GET.get('fecha_inicio')
@@ -196,8 +199,8 @@ def reporte_ventas(request):
     })
 
 
-@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
+@permission_classes([IsAdminUser])
 def reporte_compras(request):
     """Genera reporte de compras por rango de fechas"""
     fecha_inicio = request.GET.get('fecha_inicio')
@@ -296,8 +299,8 @@ def reporte_compras(request):
     })
 
 
-@cache_page(REPORTE_CACHE_TTL)
 @api_view(['GET'])
+@permission_classes([IsAdminUser])
 def productos_mas_vendidos(request):
     """Genera reporte de productos más vendidos"""
     fecha_inicio = request.GET.get('fecha_inicio')
@@ -336,6 +339,7 @@ def productos_mas_vendidos(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAdminUser])
 def cuentas_por_cobrar(request):
     """Cuentas por cobrar: ventas con saldo pendiente, con antigüedad (aging).
 
@@ -379,7 +383,7 @@ def cuentas_por_cobrar(request):
                 'id_venta': r[0],
                 'id_cliente': r[1],
                 'cliente': r[2],
-                'telefono': r[3],
+                'telefono': decrypt_value(r[3]),
                 'fecha': r[4],
                 'total': float(r[5]) if r[5] else 0.0,
                 'monto_pagado': float(r[6]) if r[6] else 0.0,
@@ -399,6 +403,7 @@ def cuentas_por_cobrar(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAdminUser])
 def reporte_rentabilidad(request):
     """Rentabilidad por producto: margen unitario y utilidad realizada en ventas.
 
@@ -458,6 +463,7 @@ def reporte_rentabilidad(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAdminUser])
 def reporte_stock_muerto(request):
     """Productos con stock que NO se han vendido en los últimos N días (default 90).
 

@@ -4,7 +4,7 @@ Configuración del admin de Django para los modelos de inventario
 from django.contrib import admin
 from .models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
-    OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
+    OrdenCompra, OrdenVenta,
     MovimientoInventario
 )
 
@@ -46,13 +46,6 @@ class ClienteAdmin(admin.ModelAdmin):
     ordering = ['nombre']
 
 
-class DetalleOrdenCompraInline(admin.TabularInline):
-    model = DetalleOrdenCompra
-    extra = 1
-    fields = ['producto', 'cantidad', 'precio_unitario', 'subtotal']
-    readonly_fields = ['subtotal']
-
-
 @admin.register(OrdenCompra)
 class OrdenCompraAdmin(admin.ModelAdmin):
     list_display = ['id_orden', 'id_proveedor', 'id_estado', 'fecha_creacion']
@@ -60,14 +53,6 @@ class OrdenCompraAdmin(admin.ModelAdmin):
     search_fields = ['id_orden']
     ordering = ['-fecha_creacion']
     readonly_fields = ['fecha_creacion']
-
-
-# DetalleOrdenVentaInline comentado - no existe en la estructura actual de la BD
-# class DetalleOrdenVentaInline(admin.TabularInline):
-#     model = DetalleOrdenVenta
-#     extra = 1
-#     fields = ['producto', 'cantidad', 'precio_unitario', 'subtotal']
-#     readonly_fields = ['subtotal']
 
 
 @admin.register(OrdenVenta)

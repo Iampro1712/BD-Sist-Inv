@@ -1,0 +1,197 @@
+================================================================================
+                ANALISIS DE RIESGOS - SISTEMA INVENTRIX
+================================================================================
+Sistema:   Inventrix (gestion de inventario y ventas para PYMEs)
+Stack:     Django 5.2 + DRF / PostgreSQL / React 19 + Vite / Dokploy + Vercel / Cloudflare R2
+Fecha:     2026-06-15
+Proposito: Identificar los posibles riesgos del sistema, clasificarlos por tipo
+           y evaluarlos con la matriz de riesgo (Probabilidad x Impacto) para
+           priorizar las acciones a tomar.
+
+
+================================================================================
+1. METODOLOGIA
+================================================================================
+
+1.1 TIPOS DE RIESGO
+-------------------
+  - Tecnico : fallos de software, infraestructura o configuracion.
+  - Humano  : errores o limitaciones de las personas del equipo.
+  - Gestion : planificacion, procesos y control del proyecto.
+  - Externo : factores fuera del control del equipo (legales, proveedores...).
+
+1.2 MATRIZ DE RIESGO
+--------------------
+  Cruza dos variables y calcula el nivel de riesgo:
+
+      NIVEL DE RIESGO = PROBABILIDAD x IMPACTO
+
+  Escala de PROBABILIDAD:        Escala de IMPACTO:
+      Baja  = 1                      Bajo  = 1
+      Media = 2                      Medio = 2
+      Alta  = 3                      Alto  = 3
+
+1.3 INTERPRETACION DEL RESULTADO
+--------------------------------
+  +-------------+-----------+-------------------------------+
+  | Resultado   | Nivel     | Accion                        |
+  +-------------+-----------+-------------------------------+
+  | 1 - 2       | BAJO      | Se puede aceptar              |
+  | 3 - 4       | MEDIO     | Monitoreo                     |
+  | 6           | ALTO      | Plan de mitigacion            |
+  | 9           | CRITICO   | Accion inmediata              |
+  +-------------+-----------+-------------------------------+
+
+
+================================================================================
+2. RIESGOS IDENTIFICADOS
+================================================================================
+(P = Probabilidad 1-3   I = Impacto 1-3   Nivel = P x I)
+
+--------------------------------------------------------------------------------
+ID    : R01
+Riesgo: API REST sin autenticacion ni control de permisos. Cualquier peticion a
+        la API puede leer o modificar inventario, clientes y ventas.
+Tipo  : Tecnico
+P = 3 (Alta)   I = 3 (Alto)   Nivel = 9  ->  CRITICO
+Accion: Accion inmediata. Implementar autenticacion (token/JWT) y permisos
+        (DEFAULT_AUTHENTICATION_CLASSES / DEFAULT_PERMISSION_CLASSES) antes de
+        exponer el sistema en produccion.
+--------------------------------------------------------------------------------
+ID    : R02
+Riesgo: Credenciales por defecto del superusuario (admin / admin123) en
+        docker-entrypoint.sh y docker-compose.yml.
+Tipo  : Tecnico / Humano
+P = 2 (Media)  I = 3 (Alto)   Nivel = 6  ->  ALTO
+Accion: Plan de mitigacion. Forzar credenciales por variable de entorno y
+        prohibir el arranque con la contrasena por defecto.
+--------------------------------------------------------------------------------
+ID    : R03
+Riesgo: Esquema hibrido (tablas creadas con SQL en backend/SQL_FILES/ y modelos
+        con managed=False). Las migraciones de Django no controlan el esquema,
+        lo que ya provoco caidas 502 en produccion (commits 870c777, f3d5541).
+Tipo  : Tecnico / Gestion
+P = 2 (Media)  I = 3 (Alto)   Nivel = 6  ->  ALTO
+Accion: Plan de mitigacion. Unificar el control del esquema (migraciones o
+        scripts versionados y ordenados) y probar despliegues en staging.
+--------------------------------------------------------------------------------
+ID    : R04
+Riesgo: Ausencia de pruebas automatizadas (tests.py vacios, sin CI). Los errores
+        solo se detectan en produccion.
+Tipo  : Gestion
+P = 3 (Alta)   I = 2 (Medio)  Nivel = 6  ->  ALTO
+Accion: Plan de mitigacion. Anadir pruebas unitarias y de integracion para los
+        flujos criticos (ventas, stock, pagos) y un pipeline de CI.
+--------------------------------------------------------------------------------
+ID    : R05
+Riesgo: Sin backups automaticos (solo pg_dump manual documentado). Riesgo de
+        perdida total de datos del negocio.
+Tipo  : Tecnico / Gestion
+P = 2 (Media)  I = 3 (Alto)   Nivel = 6  ->  ALTO
+Accion: Plan de mitigacion. Configurar backups programados y verificar
+        periodicamente la restauracion.
+--------------------------------------------------------------------------------
+ID    : R06
+Riesgo: Datos sensibles (clientes, telefonos, datos financieros en C$) sin
+        cifrado en reposo mas alla del predeterminado de PostgreSQL.
+Tipo  : Tecnico / Externo (legal)
+P = 2 (Media)  I = 3 (Alto)   Nivel = 6  ->  ALTO
+Accion: Plan de mitigacion. Evaluar cifrado en reposo, control de acceso a la BD
+        y minimizacion de datos personales.
+--------------------------------------------------------------------------------
+ID    : R07
+Riesgo: Redis opcional. Sin REDIS_URL se usa LocMemCache, no compartido entre los
+        4 workers de Gunicorn -> cache inconsistente.
+Tipo  : Tecnico
+P = 2 (Media)  I = 2 (Medio)  Nivel = 4  ->  MEDIO
+Accion: Monitoreo. Definir Redis como requisito en produccion o documentar el
+        comportamiento esperado sin cache compartida.
+--------------------------------------------------------------------------------
+ID    : R08
+Riesgo: Dependencia de credenciales de Cloudflare R2. Si faltan, la subida de
+        fotos de la bitacora falla (boto3 lanza error en la carga).
+Tipo  : Tecnico
+P = 2 (Media)  I = 2 (Medio)  Nivel = 4  ->  MEDIO
+Accion: Monitoreo. Validar las credenciales al arranque y mostrar un fallo claro
+        en vez de un error silencioso.
+--------------------------------------------------------------------------------
+ID    : R09
+Riesgo: Gunicorn arranca con --reload en produccion (flag de desarrollo): sobre-
+        carga y reinicios innecesarios de workers.
+Tipo  : Tecnico
+P = 3 (Alta)   I = 1 (Bajo)   Nivel = 3  ->  MEDIO
+Accion: Monitoreo. Quitar --reload del entrypoint de produccion.
+--------------------------------------------------------------------------------
+ID    : R10
+Riesgo: Conflicto de puerto 80 en docker-compose.prod.yml (servicios frontend y
+        nginx mapean el mismo puerto del host).
+Tipo  : Tecnico
+P = 1 (Baja)   I = 2 (Medio)  Nivel = 2  ->  BAJO
+Accion: Se puede aceptar / corregir cuando se ajuste el compose de produccion.
+--------------------------------------------------------------------------------
+ID    : R11
+Riesgo: Equipo reducido / sin experiencia en partes del stack y dependencia de
+        pocas personas (bus factor).
+Tipo  : Humano
+P = 2 (Media)  I = 2 (Medio)  Nivel = 4  ->  MEDIO
+Accion: Monitoreo. Documentar el sistema y compartir conocimiento entre el equipo.
+--------------------------------------------------------------------------------
+ID    : R12
+Riesgo: Cambios legales sobre proteccion de datos personales que obliguen a
+        modificar el tratamiento de datos de clientes.
+Tipo  : Externo
+P = 2 (Media)  I = 2 (Medio)  Nivel = 4  ->  MEDIO
+Accion: Monitoreo. Seguir la normativa aplicable y mantener el sistema adaptable.
+--------------------------------------------------------------------------------
+ID    : R13
+Riesgo: Feature de pago adelantado (PAGO_ADELANTADO_IMPLEMENTACION.md) sin
+        implementar ni validar; riesgo de inconsistencias en saldos al construirla.
+Tipo  : Gestion
+P = 2 (Media)  I = 2 (Medio)  Nivel = 4  ->  MEDIO
+Accion: Monitoreo. Implementar con reglas de negocio claras y pruebas de los
+        calculos de saldo antes de liberar.
+--------------------------------------------------------------------------------
+
+
+================================================================================
+3. MATRIZ DE RIESGO (ubicacion de cada riesgo)
+================================================================================
+
+  PROBABILIDAD
+      ^
+      |  +----------------+----------------+----------------+
+ Alta |  | Impacto Bajo   | Impacto Medio  | Impacto Alto   |
+ (3)  |  |  Nivel 3 MEDIO | Nivel 6 ALTO   | Nivel 9 CRITICO|
+      |  |  R09           | R04            | R01            |
+      |  +----------------+----------------+----------------+
+ Media|  | Nivel 2 BAJO   | Nivel 4 MEDIO  | Nivel 6 ALTO   |
+ (2)  |  |  -             | R07 R08        | R02 R03        |
+      |  |                | R11 R12 R13    | R05 R06        |
+      |  +----------------+----------------+----------------+
+ Baja |  | Nivel 1 BAJO   | Nivel 2 BAJO   | Nivel 3 MEDIO  |
+ (1)  |  |  -             | R10            | -              |
+      |  +----------------+----------------+----------------+
+      +-----------------------------------------------------> IMPACTO
+            Bajo (1)         Medio (2)        Alto (3)
+
+
+================================================================================
+4. RESUMEN POR NIVEL
+================================================================================
+
+  CRITICO (9)  -> Accion inmediata   : 1 riesgo   -> R01
+  ALTO    (6)  -> Plan de mitigacion : 5 riesgos  -> R02, R03, R04, R05, R06
+  MEDIO  (3-4) -> Monitoreo          : 6 riesgos  -> R07, R08, R09, R11, R12, R13
+  BAJO   (1-2) -> Se puede aceptar    : 1 riesgo   -> R10
+                                       --------------------------------
+                                       Total: 13 riesgos
+
+  PRIORIDADES:
+  1) Resolver de inmediato R01 (API sin autenticacion) por ser critico.
+  2) Atender los riesgos ALTOS: credenciales por defecto, control del esquema/
+     migraciones, pruebas automatizadas, backups y proteccion de datos.
+  3) Mantener bajo monitoreo los riesgos MEDIOS.
+
+================================================================================
+                              FIN DEL DOCUMENTO
+================================================================================

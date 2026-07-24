@@ -5,11 +5,13 @@ import { Button, Card, Input } from '../components/ui'
 import { useToast } from '../hooks/useToast'
 import useAuthStore from '../hooks/useAuthStore'
 import { authService } from '../services/auth.service'
+import { useDarkMode } from '../hooks/useDarkMode'
 
 const Login = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
+  const { isDark, toggleDarkMode } = useDarkMode()
   // Selectores atómicos: devuelven referencias estables y evitan el bucle de renders
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const login = useAuthStore((s) => s.login)
@@ -56,9 +58,11 @@ const Login = () => {
       const status = err.response?.status
       if (status === 429) {
         toast.error('Demasiados intentos. Espera un momento e inténtalo de nuevo.')
-      } else {
+      } else if (status === 400 || status === 401) {
         setErrors({ password: 'Usuario o contraseña incorrectos' })
         toast.error('Usuario o contraseña incorrectos')
+      } else {
+        toast.error('No se pudo conectar con el servidor. Inténtalo de nuevo.')
       }
       return
     }
@@ -74,7 +78,22 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-gray-50 dark:bg-gray-900 relative">
+      <button
+        onClick={toggleDarkMode}
+        className="absolute top-4 right-4 p-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+        title={isDark ? 'Modo claro' : 'Modo oscuro'}
+      >
+        {isDark ? (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        )}
+      </button>
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -102,7 +121,7 @@ const Login = () => {
               value={formData.username}
               onChange={handleChange}
               error={errors.username}
-              placeholder="usuario"
+              placeholder="Usuario"
               autoFocus
               autoComplete="username"
               aria-invalid={!!errors.username}

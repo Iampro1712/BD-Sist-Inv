@@ -1,0 +1,184 @@
+================================================================================
+               BENEFICIOS DEL SISTEMA — INVENTRIX
+================================================================================
+Sistema:  Inventrix — Gestión de Inventario, Ventas y Servicios
+Fecha:    2026-06-28
+Contexto: Taller / tienda de motos (JC Motoshop), Nicaragua
+================================================================================
+
+
+BENEFICIOS TANGIBLES
+================================================================================
+
+1. REDUCCIÓN DE COSTOS
+────────────────────────────────────────────────────────────────────────────────
+
+  • Eliminación del papel y cuadernos.
+    El registro manual de ventas, compras e inventario se reemplaza por un
+    sistema digital. Esto reduce el gasto en papelería, cuadernos y tiempo
+    dedicado a transcribir información.
+
+  • Reducción de pérdidas por stock no controlado.
+    El sistema emite alertas automáticas cuando un producto cae por debajo del
+    stock mínimo, evitando ventas perdidas por desabastecimiento y compras
+    en exceso que inmovilicen capital (detectadas en el reporte de stock muerto).
+
+  • Reducción de pérdidas por cuentas incobrables.
+    El módulo de Cuentas por Cobrar con antigüedad de saldo (aging 0-30,
+    31-60, 61-90, +90 días) y el recordatorio por WhatsApp permiten
+    identificar y gestionar la deuda a tiempo, reduciendo el riesgo de
+    no cobrar.
+
+  • Eliminación de errores de cálculo en ventas y pagos.
+    Los totales, descuentos, abonos y saldo pendiente se calculan
+    automáticamente, eliminando errores de suma manual que generan pérdidas
+    o diferencias de caja.
+
+  • Respaldo de datos sin costo de servicio externo.
+    El sistema genera una copia de seguridad completa con un clic, sin
+    necesidad de contratar un servicio especializado de backup.
+
+
+2. AHORRO DE TIEMPO
+────────────────────────────────────────────────────────────────────────────────
+
+  • Cobro más rápido en el Punto de Venta (POS).
+    El escáner de código de barras por cámara o lector físico permite
+    registrar productos en segundos, reduciendo el tiempo de atención al
+    cliente en mostrador comparado con el registro manual uno a uno.
+
+  • Generación instantánea de reportes.
+    Los reportes de ventas, compras, rentabilidad y stock (antes calculados
+    a mano o en Excel) se generan en segundos y se exportan a PDF o Excel
+    con un clic.
+
+  • Cotizaciones y recibos en segundos.
+    Una proforma o un recibo de venta/abono se genera y descarga como PDF
+    de forma inmediata, sin necesidad de redactarlo manualmente ni usar
+    plantillas externas.
+
+  • Búsqueda instantánea de clientes, productos y proveedores.
+    La búsqueda global (Ctrl + /) localiza cualquier registro en tiempo
+    real, eliminando el tiempo perdido revisando listas o cuadernos.
+
+  • Registro de servicios de moto sin formularios externos.
+    La bitácora digital de 4 fases (Recepción, Diagnóstico, Reparación,
+    Entrega) con fotos reemplaza documentos físicos y agiliza la
+    documentación del servicio.
+
+  • Importación masiva de productos desde Excel/CSV.
+    Actualizar o cargar el catálogo completo se hace en una sola operación,
+    en vez de ingresarlo producto por producto.
+
+
+3. INCREMENTO DE PRODUCTIVIDAD
+────────────────────────────────────────────────────────────────────────────────
+
+  • El dueño opera con datos en tiempo real.
+    El dashboard muestra métricas clave (ventas del día, stock bajo, saldo
+    por cobrar) al instante, permitiendo tomar decisiones sin necesidad de
+    revisar cuadernos ni hacer cálculos.
+
+  • Un solo sistema cubre todas las operaciones del negocio.
+    Inventario, ventas, compras, cobranza, servicios de moto, reportes y
+    respaldo están integrados en una sola plataforma, eliminando la necesidad
+    de herramientas paralelas (Excel, WhatsApp para cobros, notas de papel).
+
+  • Análisis de rentabilidad por producto.
+    El reporte de rentabilidad identifica qué productos dejan más ganancia y
+    cuáles tienen el margen más bajo, permitiendo al dueño enfocar sus
+    compras y su oferta en lo que realmente es rentable.
+
+  • Etiquetas con código de barras propias.
+    La generación e impresión de etiquetas con el SKU, precio y código de
+    barras acelera el marcado de mercadería y reduce errores de precio en
+    el punto de venta.
+
+  • Acceso desde cualquier dispositivo.
+    Al ser una aplicación web responsive, el dueño puede consultar el
+    sistema desde su teléfono, tablet o computadora, sin depender de un
+    equipo fijo en el local.
+
+
+================================================================================
+BENEFICIOS INTANGIBLES
+================================================================================
+
+1. MEJOR IMAGEN INSTITUCIONAL
+────────────────────────────────────────────────────────────────────────────────
+
+  • Profesionalismo frente al cliente.
+    Entregar una cotización o un recibo con el logo y nombre del negocio en
+    formato PDF proyecta una imagen seria y profesional, diferenciando al
+    negocio de la competencia que aún usa recibos manuales.
+
+  • Bitácora visual del servicio de moto.
+    El cliente puede recibir evidencia fotográfica del estado de su moto en
+    cada fase del servicio (recepción, diagnóstico, reparación, entrega),
+    generando confianza y transparencia en el trabajo realizado.
+
+  • Modernización del negocio.
+    Contar con un sistema digital posiciona al negocio como moderno y
+    confiable ante clientes y proveedores, fortaleciendo su reputación en
+    el mercado local.
+
+  • Comunicación profesional por WhatsApp.
+    Los recordatorios de saldo pendiente se envían con un mensaje
+    pre-armado y claro, manteniendo una comunicación formal y respetuosa
+    con los clientes deudores.
+
+
+2. MAYOR SATISFACCIÓN DEL USUARIO
+────────────────────────────────────────────────────────────────────────────────
+
+  • Interfaz intuitiva y fácil de usar.
+    El sistema fue diseñado con una interfaz moderna, modo oscuro y
+    navegación sencilla, reduciendo la curva de aprendizaje para el dueño
+    sin conocimientos técnicos avanzados.
+
+  • Tranquilidad sobre los datos del negocio.
+    Saber que la información (clientes, ventas, inventario) está respaldada
+    y protegida da al dueño paz mental y confianza para operar diariamente.
+
+  • Atención más rápida y sin errores al cliente.
+    El cliente experimenta un servicio más ágil (cobro por POS en segundos,
+    recibo inmediato), lo que mejora su percepción del negocio y fomenta
+    la fidelización.
+
+  • Historial completo del cliente y su moto.
+    El dueño puede consultar en segundos todo el historial de compras,
+    servicios y pagos de un cliente, brindando una atención más
+    personalizada.
+
+
+3. MEJOR CONTROL ADMINISTRATIVO
+────────────────────────────────────────────────────────────────────────────────
+
+  • Control total del inventario en tiempo real.
+    Cada venta, compra o ajuste actualiza el stock al instante, eliminando
+    las diferencias entre el inventario físico y el registrado.
+
+  • Trazabilidad completa de cada operación.
+    El sistema registra cada movimiento de inventario, cada abono y cada
+    cambio en el estado de una venta, creando un historial auditable que
+    permite detectar inconsistencias.
+
+  • Separación de roles con autenticación segura.
+    La versión con autenticación (JWT) controla quién accede al sistema y
+    qué puede hacer, protegiendo los datos financieros y el catálogo ante
+    accesos no autorizados.
+
+  • Visión financiera completa del negocio.
+    Con los reportes de rentabilidad, cuentas por cobrar, ventas y compras
+    integrados, el dueño tiene una visión 360° de la salud financiera del
+    negocio sin depender de un contador para obtener datos básicos.
+
+  • Auditoría automática de cambios en productos.
+    El sistema registra automáticamente (vía trigger en PostgreSQL) cualquier
+    modificación en precios o cantidades de productos, con fecha, hora y
+    valor anterior, previniendo manipulaciones y facilitando la detección
+    de errores.
+
+================================================================================
+                         FIN DEL DOCUMENTO
+================================================================================

@@ -126,6 +126,15 @@ else:
 # (por proceso). El cache acelera los reportes pesados vía cache_page.
 REDIS_URL = os.getenv('REDIS_URL')
 
+# En producción con múltiples workers de Gunicorn, LocMemCache no se comparte
+# entre procesos y produce cache inconsistente. Redis es obligatorio ahí.
+if not DEBUG and not REDIS_URL:
+    raise RuntimeError(
+        'REDIS_URL no definido. En producción Redis es obligatorio: sin él, '
+        'cada worker de Gunicorn tiene su propia caché en memoria '
+        '(datos inconsistentes entre requests).'
+    )
+
 if REDIS_URL:
     CACHES = {
         'default': {
@@ -224,14 +233,19 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/min',
-        'user': '1000/min',
+        # Reducido de 1000 a 500/min (US-11): sigue holgado para las ráfagas
+        # del dashboard (varias insights en paralelo) pero acota abuso.
+        'user': '500/min',
         'login': '5/min',
     },
 }
 
 from datetime import timedelta  # noqa: E402
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    # Reducido de 60 a 30 min (US-11): el refresh es transparente (rotación +
+    # reintento automático en el interceptor del frontend), así que acortar la
+    # vida del access token limita la ventana de un token robado sin molestar.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -245,7 +259,9 @@ CORS_ALLOWED_ORIGINS = os.getenv(
     'http://localhost:5173,http://127.0.0.1:5173'
 ).split(',')
 
-CORS_ALLOW_CREDENTIALS = True
+# Falso (US-11): la autenticación va por header Authorization (JWT), no por
+# cookies cross-origin, así que no hace falta permitir credenciales.
+CORS_ALLOW_CREDENTIALS = False
 
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -350,4 +366,63 @@ R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY')
 R2_BUCKET_NAME = os.getenv('R2_BUCKET_NAME')
 R2_PUBLIC_URL = os.getenv('R2_PUBLIC_URL')
 R2_ACCESS_URI = os.getenv('R2_ACCESS_URI')
+
+# Clave de cifrado en reposo (R06) para columnas de contacto sensibles
+# (telefono/email de clientes y proveedores). Ver inventory/encryption.py.
+FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', '')
+if not DEBUG and not FIELD_ENCRYPTION_KEY:
+    raise RuntimeError(
+        'FIELD_ENCRYPTION_KEY no definido. Es obligatorio en producción para '
+        'cifrar telefono/email de clientes y proveedores. Generar uno con: '
+        'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+    )
+
+# En producción, si se define alguna credencial de R2 deben definirse todas
+# (fail-fast en vez de fallar silenciosamente al subir la primera foto).
+_R2_VARS = {
+    'R2_ACCESS_KEY_ID': R2_ACCESS_KEY_ID,
+    'R2_SECRET_ACCESS_KEY': R2_SECRET_ACCESS_KEY,
+    'R2_BUCKET_NAME': R2_BUCKET_NAME,
+    'R2_PUBLIC_URL': R2_PUBLIC_URL,
+    'R2_ACCESS_URI': R2_ACCESS_URI,
+}
+if not DEBUG and any(_R2_VARS.values()) and not all(_R2_VARS.values()):
+    _faltantes = [k for k, v in _R2_VARS.items() if not v]
+    raise RuntimeError(
+        f'Configuración de Cloudflare R2 incompleta. Faltan: {", ".join(_faltantes)}. '
+        'Define todas las variables R2_* o ninguna.'
+    )
+
+# ============================================================================
+# Seguridad de producción (US-06)
+# ============================================================================
+# Solo se activan con DEBUG=False para no romper el desarrollo local por HTTP.
+if not DEBUG:
+    # Detrás de nginx/Cloudflare: confiar en el header del proxy para saber
+    # que la petición original llegó por HTTPS (si no, SECURE_SSL_REDIRECT
+    # entraría en un bucle de redirecciones).
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+
+    # Cookies solo por HTTPS.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    # HSTS: fuerza HTTPS en el navegador durante 1 año.
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    # Evita que el navegador "adivine" el content-type (anti MIME sniffing).
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+
+    # Orígenes de confianza para CSRF (panel admin de Django): dominios reales
+    # en https, derivados de ALLOWED_HOSTS + orígenes CORS. Se excluye
+    # localhost y cualquier entrada mal formada (URLs dentro de ALLOWED_HOSTS).
+    _csrf_origins = {o for o in CORS_ALLOWED_ORIGINS if o.startswith('https://')}
+    for _host in ALLOWED_HOSTS:
+        _host = _host.strip()
+        if _host and _host not in ('localhost', '127.0.0.1') and not _host.startswith('http'):
+            _csrf_origins.add(f'https://{_host}')
+    CSRF_TRUSTED_ORIGINS = sorted(_csrf_origins)
 

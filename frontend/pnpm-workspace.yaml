@@ -1,0 +1,11 @@
+allowBuilds:
+  core-js: true
+  esbuild: true
+
+# Overrides de seguridad (US-10): forzar versiones parcheadas de dependencias
+# transitivas con vulnerabilidades altas (recharts->lodash, exceljs->tmp,
+# axios->form-data). En pnpm 11 los overrides viven aquí, no en package.json.
+overrides:
+  lodash: ">=4.17.23"
+  tmp: ">=0.2.6"
+  form-data: ">=4.0.6"

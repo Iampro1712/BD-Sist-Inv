@@ -7,18 +7,19 @@ from decimal import Decimal
 
 from django.db import connection, models
 
+from .encryption import EncryptedCharField, EncryptedEmailField
+
 
 class Proveedor(models.Model):
     """Modelo para proveedores"""
     id_proveedor = models.AutoField(primary_key=True)
     nombre_empresa = models.CharField(max_length=255)
     persona_contacto = models.CharField(max_length=255, blank=True, null=True)
-    telefono = models.CharField(max_length=50, blank=True, null=True)
-    email = models.EmailField(max_length=255, blank=True, null=True)
+    telefono = EncryptedCharField(max_length=50, blank=True, null=True)
+    email = EncryptedEmailField(max_length=255, blank=True, null=True)
     direccion = models.TextField(blank=True, null=True)
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'proveedores'
         verbose_name = 'Proveedor'
         verbose_name_plural = 'Proveedores'
@@ -94,7 +95,6 @@ class Producto(models.Model):
     )
 
     class Meta:
-        managed = False  # No modificar la tabla existente
         db_table = 'productos'
         verbose_name = 'Producto'
         verbose_name_plural = 'Productos'
@@ -108,11 +108,10 @@ class Cliente(models.Model):
     """Modelo para clientes"""
     id_cliente = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=255)
-    telefono = models.CharField(max_length=50, blank=True, null=True)
-    email = models.EmailField(max_length=255, blank=True, null=True)
+    telefono = EncryptedCharField(max_length=50, blank=True, null=True)
+    email = EncryptedEmailField(max_length=255, blank=True, null=True)
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'cliente'
         verbose_name = 'Cliente'
         verbose_name_plural = 'Clientes'
@@ -137,7 +136,6 @@ class Moto(models.Model):
     placa = models.CharField(max_length=20, unique=True)
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'motos'
         verbose_name = 'Moto'
         verbose_name_plural = 'Motos'
@@ -162,7 +160,6 @@ class ServicioMoto(models.Model):
     costo = models.DecimalField(max_digits=10, decimal_places=2)
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'servicio_motos'
         verbose_name = 'Servicio de Moto'
         verbose_name_plural = 'Servicios de Motos'
@@ -184,7 +181,6 @@ class Servicio(models.Model):
     id_moto = models.IntegerField(blank=True, null=True)
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'servicios'
         verbose_name = 'Servicio'
         verbose_name_plural = 'Servicios'
@@ -202,7 +198,6 @@ class OrdenCompra(models.Model):
     fecha_creacion = models.DateField()
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'orden_compra'
         verbose_name = 'Orden de Compra'
         verbose_name_plural = 'Órdenes de Compra'
@@ -210,36 +205,6 @@ class OrdenCompra(models.Model):
 
     def __str__(self):
         return f"Orden #{self.id_orden}"
-
-
-class DetalleOrdenCompra(models.Model):
-    """Modelo para detalles de órdenes de compra"""
-    orden_compra = models.ForeignKey(
-        OrdenCompra,
-        on_delete=models.CASCADE,
-        related_name='detalles'
-    )
-    producto = models.ForeignKey(
-        Producto,
-        on_delete=models.PROTECT,
-        related_name='detalles_compra'
-    )
-    cantidad = models.IntegerField()
-    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
-    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
-
-    class Meta:
-        managed = False  # No modificar tabla existente
-        db_table = 'detalles_orden_compra'
-        verbose_name = 'Detalle de Orden de Compra'
-        verbose_name_plural = 'Detalles de Órdenes de Compra'
-
-    def save(self, *args, **kwargs):
-        self.subtotal = self.cantidad * self.precio_unitario
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.orden_compra.numero_orden} - {self.producto.nombre}"
 
 
 class OrdenVenta(models.Model):
@@ -261,7 +226,6 @@ class OrdenVenta(models.Model):
     )
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'ventas'
         verbose_name = 'Orden de Venta'
         verbose_name_plural = 'Órdenes de Venta'
@@ -343,7 +307,6 @@ class PagoVenta(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        managed = False  # tabla creada por SQL_FILES/create_pagos_venta_table.sql
         db_table = 'pagos_venta'
         verbose_name = 'Pago de Venta'
         verbose_name_plural = 'Pagos de Ventas'
@@ -351,36 +314,6 @@ class PagoVenta(models.Model):
 
     def __str__(self):
         return f"Pago #{self.id_pago} - Venta #{self.id_venta_id} - C${self.monto}"
-
-
-class DetalleOrdenVenta(models.Model):
-    """Modelo para detalles de órdenes de venta"""
-    orden_venta = models.ForeignKey(
-        OrdenVenta,
-        on_delete=models.CASCADE,
-        related_name='detalles'
-    )
-    producto = models.ForeignKey(
-        Producto,
-        on_delete=models.PROTECT,
-        related_name='detalles_venta'
-    )
-    cantidad = models.IntegerField()
-    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
-    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
-
-    class Meta:
-        managed = False  # No modificar tabla existente
-        db_table = 'detalles_orden_venta'
-        verbose_name = 'Detalle de Orden de Venta'
-        verbose_name_plural = 'Detalles de Órdenes de Venta'
-
-    def save(self, *args, **kwargs):
-        self.subtotal = self.cantidad * self.precio_unitario
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.orden_venta.numero_orden} - {self.producto.nombre}"
 
 
 class MovimientoInventario(models.Model):
@@ -410,7 +343,6 @@ class MovimientoInventario(models.Model):
     notas = models.TextField(blank=True, null=True)
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'movimientos_inventario'
         verbose_name = 'Movimiento de Inventario'
         verbose_name_plural = 'Movimientos de Inventario'
@@ -474,7 +406,6 @@ class BitacoraServicio(models.Model):
     actualizado_en = models.DateTimeField(auto_now=True)
 
     class Meta:
-        managed = False  # No modificar tabla existente
         db_table = 'bitacora_servicio'
         verbose_name = 'Bitácora de Servicio'
         verbose_name_plural = 'Bitácoras de Servicios'
@@ -519,7 +450,6 @@ class AuditoriaProducto(models.Model):
     datos_nuevos = models.JSONField(blank=True, null=True)
 
     class Meta:
-        managed = False  # No modificar tabla (manejada por trigger)
         db_table = 'auditoria_productos'
         verbose_name = 'Auditoría de Producto'
         verbose_name_plural = 'Auditorías de Productos'
@@ -614,7 +544,6 @@ class Cotizacion(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        managed = False  # tabla creada por SQL_FILES/create_cotizaciones_devoluciones_tables.sql
         db_table = 'cotizaciones'
         verbose_name = 'Cotización'
         verbose_name_plural = 'Cotizaciones'
@@ -641,7 +570,6 @@ class Devolucion(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        managed = False  # tabla creada por SQL_FILES/create_cotizaciones_devoluciones_tables.sql
         db_table = 'devoluciones'
         verbose_name = 'Devolución'
         verbose_name_plural = 'Devoluciones'

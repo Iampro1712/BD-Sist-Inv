@@ -78,5 +78,4 @@ exec gunicorn inventrix.wsgi:application \
     --timeout 120 \
     --access-logfile - \
     --error-logfile - \
-    --log-level info \
-    --reload
+    --log-level info

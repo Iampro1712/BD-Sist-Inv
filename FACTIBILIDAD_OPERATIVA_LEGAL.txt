@@ -1,0 +1,336 @@
+================================================================================
+          FACTIBILIDAD OPERATIVA Y LEGAL — INVENTRIX
+================================================================================
+Sistema:  Inventrix — Gestión de Inventario, Ventas y Servicios
+Fecha:    2026-06-28
+Contexto: Taller / tienda de motos (JC Motoshop), Nicaragua
+================================================================================
+
+
+================================================================================
+PARTE I — FACTIBILIDAD OPERATIVA
+================================================================================
+
+La factibilidad operativa evalúa si el sistema puede ponerse en marcha y
+mantenerse con los recursos humanos, técnicos y organizacionales disponibles
+en el negocio, y si los usuarios finales son capaces de operarlo con éxito.
+
+────────────────────────────────────────────────────────────────────────────────
+1.1 RECURSOS HUMANOS
+────────────────────────────────────────────────────────────────────────────────
+
+  Perfil del usuario principal
+  ─────────────────────────────
+  El sistema está diseñado para ser operado por UNA SOLA PERSONA: el dueño
+  del negocio. No requiere un departamento de TI ni personal especializado.
+
+  Requisitos mínimos del operador:
+    • Conocimiento básico de computadora o teléfono inteligente.
+    • Acceso a internet (para conectarse al sistema en la nube).
+    • Capacidad de lectura y escritura en español.
+
+  Capacitación necesaria:
+    • Estimado de 2 a 4 horas de inducción para dominar las funciones
+      principales (ventas, inventario, clientes, POS).
+    • El módulo de bitácora de servicios (fotos + fases) puede requerir
+      1 hora adicional de práctica.
+    • La interfaz es intuitiva, con modo oscuro, navegación responsive y
+      mensajes de error claros, lo que reduce la curva de aprendizaje.
+
+  Escalabilidad de usuarios:
+    • La versión con autenticación (master-with-auth) permite crear múltiples
+      usuarios con roles diferenciados (Administrador / Usuario) para cuando
+      el negocio contrate empleados, sin necesidad de modificar el sistema.
+
+────────────────────────────────────────────────────────────────────────────────
+1.2 RECURSOS TÉCNICOS
+────────────────────────────────────────────────────────────────────────────────
+
+  Requerimientos del lado del cliente (quien usa el sistema):
+  ┌─────────────────────────┬──────────────────────────────────────────────┐
+  │ Dispositivo             │ Computadora, laptop, tablet o celular        │
+  │ Sistema operativo       │ Cualquiera (Windows, macOS, Android, iOS)    │
+  │ Navegador               │ Chrome 90+, Firefox 88+, Safari 14+, Edge 90+│
+  │ Conexión a internet     │ Mínimo 1 Mbps (la app es ligera: <200 kB)   │
+  │ Resolución de pantalla  │ 320 px en adelante (responsive)              │
+  └─────────────────────────┴──────────────────────────────────────────────┘
+
+  Requerimientos del lado del servidor (ya están cubiertos):
+  ┌─────────────────────────┬──────────────────────────────────────────────┐
+  │ Backend                 │ VPS con Docker (Dokploy)                     │
+  │ Base de datos           │ PostgreSQL 16 en el mismo VPS                │
+  │ Frontend                │ Vercel (CDN global, sin costo)               │
+  │ Almacenamiento fotos    │ Cloudflare R2 (S3-compatible)                │
+  │ SSL / HTTPS             │ Let's Encrypt (automático)                   │
+  └─────────────────────────┴──────────────────────────────────────────────┘
+
+  Disponibilidad del sistema:
+    • Vercel garantiza 99.99% de uptime para el frontend (CDN global).
+    • El VPS del backend tiene disponibilidad estimada del 99.9%.
+    • En caso de caída del servidor, el dueño puede seguir consultando
+      el historial reciente en el navegador (caché de React Query).
+
+────────────────────────────────────────────────────────────────────────────────
+1.3 PROCESOS OPERATIVOS CUBIERTOS
+────────────────────────────────────────────────────────────────────────────────
+
+  El sistema cubre el 100% de las operaciones críticas diarias del negocio:
+
+  ✅ Registrar una venta (con o sin escáner de código de barras)
+  ✅ Cobrar en el Punto de Venta (POS) en segundos
+  ✅ Registrar abonos y controlar saldos pendientes
+  ✅ Ver quién debe y enviar recordatorio por WhatsApp
+  ✅ Registrar la recepción de mercadería (orden de compra)
+  ✅ Documentar servicios de moto con fotos (bitácora 4 fases)
+  ✅ Generar reportes de ventas, compras y rentabilidad
+  ✅ Exportar a PDF y Excel
+  ✅ Respaldar todos los datos con un clic
+  ✅ Imprimir etiquetas con código de barras
+
+────────────────────────────────────────────────────────────────────────────────
+1.4 PLAN DE CONTINUIDAD OPERATIVA
+────────────────────────────────────────────────────────────────────────────────
+
+  Ante posibles interrupciones:
+
+  • Corte de internet: el histórico de páginas visitadas queda en caché;
+    las ventas urgentes pueden anotarse temporalmente y registrarse después.
+  • Caída del servidor: el proveedor (Dokploy/VPS) restablece el servicio
+    en minutos. El respaldo descargado periódicamente protege los datos.
+  • Error del sistema: el módulo de respaldo permite exportar toda la base
+    de datos a un JSON en cualquier momento, garantizando que los datos
+    nunca se pierdan aunque el sistema deje de funcionar.
+
+────────────────────────────────────────────────────────────────────────────────
+1.5 CONCLUSIÓN DE FACTIBILIDAD OPERATIVA
+────────────────────────────────────────────────────────────────────────────────
+
+  El sistema ES OPERATIVAMENTE FACTIBLE porque:
+    ✔ Solo requiere un usuario con habilidades básicas de computadora.
+    ✔ Funciona en cualquier dispositivo con navegador e internet.
+    ✔ No demanda mantenimiento técnico activo del dueño.
+    ✔ Cubre todos los procesos críticos del negocio en una sola plataforma.
+    ✔ Tiene plan de continuidad ante fallas (respaldo, caché, VPS).
+    ✔ Escala sin cambio de sistema cuando el negocio crezca.
+
+
+================================================================================
+PARTE II — FACTIBILIDAD LEGAL
+================================================================================
+
+La factibilidad legal evalúa si el sistema cumple con el marco normativo
+vigente en Nicaragua aplicable a un negocio de taller/tienda de motos que
+almacena datos de clientes, registra ventas y opera digitalmente.
+
+────────────────────────────────────────────────────────────────────────────────
+2.1 PROTECCIÓN DE DATOS PERSONALES
+────────────────────────────────────────────────────────────────────────────────
+
+  Norma aplicable:
+    Ley No. 787 — Ley de Protección de Datos Personales (2012)
+    → http://legislacion.asamblea.gob.ni/normaweb.nsf/
+      9e314815a08d4a6206257265005d21f9/
+      e5d37e9b4827fc06062579ed0076ce1d
+
+    Decreto Reglamentario 36-2012
+    → http://legislacion.asamblea.gob.ni/normaweb.nsf/
+      ($All)/7BF684022FC4A2B406257AB70059D10F
+
+    Análisis de la normativa nicaragüense (REDIPD):
+    → https://www.redipd.org/documentos/
+      analisis-de-la-normativa-nicaraguense-en-materia-de-proteccion-de-datos
+
+  Datos que el sistema almacena de clientes:
+    • Nombre completo, teléfono, correo electrónico.
+    • Historial de compras, servicios y pagos.
+    • Fotos de motos en la bitácora de servicios.
+
+  Obligaciones del negocio según la Ley 787:
+    ✔ Informar al cliente para qué se usan sus datos al registrarlo.
+    ✔ Usar los datos únicamente para la gestión de ventas y servicios
+      (no compartirlos con terceros sin autorización).
+    ✔ Permitir al cliente solicitar la consulta, corrección o eliminación
+      de sus datos (derecho de habeas data).
+
+  Cumplimiento del sistema:
+    ✔ Los datos se almacenan en una base de datos privada del negocio
+      (PostgreSQL en servidor propio bajo VPS).
+    ✔ No se comparten datos con terceros ni plataformas publicitarias.
+    ✔ La versión con auth protege el acceso con usuario y contraseña JWT.
+    ⚠ Pendiente: agregar un aviso de privacidad visible al registrar un
+      cliente nuevo en el formulario de la aplicación.
+
+────────────────────────────────────────────────────────────────────────────────
+2.2 DEFENSA DEL CONSUMIDOR
+────────────────────────────────────────────────────────────────────────────────
+
+  Norma aplicable:
+    Ley No. 842 — Ley de Protección de los Derechos de las Personas
+    Consumidoras y Usuarias (2013)
+    → http://legislacion.asamblea.gob.ni/normaweb.nsf/
+      3133c0d121ea3897062568a1005e0f89/
+      4c237a88d8224586062589410069180c
+    → https://faolex.fao.org/docs/pdf/nic138640.pdf
+
+  Autoridad de aplicación: DIPRODEC (MIFIC)
+    → https://www.mific.gob.ni/
+
+  Obligaciones relevantes para el taller:
+    ✔ Informar precios de productos y servicios antes de la venta.
+    ✔ Emitir comprobante de cada transacción realizada.
+    ✔ Respetar los plazos de entrega prometidos al cliente.
+    ✔ Cumplir con las garantías ofrecidas sobre productos vendidos.
+
+  Cumplimiento del sistema:
+    ✔ El sistema genera recibos de venta y comprobantes de pago en PDF
+      que se pueden imprimir o enviar al cliente.
+    ✔ El módulo de garantías registra fecha de inicio, fecha de fin
+      y estado de la garantía por cada producto vendido.
+    ✔ Las cotizaciones (proformas) documentan precios antes de confirmar
+      la venta, dando transparencia al cliente.
+
+────────────────────────────────────────────────────────────────────────────────
+2.3 REGISTROS CONTABLES Y TRIBUTARIOS
+────────────────────────────────────────────────────────────────────────────────
+
+  Norma aplicable:
+    Código de Comercio de Nicaragua (1914, vigente) — Arts. 28, 29 y 32
+    → https://www.poderjudicial.gob.ni/codigoetica/pdf/
+      codigo_de_comercio_de_nicaragua.pdf
+    → http://digesto.asamblea.gob.ni/consultas/normas/
+      shownorms.php?idnorm=MjkyOTI%3D
+
+  Facturación computarizada (DGI):
+    → https://www.dgi.gob.ni/
+    → https://dgienlinea.dgi.gob.ni/
+    → Requisitos formales:
+      http://legislacion.asamblea.gob.ni/Normaweb.nsf/(All)/
+      F0AF7D609FD2B37706257570007C7DE6?OpenDocument=
+
+  Situación legal:
+    • El Código de Comercio exige llevar Libro Diario, Libro de Inventarios
+      y Libro de Balances, pero no contempla expresamente el formato digital.
+      En la práctica, la DGI acepta registros electrónicos en auditorías
+      siempre que puedan imprimirse y presentarse.
+    • Si el negocio está en el régimen de Cuota Fija (ingresos menores a
+      C$100,000/mes), la DGI no exige sistema computarizado de facturación:
+      se pueden usar talonarios autorizados por imprenta registrada.
+    • Si supera ese umbral (régimen general), se puede solicitar autorización
+      formal del software de facturación ante la Administración de Rentas.
+
+  Cumplimiento del sistema:
+    ✔ El sistema registra todas las ventas, compras y movimientos con
+      fecha, monto y datos del cliente/proveedor — funciona como libro
+      de operaciones digital.
+    ✔ Los reportes de ventas y compras son exportables a Excel, formato
+      aceptado en auditorías tributarias.
+    ✔ El módulo de respaldo genera una copia completa de todos los datos
+      en cualquier momento.
+    ⚠ Pendiente: si el negocio crece al régimen general, se deberá
+      tramitar autorización formal del software ante la DGI.
+
+────────────────────────────────────────────────────────────────────────────────
+2.4 COMERCIO ELECTRÓNICO Y FIRMA DIGITAL
+────────────────────────────────────────────────────────────────────────────────
+
+  Norma aplicable:
+    Ley No. 729 — Ley de Firma Electrónica (2010)
+    → https://www.unodc.org/cld/uploads/res/document/nic/
+      Ley_de_firma_electronica.pdf
+
+    Decreto Reglamentario No. 57-2011
+    → http://legislacion.asamblea.gob.ni/Normaweb.nsf/
+      3133c0d121ea3897062568a1005e0f89/
+      1ceea41dc1bdc53d06257951005bbc04
+
+    Análisis práctico:
+    → https://www.viafirma.com/en/faqs/
+      electronic-signature-in-nicaragua/
+
+  Situación actual:
+    • Nicaragua es el único país de América Latina sin un Proveedor de
+      Servicios de Certificación (PSC) acreditado, por lo que la Ley 729
+      existe pero no es aplicable en la práctica.
+    • No existe una ley específica de comercio electrónico en Nicaragua;
+      los artículos 77-80 de la Ley 842 ofrecen una protección básica
+      al consumidor en transacciones electrónicas.
+    → https://cosep.org.ni/comercio-electronico-en-nicaragua-en-auge-
+      por-el-covid-19-cual-es-la-debilidad-de-esto/
+
+  Impacto en el sistema:
+    ✔ Inventrix opera como sistema de gestión interno del negocio (no es
+      una tienda online pública), por lo que el vacío legal en comercio
+      electrónico no genera obligaciones adicionales.
+    ✔ Las cotizaciones y recibos en PDF tienen valor como comprobante
+      interno, aunque no equivalen legalmente a una firma electrónica
+      certificada.
+    ⚠ Para el futuro, si se integra firma electrónica (ej. en contratos
+      de servicio), esperar a que Nicaragua acredite un PSC o usar
+      plataformas internacionales reconocidas.
+
+────────────────────────────────────────────────────────────────────────────────
+2.5 SEGURIDAD DE LA INFORMACIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+  Aunque Nicaragua no tiene una ley específica de ciberseguridad, la
+  Ley 787 (Art. 4 y 21) obliga a aplicar medidas de seguridad técnicas
+  y organizativas para proteger los datos personales almacenados.
+
+  Medidas implementadas en el sistema:
+    ✔ Autenticación con JWT (tokens con expiración) para controlar acceso.
+    ✔ Contraseñas hasheadas (nunca almacenadas en texto plano).
+    ✔ Throttling anti fuerza bruta en el login (5 intentos/min).
+    ✔ Cabeceras de seguridad HTTP: CSP, X-Frame-Options, HSTS, etc.
+    ✔ Comunicación HTTPS cifrada entre cliente y servidor.
+    ✔ Respaldo de datos con un clic para proteger ante pérdida.
+    ✔ Historial de auditoría de cambios en productos (triggers PostgreSQL).
+
+────────────────────────────────────────────────────────────────────────────────
+2.6 RESUMEN DE CUMPLIMIENTO LEGAL
+────────────────────────────────────────────────────────────────────────────────
+
+  ┌──────────────────────────────────────┬──────────────┬───────────────────┐
+  │ Aspecto legal                        │ Estado       │ Acción requerida  │
+  ├──────────────────────────────────────┼──────────────┼───────────────────┤
+  │ Ley 787 — Protección de datos        │ ✅ Compatible│ Agregar aviso de  │
+  │                                      │              │ privacidad en UI  │
+  ├──────────────────────────────────────┼──────────────┼───────────────────┤
+  │ Ley 842 — Defensa del consumidor     │ ✅ Compatible│ Ninguna           │
+  ├──────────────────────────────────────┼──────────────┼───────────────────┤
+  │ Código de Comercio — registros       │ ✅ Compatible│ Mantener respaldo │
+  │                                      │              │ imprimible        │
+  ├──────────────────────────────────────┼──────────────┼───────────────────┤
+  │ DGI — Facturación computarizada      │ ✅ Aplica si │ Tramitar          │
+  │                                      │ supera cuota │ autorización DGI  │
+  │                                      │ fija         │ si crece el neg.  │
+  ├──────────────────────────────────────┼──────────────┼───────────────────┤
+  │ Ley 729 — Firma electrónica          │ ℹ Sin PSC   │ No usar como      │
+  │                                      │ acreditado   │ sustento jurídico │
+  ├──────────────────────────────────────┼──────────────┼───────────────────┤
+  │ Comercio electrónico                 │ ℹ Sin ley   │ Sin obligaciones  │
+  │                                      │ específica   │ para uso interno  │
+  └──────────────────────────────────────┴──────────────┴───────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+2.7 CONCLUSIÓN DE FACTIBILIDAD LEGAL
+────────────────────────────────────────────────────────────────────────────────
+
+  El sistema ES LEGALMENTE FACTIBLE porque:
+    ✔ No viola ninguna ley vigente en Nicaragua.
+    ✔ Cumple con los principios de la Ley 787 de Protección de Datos
+      (datos para uso propio del negocio, acceso restringido, sin
+      cesión a terceros).
+    ✔ Apoya el cumplimiento de la Ley 842 (emite comprobantes, registra
+      garantías, documenta precios).
+    ✔ Los registros digitales son aceptados por la DGI en auditorías.
+    ✔ El sistema opera en el marco legal vigente sin requerir licencias
+      especiales ni autorizaciones previas para su uso interno.
+
+  Acciones pendientes (de bajo riesgo):
+    ⚠ Agregar aviso de privacidad al formulario de registro de clientes.
+    ⚠ Si el negocio supera el umbral de Cuota Fija, tramitar autorización
+      formal del software ante la DGI (Administración de Rentas).
+
+================================================================================
+                         FIN DEL DOCUMENTO
+================================================================================

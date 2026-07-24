@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
-    OrdenCompra, DetalleOrdenCompra, OrdenVenta, DetalleOrdenVenta,
+    OrdenCompra, OrdenVenta,
     MovimientoInventario, Moto, ServicioMoto, Servicio, BitacoraServicio,
     AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta,
     Cotizacion, Devolucion
@@ -53,30 +53,23 @@ def _batch_cache(serializer, attr_name, builder):
 
 class MarcaSerializer(serializers.ModelSerializer):
     """Serializer básico para Marca"""
-    productos_count = serializers.SerializerMethodField()
-    
+    # Nota: Producto no tiene relación con Marca en el esquema actual
+    # (no existe columna marca_id en productos), por eso no hay un
+    # "productos_count" aquí — nada que contar todavía.
     class Meta:
         model = Marca
-        fields = ['id', 'nombre', 'descripcion', 'fecha_creacion', 'productos_count']
-        read_only_fields = ['fecha_creacion', 'productos_count']
-
-    def get_productos_count(self, obj):
-        """Retorna el número de productos asociados a esta marca"""
-        return obj.productos.count()
+        fields = ['id', 'nombre', 'descripcion', 'fecha_creacion']
+        read_only_fields = ['fecha_creacion']
 
 
 class CategoriaSerializer(serializers.ModelSerializer):
     """Serializer básico para Categoria"""
-    productos_count = serializers.SerializerMethodField()
-    
+    # Nota: Producto no tiene relación con Categoria en el esquema actual
+    # (no existe columna categoria_id en productos).
     class Meta:
         model = Categoria
-        fields = ['id', 'nombre', 'descripcion', 'fecha_creacion', 'productos_count']
-        read_only_fields = ['fecha_creacion', 'productos_count']
-
-    def get_productos_count(self, obj):
-        """Retorna el número de productos asociados a esta categoría"""
-        return obj.productos.count()
+        fields = ['id', 'nombre', 'descripcion', 'fecha_creacion']
+        read_only_fields = ['fecha_creacion']
 
 
 class ProveedorListSerializer(serializers.ModelSerializer):
@@ -169,20 +162,6 @@ class ClienteDetailSerializer(serializers.ModelSerializer):
 # ============================================================================
 # ORDEN COMPRA SERIALIZERS
 # ============================================================================
-
-class DetalleOrdenCompraSerializer(serializers.ModelSerializer):
-    """Serializer para detalles de orden de compra"""
-    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
-    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
-    
-    class Meta:
-        model = DetalleOrdenCompra
-        fields = [
-            'id', 'producto', 'producto_nombre', 'producto_codigo',
-            'cantidad', 'precio_unitario', 'subtotal'
-        ]
-        read_only_fields = ['subtotal']
-
 
 ESTADO_ID_MAP = {
     1: 'cancelada',
@@ -389,20 +368,6 @@ class OrdenCompraCreateSerializer(serializers.Serializer):
 # ORDEN VENTA SERIALIZERS
 # ============================================================================
 
-class DetalleOrdenVentaSerializer(serializers.ModelSerializer):
-    """Serializer para detalles de orden de venta"""
-    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
-    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
-    
-    class Meta:
-        model = DetalleOrdenVenta
-        fields = [
-            'id', 'producto', 'producto_nombre', 'producto_codigo',
-            'cantidad', 'precio_unitario', 'subtotal'
-        ]
-        read_only_fields = ['subtotal']
-
-
 class PagoVentaSerializer(serializers.ModelSerializer):
     """Serializer de lectura para un pago/abono de venta."""
     metodo_pago_display = serializers.CharField(source='get_metodo_pago_display', read_only=True)
@@ -599,7 +564,7 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
     id_cliente = serializers.IntegerField(read_only=True)
     
     def create(self, validated_data):
-        from django.db import connection
+        from django.db import connection, transaction
         from datetime import date
         from calendar import monthrange
 
@@ -612,28 +577,77 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
 
         detalles_data = validated_data.pop('detalles')
 
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                INSERT INTO ventas (id_cliente, fecha, total)
-                VALUES (%s, %s, %s)
-                RETURNING id_venta
-            """, [
-                validated_data['id_cliente'],
-                validated_data['fecha'],
-                validated_data['total']
-            ])
-            id_venta = cursor.fetchone()[0]
-
+        with transaction.atomic():
+            # Bloquear y validar stock de cada producto ANTES de crear la venta,
+            # para no descontar de más ni vender con stock insuficiente.
+            productos_bloqueados = {}
             for detalle in detalles_data:
+                producto_id = detalle['producto']
+                cantidad = int(detalle['cantidad'])
+                if cantidad <= 0:
+                    raise serializers.ValidationError(
+                        {'detalles': 'La cantidad de cada producto debe ser mayor a cero'}
+                    )
+                # US-11: precio no puede ser negativo (evita descuadrar el total).
+                if float(detalle.get('precio_unitario', 0)) < 0:
+                    raise serializers.ValidationError(
+                        {'detalles': 'El precio unitario no puede ser negativo'}
+                    )
+                if producto_id in productos_bloqueados:
+                    productos_bloqueados[producto_id]['cantidad'] += cantidad
+                    continue
+                try:
+                    producto = Producto.objects.select_for_update().get(pk=producto_id)
+                except Producto.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {'detalles': f'El producto {producto_id} no existe'}
+                    )
+                productos_bloqueados[producto_id] = {'producto': producto, 'cantidad': cantidad}
+
+            for info in productos_bloqueados.values():
+                if info['producto'].cantidad_actual < info['cantidad']:
+                    raise serializers.ValidationError(
+                        {'detalles': (
+                            f'Stock insuficiente para "{info["producto"].nombre}". '
+                            f'Disponible: {info["producto"].cantidad_actual}, '
+                            f'requerido: {info["cantidad"]}'
+                        )}
+                    )
+
+            with connection.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO ventas (id_cliente, fecha, total)
+                    VALUES (%s, %s, %s)
+                    RETURNING id_venta
                 """, [
-                    id_venta,
-                    detalle['producto'],
-                    detalle['cantidad'],
-                    detalle['precio_unitario']
+                    validated_data['id_cliente'],
+                    validated_data['fecha'],
+                    validated_data['total']
                 ])
+                id_venta = cursor.fetchone()[0]
+
+                for detalle in detalles_data:
+                    producto_id = detalle['producto']
+                    cantidad = int(detalle['cantidad'])
+                    cursor.execute("""
+                        INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s)
+                    """, [
+                        id_venta,
+                        producto_id,
+                        cantidad,
+                        detalle['precio_unitario']
+                    ])
+                    # Descontar stock y dejar rastro en movimientos_inventario
+                    cursor.execute(
+                        "UPDATE productos SET cantidad_actual = cantidad_actual - %s WHERE id_producto = %s",
+                        [cantidad, producto_id],
+                    )
+                    cursor.execute("""
+                        INSERT INTO movimientos_inventario
+                            (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                        VALUES (%s, 'SALIDA', %s, NOW(), %s, 'ORDEN_VENTA', %s)
+                    """, [producto_id, cantidad, f'VENTA-{id_venta}', f'Venta #{id_venta}'])
 
         # Auto-crear garantías para productos que las tengan
         fecha_venta = validated_data['fecha']
@@ -1065,6 +1079,12 @@ class CotizacionCreateSerializer(serializers.Serializer):
     def validate_detalles(self, value):
         if not value:
             raise serializers.ValidationError('Agrega al menos un producto')
+        # US-11: cantidad > 0 y precio no negativo.
+        for d in value:
+            if int(d.get('cantidad', 0)) <= 0:
+                raise serializers.ValidationError('La cantidad de cada producto debe ser mayor a cero')
+            if float(d.get('precio_unitario', 0)) < 0:
+                raise serializers.ValidationError('El precio unitario no puede ser negativo')
         return value
 
     def create(self, validated_data):
@@ -1158,7 +1178,10 @@ class DevolucionDetailSerializer(serializers.ModelSerializer):
 
 
 class DevolucionCreateSerializer(serializers.Serializer):
-    venta = serializers.IntegerField(required=False, allow_null=True, source='id_venta')
+    venta = serializers.IntegerField(required=True, source='id_venta', error_messages={
+        'required': 'La devolución debe referenciar una venta',
+        'null': 'La devolución debe referenciar una venta',
+    })
     cliente = serializers.IntegerField(required=False, allow_null=True, source='id_cliente')
     fecha = serializers.DateField(required=True)
     motivo = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -1171,6 +1194,62 @@ class DevolucionCreateSerializer(serializers.Serializer):
             if int(d.get('cantidad', 0)) <= 0:
                 raise serializers.ValidationError('La cantidad a devolver debe ser mayor a cero')
         return value
+
+    def validate(self, data):
+        """US-07: una devolución no puede exceder lo realmente vendido en esa
+        venta (ni incluir productos que no se vendieron). Cruza lo vendido
+        (producto_venta) contra lo ya devuelto (producto_devolucion)."""
+        id_venta = data.get('id_venta')
+        detalles = data.get('detalles', [])
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1 FROM ventas WHERE id_venta = %s", [id_venta])
+            if cursor.fetchone() is None:
+                raise serializers.ValidationError({'venta': 'La venta indicada no existe'})
+
+            # Cantidad vendida por producto en esta venta.
+            cursor.execute(
+                "SELECT id_producto, SUM(cantidad) FROM producto_venta "
+                "WHERE id_venta = %s GROUP BY id_producto",
+                [id_venta],
+            )
+            vendido = {row[0]: int(row[1]) for row in cursor.fetchall()}
+
+            # Cantidad ya devuelta por producto en devoluciones previas de esta venta.
+            cursor.execute(
+                """
+                SELECT pd.id_producto, SUM(pd.cantidad)
+                FROM producto_devolucion pd
+                JOIN devoluciones d ON d.id_devolucion = pd.id_devolucion
+                WHERE d.id_venta = %s AND d.estado = 'procesada'
+                GROUP BY pd.id_producto
+                """,
+                [id_venta],
+            )
+            ya_devuelto = {row[0]: int(row[1]) for row in cursor.fetchall()}
+
+        # Acumular lo pedido en esta devolución por producto (puede venir repetido).
+        pedido = {}
+        for d in detalles:
+            pid = int(d['producto'])
+            pedido[pid] = pedido.get(pid, 0) + int(d['cantidad'])
+
+        for pid, cant in pedido.items():
+            if pid not in vendido:
+                raise serializers.ValidationError(
+                    {'detalles': f'El producto {pid} no forma parte de la venta {id_venta}'}
+                )
+            disponible = vendido[pid] - ya_devuelto.get(pid, 0)
+            if cant > disponible:
+                raise serializers.ValidationError(
+                    {'detalles': (
+                        f'No se puede devolver {cant} del producto {pid}: '
+                        f'vendido {vendido[pid]}, ya devuelto {ya_devuelto.get(pid, 0)}, '
+                        f'disponible {disponible}'
+                    )}
+                )
+
+        return data
 
     def create(self, validated_data):
         from django.db import transaction
