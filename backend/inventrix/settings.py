@@ -398,11 +398,17 @@ if not DEBUG and any(_R2_VARS.values()) and not all(_R2_VARS.values()):
 # ============================================================================
 # Solo se activan con DEBUG=False para no romper el desarrollo local por HTTP.
 if not DEBUG:
-    # Detrás de nginx/Cloudflare: confiar en el header del proxy para saber
-    # que la petición original llegó por HTTPS (si no, SECURE_SSL_REDIRECT
-    # entraría en un bucle de redirecciones).
+    # Detrás del proxy de Dokploy (Traefik): confiar en el header para que
+    # request.is_secure() detecte bien HTTPS (usado por las cookies Secure).
+    #
+    # SECURE_SSL_REDIRECT queda deliberadamente en False (default): Traefik ya
+    # fuerza HTTPS en el borde y agrega/reescribe X-Forwarded-Proto de forma
+    # que Django no puede confiar en detectar "ya es HTTPS" de forma fiable.
+    # Con SECURE_SSL_REDIRECT=True, cualquier request que Django considere NO
+    # segura recibe 301 — incluyendo los preflight OPTIONS de CORS, que el
+    # navegador no puede seguir, rompiendo login y toda la API (visto en
+    # producción: "OPTIONS /api/... 301" en todos los endpoints).
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    SECURE_SSL_REDIRECT = True
 
     # Cookies solo por HTTPS.
     SESSION_COOKIE_SECURE = True

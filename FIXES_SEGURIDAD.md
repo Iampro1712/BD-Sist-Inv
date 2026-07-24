@@ -174,6 +174,16 @@ literalmente el criterio "docker compose config falla si faltan".
 
 **Tareas técnicas** — `backend/inventrix/settings.py` (bloque `if not DEBUG:`): `SECURE_SSL_REDIRECT`, `SECURE_PROXY_SSL_HEADER`, `SECURE_HSTS_*`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_CONTENT_TYPE_NOSNIFF`, `CSRF_TRUSTED_ORIGINS`.
 
+🔴 **Incidente (2026-07-24)**: `SECURE_SSL_REDIRECT=True` rompió producción — Dokploy/Traefik
+no reenvía `X-Forwarded-Proto` de forma que Django lo detecte de forma fiable, así que Django
+creía que TODAS las requests llegaban por HTTP y respondía **301** a todo, incluidos los
+preflight `OPTIONS` de CORS (el navegador no puede seguir una redirección en un preflight →
+login y toda la API quedaron bloqueados). Revertido: `SECURE_SSL_REDIRECT` se quita del bloque
+`if not DEBUG:` y se deja que Traefik fuerce HTTPS en el borde (ya lo hace). El resto de los
+flags (HSTS, cookies seguras, `SECURE_PROXY_SSL_HEADER` para que `request.is_secure()` funcione
+en las cookies) se mantienen. `check --deploy` ahora reporta `W008` (SSL redirect no forzado por
+Django) como esperado/aceptado en este entorno.
+
 ---
 
 # 🏃 Sprint 3 — "Hardening y deuda" (14 SP)

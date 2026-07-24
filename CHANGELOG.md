@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.0.0-4F46E5?style=flat-square)](#100---2026-07-24)
+[![Version](https://img.shields.io/badge/version-1.0.1-4F46E5?style=flat-square)](#101---2026-07-24)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,14 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.0.1] - 2026-07-24
+
+### Fixed
+
+- Revertido `SECURE_SSL_REDIRECT=True` (introducido en 1.0.0), que rompió producción: Dokploy/Traefik no reenvía `X-Forwarded-Proto` de forma que Django lo detecte de forma fiable, así que Django respondía `301` a toda petición — incluidos los preflight `OPTIONS` de CORS, bloqueando el login y toda la API. Traefik ya fuerza HTTPS en el borde; el resto de los flags de seguridad (HSTS, cookies seguras) se mantienen sin cambios.
 
 ---
 
