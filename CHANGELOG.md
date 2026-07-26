@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.8.0-4F46E5?style=flat-square)](#180---2026-07-25)
+[![Version](https://img.shields.io/badge/version-1.8.1-4F46E5?style=flat-square)](#181---2026-07-26)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,16 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.8.1] - 2026-07-26
+
+### Fixed
+
+- **Los logs de auditoría atribuían todos los cambios a `postgres`.** El registro de cambios de productos lo escribe un disparador de la base de datos, que solo conoce el usuario con el que se conecta el sistema, no la persona que hizo el cambio. Ahora cada registro guarda **el nombre de la cuenta que lo hizo** y su dirección IP, así que el historial sirve para saber quién tocó un precio o un stock.
+- Los cambios hechos por fuera del sistema (scripts, mantenimiento directo a la base) se identifican como **"sistema"** en vez de mostrar un nombre que parezca una persona.
+- La atribución no se contagia entre sesiones: el sistema reutiliza conexiones a la base de datos, así que se limpia el contexto en cada petición para que a nadie se le carguen cambios de otro.
 
 ---
 

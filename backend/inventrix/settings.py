@@ -73,6 +73,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'api.middleware.ErrorHandlingMiddleware',  # Error handling global
+    # Publica el usuario autenticado para el trigger de auditoría de productos.
+    # Va al final para que la sesión de Django ya esté resuelta.
+    'api.middleware.AuditoriaUsuarioMiddleware',
 ]
 
 ROOT_URLCONF = 'inventrix.urls'

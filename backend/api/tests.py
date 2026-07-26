@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 from inventory.models import (
     Proveedor, Producto, Cliente, MovimientoInventario, OrdenVenta, SesionCaja,
     CategoriaGasto, OrdenCompra, Moto, Servicio, ServicioMoto, BitacoraServicio,
-    Cotizacion, Ubicacion, DevolucionCompra,
+    Cotizacion, Ubicacion, DevolucionCompra, AuditoriaProducto,
 )
 
 
@@ -2208,3 +2208,128 @@ class DevolucionProveedorTestCase(APITestCase):
         self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
         self.producto.refresh_from_db()
         self.assertEqual(self.producto.cantidad_actual, 20)
+
+
+class AuditoriaUsuarioTestCase(APITestCase):
+    """Los logs deben decir quién hizo el cambio, no el rol de la base de datos.
+
+    La auditoría la escribe un trigger de Postgres, que solo veía `CURRENT_USER`
+    (`postgres`) porque un trigger no conoce al usuario de la aplicación. El
+    middleware lo publica en una variable de sesión y el trigger la lee.
+
+    Se usa la API con **token JWT real** en vez de `force_authenticate`: el
+    middleware tiene que resolver el token por su cuenta, porque DRF autentica
+    dentro de la vista, después de que el middleware ya corrió. Con
+    `force_authenticate` ese camino no se ejercitaría.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='jefa_auditoria', password='x', is_staff=True)
+        self.otro_admin = User.objects.create_user(
+            username='otro_admin', password='x', is_staff=True)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Proveedor Auditoría')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-AUD-1', nombre='Producto auditado',
+            cantidad_actual=10, cantidad_total=10, cantidad_minima=1,
+            precio_compra_unitario=50, precio_final='100.00',
+            id_proveedor=self.proveedor,
+        )
+        # Los cambios del setUp no interesan: se mide de acá en adelante.
+        AuditoriaProducto.objects.all().delete()
+
+    def _autenticar(self, usuario):
+        """Manda el token en el header, como lo hace el navegador.
+
+        El token se genera directo en vez de pegarle a /auth/login/ porque ese
+        endpoint tiene throttling de 5 por minuto y el cache persiste entre
+        tests. Es el mismo token; lo que importa es que el middleware tenga que
+        resolverlo desde el header, que es el camino de producción.
+        """
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = RefreshToken.for_user(usuario).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def _editar_precio(self, precio):
+        return self.client.patch(f'/api/productos/{self.producto.id_producto}/',
+                                 {'precio_final': str(precio)}, format='json')
+
+    # ------------------------------------------------------------------
+
+    def test_registra_el_username_de_quien_edita(self):
+        self._autenticar(self.admin)
+        r = self._editar_precio('150.00')
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+
+        log = AuditoriaProducto.objects.latest('fecha_cambio')
+        self.assertEqual(log.usuario, 'jefa_auditoria')
+        self.assertEqual(log.operacion, 'UPDATE')
+        # Y no el rol de conexión, que era el síntoma original.
+        self.assertNotEqual(log.usuario, 'postgres')
+
+    def test_cada_usuario_queda_con_sus_propios_cambios(self):
+        """El riesgo real: las conexiones se reutilizan entre peticiones
+        (conn_max_age), así que un usuario podría heredar el nombre del anterior
+        y cargar con cambios que no hizo."""
+        self._autenticar(self.admin)
+        self._editar_precio('150.00')
+
+        self._autenticar(self.otro_admin)
+        self._editar_precio('175.00')
+
+        logs = list(AuditoriaProducto.objects.order_by('id_auditoria')
+                    .values_list('usuario', flat=True))
+        self.assertEqual(logs, ['jefa_auditoria', 'otro_admin'])
+
+    def test_peticion_sin_sesion_no_hereda_el_usuario_anterior(self):
+        self._autenticar(self.admin)
+        self._editar_precio('150.00')
+
+        # Se cae la sesión y alguien toca la base por fuera de la aplicación
+        # (script, psql, un comando de management).
+        self.client.credentials()
+        Producto.objects.filter(pk=self.producto.id_producto).update(
+            precio_final='200.00')
+
+        log = AuditoriaProducto.objects.latest('id_auditoria')
+        self.assertNotEqual(log.usuario, 'jefa_auditoria')
+        # Se declara que fue un proceso directo, en vez de un nombre que
+        # parezca una persona.
+        self.assertIn('sistema', log.usuario)
+
+    def test_cambio_por_sql_crudo_tambien_se_audita_con_el_usuario(self):
+        """La mayor parte del sistema mueve stock con SQL crudo (ventas, taller,
+        recepciones). El trigger es lo único que captura esos cambios, y también
+        tiene que atribuirlos bien."""
+        self._autenticar(self.admin)
+        r = self.client.post('/api/movimientos/ajuste/', {
+            'producto_id': self.producto.id_producto,
+            'cantidad': 5,
+            'notas': 'Ajuste auditado',
+        }, format='json')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+
+        log = AuditoriaProducto.objects.latest('id_auditoria')
+        self.assertEqual(log.usuario, 'jefa_auditoria')
+        self.assertEqual(log.diferencia_cantidad, 5)
+
+    def test_registra_la_ip(self):
+        self._autenticar(self.admin)
+        self._editar_precio('150.00')
+
+        log = AuditoriaProducto.objects.latest('id_auditoria')
+        self.assertIsNotNone(log.usuario)
+        # El cliente de tests viaja con REMOTE_ADDR.
+        self.assertTrue(log.ip_address)
+
+    def test_la_columna_ya_no_tiene_el_default_de_la_base(self):
+        """Sin quitar el DEFAULT CURRENT_USER, cualquier INSERT que omitiera la
+        columna volvería a escribir `postgres`."""
+        with connection.cursor() as c:
+            c.execute("""
+                SELECT column_default FROM information_schema.columns
+                WHERE table_name = 'auditoria_productos' AND column_name = 'usuario'
+            """)
+            self.assertIsNone(c.fetchone()[0])
