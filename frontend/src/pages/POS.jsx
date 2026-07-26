@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useProductos } from '../hooks/useProductos'
 import { useClientes } from '../hooks/useClientes'
 import { useCreateOrdenVenta as useCrearVenta } from '../hooks/useOrdenesVenta'
+import { useCajaActual } from '../hooks/useCaja'
 import { useDebounce } from '../hooks/useDebounce'
 import { useToast } from '../hooks/useToast'
 import { productosService } from '../services/productos.service'
@@ -19,13 +21,17 @@ const POS = () => {
   const [clienteId, setClienteId] = useState('')
   const [scannerOpen, setScannerOpen] = useState(false)
   const [cobrando, setCobrando] = useState(false)
+  const [metodoPago, setMetodoPago] = useState('efectivo')
   const scanRef = useRef(null)
   const toast = useToast()
 
   const debouncedQuery = useDebounce(query, 300)
   const { data: productosData } = useProductos({ search: debouncedQuery || undefined })
   const { data: clientesData } = useClientes()
+  const { data: cajaActual } = useCajaActual()
   const crearVenta = useCrearVenta()
+
+  const cajaAbierta = !!cajaActual
 
   const productos = productosData?.results || []
   const clientes = clientesData?.results || []
@@ -96,6 +102,7 @@ const POS = () => {
 
   const cobrar = async () => {
     if (!cart.length) return
+    if (!cajaAbierta) { toast.error('Abre la caja antes de cobrar'); return }
     if (!clienteId) { toast.error('Selecciona un cliente'); return }
     setCobrando(true)
     try {
@@ -112,7 +119,7 @@ const POS = () => {
       // Marca la venta como pagada (cobro de mostrador)
       if (idVenta) {
         try {
-          await ordenesVentaService.registrarPago(idVenta, { monto: total, metodo_pago: 'efectivo' })
+          await ordenesVentaService.registrarPago(idVenta, { monto: total, metodo_pago: metodoPago })
         } catch { /* la venta quedó creada aunque falle el registro de pago */ }
       }
       toast.success(`Venta #${idVenta ?? ''} cobrada · ${formatCurrency(total)}`)
@@ -172,6 +179,12 @@ const POS = () => {
                   <p className="text-xs font-mono text-gray-400">{p.sku_producto}</p>
                   <p className="text-sm font-bold text-primary-600 dark:text-primary-400 mt-1">{formatCurrency(p.precio_final)}</p>
                   <p className="text-xs text-gray-400">Stock: {p.cantidad_actual}</p>
+                  {/* Dónde ir a buscarlo, sin salir del mostrador */}
+                  {p.ubicacion_codigo && (
+                    <p className="text-xs font-mono text-gray-500 dark:text-gray-400 mt-0.5">
+                      📍 {p.ubicacion_codigo}
+                    </p>
+                  )}
                 </button>
               ))}
               {productos.length === 0 && (
@@ -213,6 +226,14 @@ const POS = () => {
               ))}
             </div>
 
+            {/* Aviso: sin caja abierta no se puede cobrar */}
+            {!cajaAbierta && (
+              <div className="mb-3 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+                No hay caja abierta.{' '}
+                <Link to="/caja" className="font-medium underline">Abre la caja</Link> para poder cobrar.
+              </div>
+            )}
+
             {/* Cliente */}
             <div className="mb-3">
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Cliente</label>
@@ -222,12 +243,25 @@ const POS = () => {
               </select>
             </div>
 
+            {/* Método de pago */}
+            <div className="mb-3">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Método de pago</label>
+              <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500">
+                <option value="efectivo">Efectivo</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="deposito">Depósito</option>
+                <option value="cheque">Cheque</option>
+              </select>
+            </div>
+
             <div className="flex items-center justify-between mb-3 px-1">
               <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Total</span>
               <span className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(total)}</span>
             </div>
 
-            <Button onClick={cobrar} loading={cobrando} disabled={cobrando || cart.length === 0} className="w-full">
+            <Button onClick={cobrar} loading={cobrando} disabled={cobrando || cart.length === 0 || !cajaAbierta} className="w-full">
               Cobrar {formatCurrency(total)}
             </Button>
           </Card>

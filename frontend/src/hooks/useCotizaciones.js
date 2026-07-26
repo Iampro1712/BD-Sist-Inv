@@ -45,6 +45,10 @@ export const useCambiarEstadoCotizacion = () => {
     mutationFn: ({ id, estado }) => cotizacionesService.cambiarEstado(id, estado),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cotizaciones'] })
+      // Aprobar un presupuesto de reparación carga la orden de trabajo y
+      // consume repuestos del inventario.
+      queryClient.invalidateQueries({ queryKey: ['taller'] })
+      queryClient.invalidateQueries({ queryKey: ['productos'] })
     },
   })
 }

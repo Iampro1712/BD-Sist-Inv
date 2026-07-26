@@ -1,30 +1,59 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { fadeIn, staggerContainer } from '../utils/animations'
-import { useDevoluciones, useDevolucion, useCreateDevolucion } from '../hooks/useDevoluciones'
+import {
+  useDevoluciones, useDevolucion, useCreateDevolucion,
+  useDevolucionesCompra, useCreateDevolucionCompra,
+} from '../hooks/useDevoluciones'
 import { useToast } from '../hooks/useToast'
+import useAuthStore from '../hooks/useAuthStore'
 import { Button, Card, Modal } from '../components/ui'
 import DevolucionForm from '../components/forms/DevolucionForm'
+import DevolucionCompraForm from '../components/forms/DevolucionCompraForm'
 
 const formatCurrency = (v) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 const formatDate = (d) =>
   new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
 
+/** Saca el mensaje del backend, que explica el motivo real del rechazo. */
+const mensajeError = (err, fallback) => {
+  const data = err?.response?.data
+  const details = data?.error?.details
+  if (details && typeof details === 'object') {
+    const primero = Object.values(details)[0]
+    if (primero) return Array.isArray(primero) ? primero[0] : primero
+  }
+  const message = data?.error?.message
+  if (typeof message === 'string') return message
+  if (typeof data?.error === 'string') return data.error
+  return data?.detalles?.[0] || err?.message || fallback
+}
+
 const Devoluciones = () => {
+  const [tab, setTab] = useState('clientes')
   const [page, setPage] = useState(1)
   const [isNewOpen, setIsNewOpen] = useState(false)
+  const [isNewCompraOpen, setIsNewCompraOpen] = useState(false)
   const [isDetalleOpen, setIsDetalleOpen] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
   const toast = useToast()
+  const esAdmin = useAuthStore((s) => s.user?.is_staff)
 
   const { data, isLoading, error } = useDevoluciones({ page })
   const { data: detalle } = useDevolucion(selectedId)
   const createMutation = useCreateDevolucion()
 
+  // Devoluciones a proveedor: solo admin (el backend las restringe así).
+  const { data: dataCompra, isLoading: cargandoCompra, error: errorCompra } =
+    useDevolucionesCompra({}, tab === 'proveedores' && esAdmin)
+  const createCompra = useCreateDevolucionCompra()
+
   const devoluciones = data?.results || data || []
   const totalCount = data?.count || devoluciones.length
   const totalPages = totalCount ? Math.ceil(totalCount / 20) : 1
+
+  const devolucionesCompra = dataCompra?.results || dataCompra || []
 
   const handleCreate = async (formData) => {
     try {
@@ -32,7 +61,21 @@ const Devoluciones = () => {
       setIsNewOpen(false)
       toast.success('Devolución procesada y stock reingresado')
     } catch (err) {
-      toast.error(err.response?.data?.detalles?.[0] || err.response?.data?.error || err.message || 'Error al procesar devolución')
+      toast.error(mensajeError(err, 'Error al procesar devolución'))
+    }
+  }
+
+  const handleCreateCompra = async (formData) => {
+    try {
+      const res = await createCompra.mutateAsync(formData)
+      const d = res.data
+      const aFavor = d.saldo_a_favor
+      setIsNewCompraOpen(false)
+      toast.success(aFavor > 0
+        ? `Devolución registrada. El proveedor queda debiendo ${formatCurrency(aFavor)}`
+        : 'Devolución registrada: stock descontado y deuda ajustada')
+    } catch (err) {
+      toast.error(mensajeError(err, 'Error al registrar la devolución'))
     }
   }
 
@@ -43,18 +86,149 @@ const Devoluciones = () => {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Devoluciones</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Notas de crédito; al procesarlas el stock se reingresa</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {tab === 'clientes'
+              ? 'Notas de crédito; al procesarlas el stock se reingresa'
+              : 'Mercadería devuelta al proveedor: sale del stock y baja la deuda'}
+          </p>
         </div>
-        <Button onClick={() => setIsNewOpen(true)} className="shrink-0">+ Nueva devolución</Button>
+        {tab === 'clientes' ? (
+          <Button onClick={() => setIsNewOpen(true)} className="shrink-0">+ Nueva devolución</Button>
+        ) : esAdmin && (
+          <Button onClick={() => setIsNewCompraOpen(true)} className="shrink-0">
+            + Devolver a proveedor
+          </Button>
+        )}
       </div>
 
-      {error && (
+      {/* Pestañas: las dos devoluciones viven en tablas distintas porque mueven
+          el stock en direcciones opuestas, pero se administran en un solo lugar. */}
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+        {[
+          { id: 'clientes', label: 'De clientes' },
+          { id: 'proveedores', label: 'A proveedores' },
+        ].map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === t.id
+                ? 'border-primary-600 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ---------------------------- A PROVEEDORES ---------------------------- */}
+      {tab === 'proveedores' && (
+        !esAdmin ? (
+          <Card className="p-12 text-center">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Solo para administradores
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Devolver mercadería a un proveedor mueve stock y deuda.
+            </p>
+          </Card>
+        ) : errorCompra ? (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-800 dark:text-red-400 text-sm">
+            Error al cargar devoluciones a proveedores: {errorCompra.message}
+          </div>
+        ) : cargandoCompra ? (
+          <Card className="p-6 space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            ))}
+          </Card>
+        ) : devolucionesCompra.length === 0 ? (
+          <Card className="p-12 text-center">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Sin devoluciones a proveedores
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Cuando llegue mercadería defectuosa o equivocada, registrala acá para
+              que salga del inventario y deje de deberse.
+            </p>
+            <Button className="mt-4" onClick={() => setIsNewCompraOpen(true)}>
+              + Devolver a proveedor
+            </Button>
+          </Card>
+        ) : (
+          <motion.div variants={staggerContainer} initial="hidden" animate="visible"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900/50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"># Dev.</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proveedor</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Compra</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Motivo</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Devuelto</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reembolsado</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">A favor</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {devolucionesCompra.map((d) => (
+                    <motion.tr key={d.id_devolucion_compra} variants={fadeIn}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm font-mono font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                          #{d.id_devolucion_compra}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                        {d.proveedor_nombre}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        #{d.id_orden}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {formatDate(d.fecha)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-[220px] truncate">
+                        {d.motivo || '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900 dark:text-white">
+                        {formatCurrency(d.total)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600 dark:text-gray-400">
+                        {d.reembolso > 0 ? (
+                          <>
+                            {formatCurrency(d.reembolso)}
+                            <span className="block text-xs text-gray-400">
+                              {d.metodo_reembolso_display}
+                            </span>
+                          </>
+                        ) : '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        {d.saldo_a_favor > 0 ? (
+                          <span className="font-semibold text-amber-600 dark:text-amber-400">
+                            {formatCurrency(d.saldo_a_favor)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                        )}
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        )
+      )}
+
+      {tab === 'clientes' && error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-800 dark:text-red-400 text-sm">
           Error al cargar devoluciones: {error.message}
         </div>
       )}
 
-      {isLoading ? (
+      {tab === 'clientes' && (isLoading ? (
         <Card className="p-6 space-y-3">
           {[...Array(5)].map((_, i) => <div key={i} className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />)}
         </Card>
@@ -110,11 +284,18 @@ const Devoluciones = () => {
             </div>
           )}
         </motion.div>
-      )}
+      ))}
 
-      {/* Modal Nueva */}
+      {/* Modal Nueva (cliente) */}
       <Modal isOpen={isNewOpen} onClose={() => setIsNewOpen(false)} title="Nueva Devolución" size="xl">
         <DevolucionForm onSubmit={handleCreate} onCancel={() => setIsNewOpen(false)} isLoading={createMutation.isPending} />
+      </Modal>
+
+      {/* Modal Nueva (proveedor) */}
+      <Modal isOpen={isNewCompraOpen} onClose={() => setIsNewCompraOpen(false)}
+        title="Devolver mercadería a un proveedor" size="xl">
+        <DevolucionCompraForm onSubmit={handleCreateCompra}
+          onCancel={() => setIsNewCompraOpen(false)} isLoading={createCompra.isPending} />
       </Modal>
 
       {/* Modal Detalle */}

@@ -1,8 +1,10 @@
 import { motion } from 'framer-motion'
 import { Badge, Button } from '../ui'
 import { fadeIn } from '../../utils/animations'
+import { usePreciosDeProducto } from '../../hooks/useProveedores'
 
 const ProductoDetalle = ({ producto, onEdit }) => {
+  const { data: precios } = usePreciosDeProducto(producto?.id_producto)
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(value || 0)
   }
@@ -77,6 +79,38 @@ const ProductoDetalle = ({ producto, onEdit }) => {
           <p className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">{producto.cantidad_total}</p>
         </div>
       </motion.div>
+
+      {/* A qué precio lo vendió cada proveedor, según el historial de compras */}
+      {(precios?.proveedores?.length || 0) > 0 && (
+        <motion.div variants={fadeIn}
+          className="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
+            Precio por proveedor (historial de compras)
+          </p>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {precios.proveedores.map((p) => (
+              <div key={p.id_proveedor}
+                className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                <span className={p.id_proveedor === precios.proveedores[0].id_proveedor
+                  ? 'font-semibold text-green-700 dark:text-green-400'
+                  : 'text-gray-700 dark:text-gray-300'}>
+                  {p.proveedor}
+                  {p.id_proveedor === precios.proveedores[0].id_proveedor
+                    && precios.proveedores.length > 1 && ' · más barato'}
+                </span>
+                <span className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    {p.veces_comprado}x
+                  </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(p.ultimo_precio)}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Garantía */}
       {producto.meses_garantia > 0 && (

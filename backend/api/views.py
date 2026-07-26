@@ -1,6 +1,10 @@
 """
 ViewSets para la API de Inventrix
 """
+from datetime import date, timedelta
+from decimal import Decimal
+
+from django.utils import timezone
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -11,7 +15,8 @@ from .permissions import IsAdminOrReadOnly
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import models
+from django.db import connection, models, transaction
+from django.db.utils import IntegrityError
 from django.db.models import Q, Sum, F
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -19,7 +24,9 @@ from inventory.models import (
     Proveedor, Marca, Categoria, Producto, Cliente,
     OrdenCompra, OrdenVenta, MovimientoInventario, Moto, ServicioMoto, Servicio,
     BitacoraServicio, AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta,
-    Cotizacion, Devolucion
+    Cotizacion, Devolucion, SesionCaja, MovimientoCaja,
+    CategoriaGasto, Gasto, PagoCompra, ServicioRepuesto, Ubicacion,
+    DevolucionCompra,
 )
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
@@ -38,6 +45,11 @@ from .serializers import (
     CotizacionListSerializer, CotizacionDetailSerializer, CotizacionCreateSerializer,
     DevolucionListSerializer, DevolucionDetailSerializer, DevolucionCreateSerializer,
     UsuarioSerializer,
+    SesionCajaSerializer, MovimientoCajaSerializer, AbrirCajaSerializer, CerrarCajaSerializer,
+    CategoriaGastoSerializer, GastoSerializer, GastoCreateSerializer,
+    PagoCompraSerializer, PagoCompraCreateSerializer,
+    ServicioRepuestoSerializer, UbicacionSerializer,
+    DevolucionCompraSerializer, DevolucionCompraCreateSerializer,
 )
 
 # MasterDev
@@ -109,6 +121,51 @@ class CategoriaViewSet(viewsets.ModelViewSet):
     ordering = ['nombre']
 
 
+class UbicacionViewSet(viewsets.ModelViewSet):
+    """Lugares físicos de almacenamiento (bodega / pasillo / estante / gaveta).
+
+    Lectura para cualquier usuario (el POS muestra dónde está el producto);
+    administrarlos es de admin (US-04).
+    """
+    permission_classes = [IsAdminOrReadOnly]
+    serializer_class = UbicacionSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['bodega', 'pasillo', 'estante', 'gaveta', 'notas']
+    ordering_fields = ['bodega', 'pasillo', 'estante', 'gaveta']
+    ordering = ['bodega', 'pasillo', 'estante', 'gaveta']
+
+    def get_queryset(self):
+        # Se anotan los agregados acá para que el listado no haga dos consultas
+        # por cada ubicación (ver UbicacionSerializer._agregados).
+        queryset = Ubicacion.objects.annotate(
+            num_productos=models.Count('productos'),
+            valor_guardado=Sum(
+                F('productos__cantidad_actual') * F('productos__precio_final'),
+                output_field=models.DecimalField(max_digits=14, decimal_places=2),
+            ),
+        )
+        bodega = self.request.query_params.get('bodega')
+        if bodega:
+            queryset = queryset.filter(bodega=bodega)
+        if self.request.query_params.get('activo') == 'true':
+            queryset = queryset.filter(activo=True)
+        return queryset
+
+    @action(detail=True, methods=['get'])
+    def productos(self, request, pk=None):
+        """Qué hay guardado en este lugar."""
+        ubicacion = self.get_object()
+        productos = ubicacion.productos.select_related('id_proveedor').order_by('nombre')
+        return Response(ProductoListSerializer(productos, many=True).data)
+
+    @action(detail=False, methods=['get'])
+    def bodegas(self, request):
+        """Bodegas existentes, para poblar filtros sin traer todo el catálogo."""
+        nombres = (Ubicacion.objects.values_list('bodega', flat=True)
+                   .distinct().order_by('bodega'))
+        return Response(list(nombres))
+
+
 class ProductoViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de productos.
 
@@ -116,7 +173,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
     borrar e importar productos son acciones de administrador (US-04).
     """
     permission_classes = [IsAdminOrReadOnly]
-    queryset = Producto.objects.all()
+    queryset = Producto.objects.select_related('id_ubicacion', 'id_proveedor').all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['sku_producto', 'nombre']
     ordering_fields = ['nombre', 'sku_producto', 'cantidad_actual', 'precio_final']
@@ -141,8 +198,102 @@ class ProductoViewSet(viewsets.ModelViewSet):
         proveedor_id = self.request.query_params.get('proveedor', None)
         if proveedor_id:
             queryset = queryset.filter(id_proveedor_id=proveedor_id)
-        
+
+        # Filtros de ubicación
+        ubicacion_id = self.request.query_params.get('ubicacion', None)
+        if ubicacion_id:
+            queryset = queryset.filter(id_ubicacion_id=ubicacion_id)
+        bodega = self.request.query_params.get('bodega', None)
+        if bodega:
+            queryset = queryset.filter(id_ubicacion__bodega=bodega)
+        # Lo que falta por ubicar: sin esto no hay forma de saber cuánto queda
+        # de la tarea y se abandona a medias.
+        if self.request.query_params.get('sin_ubicacion') == 'true':
+            queryset = queryset.filter(id_ubicacion__isnull=True)
+
         return queryset
+
+    @action(detail=True, methods=['get'], url_path='precios-proveedores')
+    def precios_proveedores(self, request, pk=None):
+        """A qué precio le vendió cada proveedor este producto.
+
+        Alimenta el aviso del formulario de compra: es el único punto donde ver
+        que otro proveedor lo daba más barato sirve para cambiar la decisión.
+        Lectura para cualquier usuario autenticado (el permiso del ViewSet ya
+        permite GET), a diferencia de los reportes que son admin-only.
+        """
+        producto = self.get_object()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT oc.id_proveedor, pr.nombre_empresa,
+                       COUNT(*)                AS veces,
+                       AVG(op.precio_unitario) AS promedio,
+                       MAX(oc.fecha_creacion)  AS ultima_fecha,
+                       -- Desempate por id_orden: dos compras el mismo día al
+                       -- mismo proveedor dejarían el último precio indefinido.
+                       (ARRAY_AGG(op.precio_unitario
+                                  ORDER BY oc.fecha_creacion DESC, oc.id_orden DESC))[1]
+                                               AS ultimo_precio
+                FROM orden_producto op
+                JOIN orden_compra oc ON oc.id_orden = op.id_orden
+                JOIN proveedores pr ON pr.id_proveedor = oc.id_proveedor
+                WHERE op.id_producto = %s
+                  AND op.precio_unitario IS NOT NULL AND op.precio_unitario > 0
+                  AND oc.id_estado <> 1
+                GROUP BY oc.id_proveedor, pr.nombre_empresa
+                ORDER BY 6
+            """, [producto.id_producto])
+            proveedores = [{
+                'id_proveedor': r[0],
+                'proveedor': r[1],
+                'veces_comprado': int(r[2]),
+                'precio_promedio': round(float(r[3]), 2),
+                'ultima_fecha': r[4],
+                'ultimo_precio': round(float(r[5]), 2),
+            } for r in cursor.fetchall()]
+
+        mejor = proveedores[0] if proveedores else None
+        return Response({
+            'id_producto': producto.id_producto,
+            'nombre': producto.nombre,
+            'proveedor_asignado': producto.id_proveedor_id,
+            'mejor_precio': mejor['ultimo_precio'] if mejor else None,
+            'mejor_proveedor': mejor['proveedor'] if mejor else None,
+            'proveedores': proveedores,
+        })
+
+    @action(detail=False, methods=['post'], url_path='asignar-ubicacion')
+    def asignar_ubicacion(self, request):
+        """Asigna una ubicación a varios productos de una vez.
+
+        Es la palanca de adopción de la función: ubicar 75 productos entrando
+        uno por uno es la fricción que dejó `marcas` y `categorias` en cero
+        filas. Enviar `id_ubicacion: null` desasigna.
+        """
+        if not request.user.is_staff:
+            return Response({'error': 'Solo un administrador puede asignar ubicaciones.'},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        ids = request.data.get('productos') or []
+        id_ubicacion = request.data.get('id_ubicacion')
+
+        if not isinstance(ids, list) or not ids:
+            return Response({'error': 'Enviá la lista de productos a ubicar.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if id_ubicacion is not None:
+            if not Ubicacion.objects.filter(pk=id_ubicacion).exists():
+                return Response({'error': 'La ubicación no existe.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            actualizados = Producto.objects.filter(id_producto__in=ids).update(
+                id_ubicacion_id=id_ubicacion)
+
+        return Response({
+            'actualizados': actualizados,
+            'id_ubicacion': id_ubicacion,
+        })
 
     def perform_destroy(self, instance):
         """Eliminar producto usando SQL directo para evitar verificación de relaciones"""
@@ -265,6 +416,14 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
     ordering_fields = ['fecha_creacion']
     ordering = ['-fecha_creacion']
 
+    def get_permissions(self):
+        # Registrar/consultar pagos a proveedor lo puede hacer cualquier usuario
+        # autenticado (un pago en efectivo es un egreso del turno, necesario para
+        # el arqueo). Gestionar la orden (crear/confirmar/recibir) sigue admin.
+        if self.action in ('pagos', 'registrar_pago', 'eliminar_pago'):
+            return [IsAuthenticated()]
+        return [IsAdminOrReadOnly()]
+
     def get_serializer_class(self):
         if self.action == 'list':
             return OrdenCompraListSerializer
@@ -304,46 +463,105 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    def _recibir_orden(self, orden, usuario):
+        """Recibe la mercadería: suma el stock y deja el rastro del movimiento.
+
+        Antes recibir una orden solo cambiaba `id_estado`, sin tocar inventario:
+        la mercadería entraba a la bodega y el sistema nunca se enteraba (y la
+        interfaz igual anunciaba "stock actualizado"). Acá se hace de verdad.
+
+        Devuelve `(respuesta_error, resumen)`: si `respuesta_error` no es None,
+        no se aplicó nada.
+        """
+        if orden.id_estado == OrdenCompra.ESTADO_CANCELADA:
+            return Response(
+                {'error': 'La orden está cancelada; no se puede recibir.'},
+                status=status.HTTP_400_BAD_REQUEST), None
+
+        if orden.stock_aplicado:
+            return Response(
+                {'error': f'La orden #{orden.id_orden} ya fue recibida y su stock '
+                          f'ya se sumó al inventario.'},
+                status=status.HTTP_400_BAD_REQUEST), None
+
+        if orden.id_estado != OrdenCompra.ESTADO_PENDIENTE:
+            return Response(
+                {'error': 'Solo se puede recibir una orden pendiente.'},
+                status=status.HTTP_400_BAD_REQUEST), None
+
+        lineas = orden.lineas_recepcion()
+        if not lineas:
+            # Sin cantidades no hay forma de saber cuánto sumar. Se rechaza en
+            # vez de "recibir" sin mover nada: un no-op silencioso es lo que
+            # hacía que la interfaz mintiera.
+            return Response(
+                {'error': 'Esta orden no tiene cantidades registradas en su detalle, '
+                          'así que no se puede saber cuánto stock sumar. Es una orden '
+                          'creada antes de que el sistema guardara las cantidades.'},
+                status=status.HTTP_400_BAD_REQUEST), None
+
+        aplicadas = []
+        with transaction.atomic():
+            # Se relee con bloqueo: dos recepciones simultáneas no pueden pasar
+            # ambas la guarda de stock_aplicado.
+            orden = OrdenCompra.objects.select_for_update().get(pk=orden.pk)
+            if orden.stock_aplicado:
+                return Response(
+                    {'error': f'La orden #{orden.id_orden} ya fue recibida.'},
+                    status=status.HTTP_400_BAD_REQUEST), None
+
+            with connection.cursor() as cursor:
+                for id_producto, cantidad in lineas:
+                    cursor.execute(
+                        "UPDATE productos SET cantidad_actual = cantidad_actual + %s "
+                        "WHERE id_producto = %s",
+                        [cantidad, id_producto],
+                    )
+                    if cursor.rowcount == 0:
+                        # El producto se borró después de crear la orden.
+                        continue
+                    cursor.execute("""
+                        INSERT INTO movimientos_inventario
+                            (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                        VALUES (%s, 'ENTRADA', %s, NOW(), %s, 'ORDEN_COMPRA', %s)
+                    """, [id_producto, cantidad, f'COMPRA-{orden.id_orden}',
+                          f'Recepción de la orden de compra #{orden.id_orden} por {usuario}'])
+                    aplicadas.append((id_producto, cantidad))
+
+            orden.id_estado = OrdenCompra.ESTADO_RECIBIDA
+            orden.stock_aplicado = True
+            # Sin esta fecha no se puede medir cuánto tardó el proveedor.
+            orden.fecha_recepcion = timezone.now()
+            orden.save(update_fields=['id_estado', 'stock_aplicado', 'fecha_recepcion'])
+
+        return None, {
+            'lineas_aplicadas': len(aplicadas),
+            'unidades_ingresadas': sum(c for _, c in aplicadas),
+            'dias_entrega': orden.dias_entrega(),
+        }
+
     @action(detail=True, methods=['post'])
     def confirmar(self, request, pk=None):
-        """Confirma una orden de compra (pendiente → recibida/completada)"""
-        try:
-            orden = self.get_object()
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE orden_compra SET id_estado = 3 WHERE id_orden = %s AND id_estado = 2",
-                    [orden.id_orden]
-                )
-                if cursor.rowcount == 0:
-                    return Response(
-                        {'error': 'La orden no está en estado pendiente o no existe'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-            return Response({'status': 'Orden confirmada exitosamente'})
-        except Exception as e:
-            return Response(
-                {'error': f'Error al confirmar orden: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        """Alias histórico de `recibir`.
+
+        El catálogo `estado` solo tiene cancelada/pendiente/recibida, así que no
+        existe un estado "confirmada" intermedio: confirmar y recibir son la
+        misma transición. Se mantiene el endpoint porque la interfaz lo usaba, y
+        delega para que el stock se sume igual por cualquiera de los dos.
+        """
+        return self.recibir(request, pk)
 
     @action(detail=True, methods=['post'])
     def recibir(self, request, pk=None):
-        """Marca una orden de compra como recibida"""
-        try:
-            orden = self.get_object()
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE orden_compra SET id_estado = 3 WHERE id_orden = %s AND id_estado IN (2, 3)",
-                    [orden.id_orden]
-                )
-            return Response({'status': 'Orden recibida exitosamente'})
-        except Exception as e:
-            return Response(
-                {'error': f'Error al recibir orden: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        """Recibe la orden: suma el stock de cada línea al inventario."""
+        usuario = request.user.get_full_name() or request.user.username
+        error, resumen = self._recibir_orden(self.get_object(), usuario)
+        if error is not None:
+            return error
+        return Response({
+            'status': 'Orden recibida y stock actualizado',
+            **resumen,
+        })
 
     @action(detail=True, methods=['post'])
     def cancelar(self, request, pk=None):
@@ -367,6 +585,53 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
                 {'error': f'Error al cancelar orden: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    # ------------------------------------------------------------------
+    # Cuentas por pagar: abonos a proveedores (espejo de OrdenVentaViewSet)
+    # ------------------------------------------------------------------
+    @action(detail=True, methods=['get'], url_path='pagos')
+    def pagos(self, request, pk=None):
+        """Lista los pagos/abonos de una compra (más reciente primero)."""
+        orden = self.get_object()
+        return Response(PagoCompraSerializer(orden.pagos.all(), many=True).data)
+
+    @action(detail=True, methods=['post'], url_path='registrar-pago')
+    def registrar_pago(self, request, pk=None):
+        """Registra un pago a proveedor y recalcula el saldo de la compra."""
+        from django.db import transaction
+        with transaction.atomic():
+            orden = OrdenCompra.objects.select_for_update().get(pk=pk)
+            if orden.estado_pago == 'pagado':
+                return Response(
+                    {'error': 'Esta compra ya está completamente pagada'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            serializer = PagoCompraCreateSerializer(
+                data=request.data, context={'orden': orden}
+            )
+            serializer.is_valid(raise_exception=True)
+            pago = serializer.save()
+        return Response(PagoCompraSerializer(pago).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path=r'pagos/(?P<id_pago>[^/.]+)')
+    def eliminar_pago(self, request, pk=None, id_pago=None):
+        """Elimina un pago (solo el último registrado) y recalcula el saldo."""
+        from django.db import transaction
+        with transaction.atomic():
+            orden = OrdenCompra.objects.select_for_update().get(pk=pk)
+            try:
+                pago = orden.pagos.get(pk=id_pago)
+            except PagoCompra.DoesNotExist:
+                return Response({'error': 'Pago no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            ultimo = orden.pagos.order_by('-created_at', '-id_pago').first()
+            if ultimo and pago.id_pago != ultimo.id_pago:
+                return Response(
+                    {'error': 'Solo se puede eliminar el último pago registrado'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            pago.delete()
+            orden.calcular_saldo()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class OrdenVentaViewSet(viewsets.ModelViewSet):
@@ -631,6 +896,116 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=['post'], url_path='aplicar-conteo')
+    def aplicar_conteo(self, request):
+        """Cuadra el inventario con lo que se contó físicamente.
+
+        La acción `ajuste` de arriba corrige un producto a la vez, así que un
+        conteo completo eran 75 formularios y en la práctica no se hacía. Acá se
+        recibe todo el conteo de una pasada.
+
+        Solo se ajusta lo que difiere: los productos que cuadran no generan
+        movimiento, para que la bitácora de inventario no se llene de ruido.
+        Se usa `tipo_referencia='AJUSTE_MANUAL'` (ya permitido por el CHECK de la
+        tabla) con la referencia `CONTEO-<fecha>` para poder distinguirlos.
+        """
+        if not request.user.is_staff:
+            return Response({'error': 'Solo un administrador puede aplicar un conteo.'},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        conteos = request.data.get('conteos') or []
+        if not isinstance(conteos, list) or not conteos:
+            return Response({'error': 'Enviá el conteo de al menos un producto.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Se valida TODO antes de tocar nada: un conteo aplicado a medias sería
+        # peor que no aplicarlo.
+        pendientes = []
+        for fila in conteos:
+            id_producto = fila.get('id_producto')
+            contado = fila.get('contado')
+            if id_producto is None or contado is None or contado == '':
+                continue  # producto no contado: se deja como está
+            try:
+                contado = int(contado)
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': f'La cantidad contada del producto {id_producto} no es un número.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            if contado < 0:
+                return Response(
+                    {'error': f'La cantidad contada del producto {id_producto} no puede ser negativa.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            pendientes.append((id_producto, contado))
+
+        if not pendientes:
+            return Response({'error': 'No se anotó ninguna cantidad contada.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        referencia = f'CONTEO-{timezone.now().date().isoformat()}'
+        usuario = request.user.get_full_name() or request.user.username
+        notas_extra = (request.data.get('notas') or '').strip()
+
+        resumen = {'cuadrados': 0, 'sobrantes': 0, 'faltantes': 0,
+                   'ajustados': 0, 'impacto': Decimal('0'), 'diferencias': []}
+
+        with transaction.atomic():
+            productos = {
+                p.id_producto: p for p in Producto.objects.select_for_update()
+                .filter(id_producto__in=[i for i, _ in pendientes])
+            }
+            faltan = [i for i, _ in pendientes if i not in productos]
+            if faltan:
+                return Response({'error': f'Productos inexistentes: {faltan}'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            with connection.cursor() as cursor:
+                for id_producto, contado in pendientes:
+                    producto = productos[id_producto]
+                    diferencia = contado - producto.cantidad_actual
+
+                    if diferencia == 0:
+                        resumen['cuadrados'] += 1
+                        continue
+
+                    if diferencia > 0:
+                        resumen['sobrantes'] += 1
+                    else:
+                        resumen['faltantes'] += 1
+                    resumen['ajustados'] += 1
+                    resumen['impacto'] += diferencia * (producto.precio_final or Decimal('0'))
+                    resumen['diferencias'].append({
+                        'id_producto': id_producto,
+                        'nombre': producto.nombre,
+                        'sistema': producto.cantidad_actual,
+                        'contado': contado,
+                        'diferencia': diferencia,
+                    })
+
+                    nota = (f'Conteo físico por {usuario}: sistema '
+                            f'{producto.cantidad_actual}, contado {contado}.')
+                    if notas_extra:
+                        nota = f'{nota} {notas_extra}'
+                    cursor.execute("""
+                        INSERT INTO movimientos_inventario
+                            (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                        VALUES (%s, 'AJUSTE', %s, NOW(), %s, 'AJUSTE_MANUAL', %s)
+                    """, [id_producto, diferencia, referencia, nota])
+
+                    producto.cantidad_actual = contado
+                    producto.save(update_fields=['cantidad_actual'])
+
+        return Response({
+            'referencia': referencia,
+            'contados': len(pendientes),
+            'cuadrados': resumen['cuadrados'],
+            'ajustados': resumen['ajustados'],
+            'sobrantes': resumen['sobrantes'],
+            'faltantes': resumen['faltantes'],
+            'impacto': float(resumen['impacto']),
+            'diferencias': resumen['diferencias'],
+        })
+
 
 # Dashboard y reportes removidos temporalmente
 # Se implementarán cuando se necesiten
@@ -659,75 +1034,428 @@ class MotoViewSet(viewsets.ModelViewSet):
 
 
 class ServicioMotoViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de servicios de motos"""
-    queryset = ServicioMoto.objects.all().select_related('id_moto')
+    """Órdenes de trabajo del taller: agenda, estados, repuestos y entrega."""
+    queryset = ServicioMoto.objects.all().select_related(
+        'id_moto', 'id_moto__id_cliente', 'id_mecanico', 'id_tipo_servicio'
+    ).prefetch_related('repuestos__id_producto', 'presupuestos')
     serializer_class = ServicioMotoSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['tipo_servicio', 'descripcion', 'id_moto__placa']
-    ordering_fields = ['fecha_servicio', 'costo']
+    ordering_fields = ['fecha_servicio', 'costo', 'fecha_cita']
     ordering = ['-fecha_servicio']
 
+    # Trabajar el día a día del taller (mover estados, consumir repuestos,
+    # entregar) es tarea del operador/mecánico; borrar órdenes es de admin.
+    ACCIONES_OPERATIVAS = {
+        'cambiar_estado', 'agregar_repuesto', 'eliminar_repuesto', 'entregar',
+        'presupuestar',
+        'create', 'update', 'partial_update', 'list', 'retrieve',
+    }
+
+    def get_permissions(self):
+        if self.action in self.ACCIONES_OPERATIVAS:
+            return [IsAuthenticated()]
+        return [IsAdminOrReadOnly()]
+
     def get_queryset(self):
-        """Filtrar servicios por moto si se proporciona el parámetro"""
         queryset = super().get_queryset()
         moto_id = self.request.query_params.get('moto', None)
         if moto_id:
             queryset = queryset.filter(id_moto=moto_id)
+        estado = self.request.query_params.get('estado', None)
+        if estado:
+            queryset = queryset.filter(estado=estado)
+        # El Kanban solo muestra lo que está en curso.
+        if self.request.query_params.get('activas') == 'true':
+            queryset = queryset.exclude(estado__in=['entregada', 'cancelada'])
+        mecanico = self.request.query_params.get('mecanico', None)
+        if mecanico:
+            queryset = queryset.filter(id_mecanico=mecanico)
         return queryset
-    
+
     def perform_create(self, serializer):
-        """Crear servicio y registrar venta automáticamente"""
-        from django.db import connection, transaction
-        
-        # Usar transacción para asegurar que ambas operaciones se completen
-        with transaction.atomic():
-            # Guardar el servicio
-            servicio = serializer.save()
-            
-            # Obtener el cliente de la moto
-            moto = servicio.id_moto
-            cliente_id = moto.id_cliente.id_cliente
-            
-            # Crear una venta asociada al servicio
-            with connection.cursor() as cursor:
-                cursor.execute("""
-                    INSERT INTO ventas (id_cliente, fecha, total)
-                    VALUES (%s, %s, %s)
-                    RETURNING id_venta
-                """, [
-                    cliente_id,
-                    servicio.fecha_servicio,
-                    servicio.costo
-                ])
-                id_venta = cursor.fetchone()[0]
-                
-                # Log para debugging
-                print(f"✅ Venta creada automáticamente: ID {id_venta} para servicio {servicio.id_servicio}")
-        
+        """Agenda la orden de trabajo.
+
+        Ojo: antes esto creaba además una venta automáticamente, con SQL crudo
+        y sin guardar el vínculo servicio↔venta. Eso quedaba facturado antes de
+        que el trabajo existiera y obligaba a adivinar el enlace después. Ahora
+        la venta se genera al entregar (acción `entregar`), una sola vez y
+        referenciada en `id_venta`.
+        """
+        # `costo` es NOT NULL en el esquema y es de solo lectura en la API
+        # (lo calcula el backend), así que hay que sembrarlo al agendar.
+        datos = {'costo': 0}
+        tipo = serializer.validated_data.get('id_tipo_servicio')
+        if tipo is not None:
+            # Precio congelado: si el catálogo cambia, esta orden no se mueve.
+            if not serializer.validated_data.get('precio_mano_obra'):
+                datos['precio_mano_obra'] = tipo.precio_mano_obra
+            if not serializer.validated_data.get('tipo_servicio'):
+                datos['tipo_servicio'] = tipo.nombre
+        servicio = serializer.save(**datos)
+        servicio.calcular_total()
         return servicio
 
+    @action(detail=True, methods=['post'], url_path='cambiar-estado')
+    def cambiar_estado(self, request, pk=None):
+        """Avanza la orden de estado y deja constancia en la bitácora.
+
+        La bitácora se llenaba a mano y se abandonaba: de 7 registros históricos
+        ninguno llegó a 'reparacion' ni 'entrega'. Al colgarla de la transición
+        de estado, avanzar el trabajo es lo que la va escribiendo.
+        """
+        from django.db import transaction
+
+        nuevo_estado = request.data.get('estado')
+        if not nuevo_estado:
+            return Response({'error': 'Se requiere el campo "estado".'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            orden = ServicioMoto.objects.select_for_update().get(pk=self.get_object().pk)
+
+            if nuevo_estado == orden.estado:
+                return Response({'error': f'La orden ya está en "{nuevo_estado}".'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not orden.puede_pasar_a(nuevo_estado):
+                permitidas = ServicioMoto.TRANSICIONES.get(orden.estado, [])
+                return Response(
+                    {'error': f'No se puede pasar de "{orden.estado}" a "{nuevo_estado}".',
+                     'transiciones_posibles': permitidas},
+                    status=status.HTTP_400_BAD_REQUEST)
+            if nuevo_estado == 'entregada':
+                return Response(
+                    {'error': 'Para entregar usá la acción "entregar": genera la venta.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            # No se empieza a gastar sin el visto bueno del cliente. Si la orden
+            # no tiene presupuesto se permite (un trabajo chico no necesita uno).
+            if nuevo_estado == 'en_reparacion' and not orden.reparacion_autorizada():
+                presupuesto = orden.presupuesto_vigente()
+                return Response(
+                    {'error': f'El presupuesto #{presupuesto.id_cotizacion} está '
+                              f'"{presupuesto.get_estado_display()}": el cliente todavía no '
+                              f'autorizó la reparación.',
+                     'id_presupuesto': presupuesto.id_cotizacion,
+                     'estado_presupuesto': presupuesto.estado},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            orden.estado = nuevo_estado
+            campos = ['estado']
+            if request.data.get('km_actual') is not None:
+                orden.km_actual = request.data['km_actual']
+                campos.append('km_actual')
+            if request.data.get('id_mecanico') is not None:
+                orden.id_mecanico_id = request.data['id_mecanico']
+                campos.append('id_mecanico')
+            orden.save(update_fields=campos)
+
+            self._registrar_bitacora(orden, nuevo_estado, request)
+
+        return Response(ServicioMotoSerializer(orden).data)
+
+    def _registrar_bitacora(self, orden, estado, request):
+        """Crea la entrada de bitácora del módulo que corresponde al estado."""
+        modulo = ServicioMoto.MODULO_POR_ESTADO.get(estado)
+        if not modulo:
+            return None
+
+        usuario = request.user
+        campos = {
+            'id_servicio': orden,
+            'id_moto': orden.id_moto,
+            'modulo': modulo,
+            'notas': request.data.get('notas'),
+            'creado_por': usuario.get_full_name() or usuario.username,
+        }
+        # Cada módulo tiene sus propios campos en bitacora_servicio.
+        opcionales = {
+            'recepcion': ['nivel_gasolina', 'rayones_previos'],
+            'diagnostico': ['fallas_encontradas'],
+            'reparacion': ['trabajo_realizado', 'tecnico_responsable'],
+            'entrega': ['checklist_salida', 'firma_cliente'],
+        }
+        for campo in opcionales.get(modulo, []):
+            if request.data.get(campo) is not None:
+                campos[campo] = request.data[campo]
+        if modulo == 'reparacion' and 'tecnico_responsable' not in campos:
+            mecanico = orden.id_mecanico
+            if mecanico:
+                campos['tecnico_responsable'] = (
+                    mecanico.get_full_name() or mecanico.username)
+
+        return BitacoraServicio.objects.create(**campos)
+
+    @action(detail=True, methods=['post'], url_path='agregar-repuesto')
+    def agregar_repuesto(self, request, pk=None):
+        """Consume un repuesto del inventario para esta orden.
+
+        Descuenta `productos.cantidad_actual` y deja el movimiento, igual que
+        una venta. Antes los repuestos del taller no descontaban stock en
+        ninguna parte.
+        """
+        from django.db import connection, transaction
+
+        id_producto = request.data.get('id_producto')
+        cantidad = request.data.get('cantidad')
+        if not id_producto or not cantidad:
+            return Response({'error': 'Se requieren "id_producto" y "cantidad".'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            cantidad = int(cantidad)
+        except (TypeError, ValueError):
+            return Response({'error': 'La cantidad debe ser un número entero.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if cantidad <= 0:
+            return Response({'error': 'La cantidad debe ser mayor a cero.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            orden = ServicioMoto.objects.select_for_update().get(pk=self.get_object().pk)
+            if orden.estado in ('entregada', 'cancelada'):
+                return Response(
+                    {'error': f'No se pueden agregar repuestos a una orden {orden.estado}.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                producto = Producto.objects.select_for_update().get(pk=id_producto)
+            except Producto.DoesNotExist:
+                return Response({'error': 'Producto no encontrado.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            if producto.cantidad_actual < cantidad:
+                return Response(
+                    {'error': f'Stock insuficiente de "{producto.nombre}": '
+                              f'hay {producto.cantidad_actual}, se piden {cantidad}.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            precio = request.data.get('precio_unitario')
+            if precio in (None, ''):
+                precio = producto.precio_final
+
+            repuesto = ServicioRepuesto.objects.create(
+                id_servicio=orden, id_producto=producto,
+                cantidad=cantidad, precio_unitario=precio,
+            )
+
+            producto.cantidad_actual -= cantidad
+            producto.save(update_fields=['cantidad_actual'])
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO movimientos_inventario
+                        (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                    VALUES (%s, 'SALIDA', %s, NOW(), %s, 'SERVICIO_TALLER', %s)
+                """, [producto.id_producto, cantidad, f'TALLER-{orden.id_servicio}',
+                      f'Repuesto usado en orden de trabajo #{orden.id_servicio}'])
+
+            orden.calcular_total()
+
+        return Response(ServicioRepuestoSerializer(repuesto).data,
+                        status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='eliminar-repuesto/(?P<repuesto_id>[^/.]+)')
+    def eliminar_repuesto(self, request, pk=None, repuesto_id=None):
+        """Quita un repuesto de la orden y devuelve el stock al inventario."""
+        from django.db import connection, transaction
+
+        with transaction.atomic():
+            orden = ServicioMoto.objects.select_for_update().get(pk=self.get_object().pk)
+            if orden.estado in ('entregada', 'cancelada'):
+                return Response(
+                    {'error': f'No se pueden quitar repuestos de una orden {orden.estado}.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                repuesto = orden.repuestos.select_related('id_producto').get(pk=repuesto_id)
+            except ServicioRepuesto.DoesNotExist:
+                return Response({'error': 'Repuesto no encontrado en esta orden.'},
+                                status=status.HTTP_404_NOT_FOUND)
+
+            producto = Producto.objects.select_for_update().get(
+                pk=repuesto.id_producto_id)
+            cantidad = repuesto.cantidad
+            repuesto.delete()
+
+            producto.cantidad_actual += cantidad
+            producto.save(update_fields=['cantidad_actual'])
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO movimientos_inventario
+                        (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                    VALUES (%s, 'ENTRADA', %s, NOW(), %s, 'SERVICIO_TALLER', %s)
+                """, [producto.id_producto, cantidad, f'TALLER-REV-{orden.id_servicio}',
+                      f'Repuesto devuelto de orden de trabajo #{orden.id_servicio}'])
+
+            orden.calcular_total()
+
+        return Response({'status': 'Repuesto eliminado, stock restituido.'})
+
+    @action(detail=True, methods=['post'])
+    def presupuestar(self, request, pk=None):
+        """Crea el presupuesto de reparación de esta orden, para que el cliente
+        autorice el costo antes de que se gaste su plata.
+
+        Importante: NO toca stock. Los repuestos acá son una propuesta; se
+        consumen recién cuando el cliente aprueba (ver
+        `CotizacionViewSet.cambiar_estado`). Presupuestar algo y descontarlo del
+        inventario en el mismo paso vaciaría la bodega con trabajos que nunca se
+        autorizan.
+        """
+        from django.db import transaction
+
+        servicios = request.data.get('servicios') or []
+        productos = request.data.get('productos') or []
+        if not servicios and not productos:
+            return Response(
+                {'error': 'Agregá al menos una línea de mano de obra o un repuesto.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            orden = ServicioMoto.objects.select_for_update().get(pk=self.get_object().pk)
+            if orden.estado in ('entregada', 'cancelada'):
+                return Response(
+                    {'error': f'No se puede presupuestar una orden {orden.estado}.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            vigente = orden.presupuesto_vigente()
+            if vigente and vigente.estado == 'pendiente':
+                return Response(
+                    {'error': f'Esta orden ya tiene el presupuesto #{vigente.id_cotizacion} '
+                              f'esperando respuesta del cliente.',
+                     'id_presupuesto': vigente.id_cotizacion},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            # El diagnóstico viene de la bitácora, que es donde el mecánico
+            # anotó las fallas al revisar la moto.
+            diagnostico = request.data.get('diagnostico')
+            if not diagnostico:
+                bitacora = orden.bitacoras.filter(modulo='diagnostico').order_by(
+                    '-fecha_registro').first()
+                if bitacora:
+                    diagnostico = bitacora.fallas_encontradas or bitacora.notas
+
+            datos = {
+                'cliente': orden.id_moto.id_cliente_id,
+                'fecha': str(date.today()),
+                'validez_dias': request.data.get('validez_dias', 15),
+                'notas': request.data.get('notas'),
+                'tipo': 'reparacion',
+                'id_moto': orden.id_moto_id,
+                'id_servicio': orden.id_servicio,
+                'diagnostico': diagnostico,
+                'servicios': servicios,
+                'detalles': productos,
+            }
+            serializer = CotizacionCreateSerializer(data=datos)
+            serializer.is_valid(raise_exception=True)
+            presupuesto = serializer.save()
+
+        return Response(CotizacionDetailSerializer(presupuesto).data,
+                        status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def entregar(self, request, pk=None):
+        """Cierra la orden y genera su venta (mano de obra + repuestos).
+
+        Genera UNA sola venta y guarda la referencia en `id_venta`. La venta
+        queda con estado_pago 'pendiente': el cobro sigue por el flujo normal
+        de pagos, que ya exige caja abierta.
+        """
+        from django.db import connection, transaction
+
+        with transaction.atomic():
+            orden = ServicioMoto.objects.select_for_update().get(pk=self.get_object().pk)
+
+            if orden.id_venta_id:
+                return Response(
+                    {'error': f'Esta orden ya generó la venta #{orden.id_venta_id}.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            if not orden.puede_pasar_a('entregada'):
+                return Response(
+                    {'error': f'No se puede entregar una orden en estado "{orden.estado}".',
+                     'transiciones_posibles': ServicioMoto.TRANSICIONES.get(orden.estado, [])},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            total = orden.calcular_total(guardar=False)
+            if total <= 0:
+                return Response(
+                    {'error': 'La orden no tiene monto: definí la mano de obra o agregá repuestos.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+            cliente_id = orden.id_moto.id_cliente_id
+            fecha_entrega = timezone.now()
+
+            with connection.cursor() as cursor:
+                # `id_servicio` apunta al catálogo (qué tipo de servicio se
+                # vendió), no a la orden de trabajo: son tablas distintas.
+                cursor.execute("""
+                    INSERT INTO ventas (id_cliente, fecha, total, id_servicio,
+                                        monto_pagado, saldo_pendiente, estado_pago)
+                    VALUES (%s, %s, %s, %s, 0, %s, 'pendiente')
+                    RETURNING id_venta
+                """, [cliente_id, fecha_entrega.date(), total,
+                      orden.id_tipo_servicio_id, total])
+                id_venta = cursor.fetchone()[0]
+
+                # Los repuestos se facturan como líneas normales: la venta
+                # queda itemizada en vez de ser un monto opaco.
+                for repuesto in orden.repuestos.all():
+                    cursor.execute("""
+                        INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s)
+                    """, [id_venta, repuesto.id_producto_id,
+                          repuesto.cantidad, repuesto.precio_unitario])
+
+            orden.estado = 'entregada'
+            orden.costo = total
+            orden.fecha_entrega = fecha_entrega
+            orden.id_venta_id = id_venta
+            campos = ['estado', 'costo', 'fecha_entrega', 'id_venta']
+
+            # Mantenimiento preventivo sugerido.
+            meses = request.data.get('proximo_mantenimiento_meses')
+            if meses:
+                try:
+                    orden.proximo_mantenimiento_fecha = (
+                        fecha_entrega.date() + timedelta(days=int(meses) * 30))
+                    campos.append('proximo_mantenimiento_fecha')
+                except (TypeError, ValueError):
+                    pass
+            km_proximo = request.data.get('proximo_mantenimiento_km')
+            if km_proximo:
+                try:
+                    orden.proximo_mantenimiento_km = int(km_proximo)
+                    campos.append('proximo_mantenimiento_km')
+                except (TypeError, ValueError):
+                    pass
+            orden.save(update_fields=campos)
+
+            self._registrar_bitacora(orden, 'entregada', request)
+
+        return Response({
+            'status': 'Orden entregada y venta generada.',
+            'id_venta': id_venta,
+            'total': float(total),
+            'orden': ServicioMotoSerializer(orden).data,
+        })
 
 
-class ServicioViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet para catálogo de servicios (solo lectura)"""
-    queryset = Servicio.objects.all()
+class ServicioViewSet(viewsets.ModelViewSet):
+    """Catálogo de tipos de servicio con su mano de obra.
+
+    Solo expone las filas marcadas como plantilla: la tabla `servicios` también
+    guarda 100 registros históricos de trabajos realizados (referenciados por
+    ventas antiguas) que no son seleccionables.
+    """
+    queryset = Servicio.objects.filter(es_plantilla=True)
     serializer_class = ServicioSerializer
+    permission_classes = [IsAdminOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre', 'tipo']
     ordering_fields = ['nombre', 'precio_mano_obra']
     ordering = ['nombre']
-    
-    def list(self, request, *args, **kwargs):
-        """Listar servicios únicos por nombre"""
-        from django.db.models import Min
-        
-        # Obtener servicios únicos por nombre con el precio mínimo
-        servicios_unicos = Servicio.objects.values('nombre').annotate(
-            precio_mano_obra=Min('precio_mano_obra'),
-            tipo=Min('tipo')
-        ).order_by('nombre')
-        
-        return Response(list(servicios_unicos))
 
 
 # ============================================================================
@@ -1064,6 +1792,9 @@ class CotizacionViewSet(viewsets.ModelViewSet):
         estado = self.request.query_params.get('estado', None)
         if estado:
             queryset = queryset.filter(estado=estado)
+        tipo = self.request.query_params.get('tipo', None)
+        if tipo:
+            queryset = queryset.filter(tipo=tipo)
         return queryset
 
     @action(detail=True, methods=['post'], url_path='convertir-venta')
@@ -1089,10 +1820,15 @@ class CotizacionViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 total = sum(float(i[2]) * int(i[1]) for i in items)
+                # `saldo_pendiente` se setea explícitamente: es nullable y sin
+                # él la venta queda invisible en el reporte de cuentas por
+                # cobrar, que filtra por COALESCE(saldo_pendiente,0) > 0.
                 cursor.execute("""
-                    INSERT INTO ventas (id_cliente, fecha, total)
-                    VALUES (%s, CURRENT_DATE, %s) RETURNING id_venta
-                """, [cot.id_cliente, total])
+                    INSERT INTO ventas (id_cliente, fecha, total,
+                                        monto_pagado, saldo_pendiente, estado_pago)
+                    VALUES (%s, CURRENT_DATE, %s, 0, %s, 'pendiente')
+                    RETURNING id_venta
+                """, [cot.id_cliente, total, total])
                 id_venta = cursor.fetchone()[0]
                 for id_producto, cantidad, precio in items:
                     cursor.execute("""
@@ -1111,19 +1847,99 @@ class CotizacionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def cambiar_estado(self, request, pk=None):
-        """Cambia el estado de la cotización (aprobada / rechazada / pendiente)."""
-        cot = self.get_object()
+        """Cambia el estado (aprobada / rechazada / pendiente).
+
+        Aprobar un presupuesto de reparación además lo **carga a la orden de
+        trabajo**: fija la mano de obra y consume los repuestos del inventario.
+        Es todo o nada: si falta stock de una pieza, la aprobación falla completa
+        en vez de dejar la orden a medio cargar.
+        """
+        from django.db import transaction
+
         nuevo = request.data.get('estado')
         if nuevo not in ('pendiente', 'aprobada', 'rechazada'):
             return Response({'error': 'Estado inválido'}, status=status.HTTP_400_BAD_REQUEST)
-        if cot.estado == 'convertida':
-            return Response(
-                {'error': 'No se puede cambiar el estado de una cotización convertida'},
-                status=status.HTTP_400_BAD_REQUEST,
+
+        with transaction.atomic():
+            cot = Cotizacion.objects.select_for_update().get(pk=self.get_object().pk)
+            if cot.estado == 'convertida':
+                return Response(
+                    {'error': 'No se puede cambiar el estado de una cotización convertida'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            aprobando_reparacion = (
+                nuevo == 'aprobada'
+                and cot.tipo == 'reparacion'
+                and cot.id_servicio_id
+                and not cot.cargado_a_orden
             )
-        cot.estado = nuevo
-        cot.save(update_fields=['estado'])
+
+            campos = ['estado']
+            cot.estado = nuevo
+            if nuevo == 'aprobada':
+                cot.fecha_aprobacion = timezone.now()
+                cot.aprobado_por = (
+                    request.user.get_full_name() or request.user.username)
+                campos += ['fecha_aprobacion', 'aprobado_por']
+
+            if aprobando_reparacion:
+                error = self._cargar_presupuesto_en_orden(cot)
+                if error is not None:
+                    return error
+                cot.cargado_a_orden = True
+                campos.append('cargado_a_orden')
+
+            cot.save(update_fields=campos)
+
+        cot.refresh_from_db()
         return Response(CotizacionDetailSerializer(cot).data)
+
+    def _cargar_presupuesto_en_orden(self, cot):
+        """Pasa lo presupuestado a la orden de trabajo. Devuelve una Response de
+        error si algo falla, o None si salió bien."""
+        orden = ServicioMoto.objects.select_for_update().get(pk=cot.id_servicio_id)
+        if orden.estado in ('entregada', 'cancelada'):
+            return Response(
+                {'error': f'La orden de trabajo ya está {orden.estado}.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        # Mano de obra: la suma de las líneas presupuestadas.
+        orden.precio_mano_obra = cot.total_mano_obra()
+        orden.save(update_fields=['precio_mano_obra'])
+
+        # Repuestos: recién acá salen del inventario.
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id_producto, cantidad, precio_unitario
+                FROM producto_cotizacion WHERE id_cotizacion = %s
+            """, [cot.id_cotizacion])
+            lineas = cursor.fetchall()
+
+            for id_producto, cantidad, precio in lineas:
+                producto = Producto.objects.select_for_update().get(pk=id_producto)
+                if producto.cantidad_actual < cantidad:
+                    return Response(
+                        {'error': f'Stock insuficiente de "{producto.nombre}" para aprobar: '
+                                  f'hay {producto.cantidad_actual}, el presupuesto pide {cantidad}.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+                ServicioRepuesto.objects.create(
+                    id_servicio=orden, id_producto=producto,
+                    cantidad=cantidad, precio_unitario=precio,
+                )
+                producto.cantidad_actual -= cantidad
+                producto.save(update_fields=['cantidad_actual'])
+
+                cursor.execute("""
+                    INSERT INTO movimientos_inventario
+                        (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                    VALUES (%s, 'SALIDA', %s, NOW(), %s, 'SERVICIO_TALLER', %s)
+                """, [id_producto, cantidad, f'TALLER-{orden.id_servicio}',
+                      f'Repuesto aprobado en presupuesto #{cot.id_cotizacion}'])
+
+        orden.calcular_total()
+        return None
 
 
 class DevolucionViewSet(viewsets.ModelViewSet):
@@ -1157,6 +1973,117 @@ class DevolucionViewSet(viewsets.ModelViewSet):
             except (ValueError, TypeError):
                 pass
         return queryset
+
+
+class DevolucionCompraViewSet(viewsets.ModelViewSet):
+    """Devoluciones de mercadería a proveedores. Saca stock y baja la deuda.
+
+    Espejo de DevolucionViewSet pero en la otra dirección. Igual que las
+    devoluciones de cliente, no se editan ni se borran: deshacerlas implicaría
+    revertir stock, deuda y caja de forma coordinada. Si hay un error, se
+    corrige con un ajuste de inventario, que deja su propio rastro.
+    """
+    permission_classes = [IsAdminUser]
+    queryset = DevolucionCompra.objects.select_related(
+        'id_proveedor', 'id_orden').prefetch_related('detalles__id_producto')
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['id_devolucion_compra', 'motivo']
+    ordering_fields = ['fecha', 'total']
+    ordering = ['-fecha', '-id_devolucion_compra']
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return DevolucionCompraCreateSerializer
+        return DevolucionCompraSerializer
+
+    def get_serializer_context(self):
+        contexto = super().get_serializer_context()
+        usuario = self.request.user
+        contexto['usuario'] = usuario.get_full_name() or usuario.username
+        return contexto
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        proveedor = self.request.query_params.get('proveedor', None)
+        if proveedor:
+            try:
+                queryset = queryset.filter(id_proveedor=int(proveedor))
+            except (ValueError, TypeError):
+                pass
+        orden = self.request.query_params.get('orden', None)
+        if orden:
+            try:
+                queryset = queryset.filter(id_orden=int(orden))
+            except (ValueError, TypeError):
+                pass
+        return queryset
+
+    @action(detail=False, methods=['get'], url_path='devolvible/(?P<id_orden>[^/.]+)')
+    def devolvible(self, request, id_orden=None):
+        """Cuánto se puede devolver de cada producto de una compra.
+
+        Es lo que el formulario necesita para mostrar el máximo por línea, en
+        vez de dejar que el usuario escriba una cantidad que el backend va a
+        rechazar. El tope es el menor entre lo que queda por devolver y lo que
+        físicamente hay en stock.
+        """
+        try:
+            orden = OrdenCompra.objects.get(pk=id_orden)
+        except OrdenCompra.DoesNotExist:
+            return Response({'error': 'La orden no existe'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        if not orden.stock_aplicado or orden.id_estado == OrdenCompra.ESTADO_CANCELADA:
+            return Response({
+                'id_orden': orden.id_orden,
+                'puede_devolverse': False,
+                'motivo': ('La orden está cancelada.'
+                           if orden.id_estado == OrdenCompra.ESTADO_CANCELADA
+                           else 'La orden todavía no se recibió.'),
+                'productos': [],
+            })
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT op.id_producto, p.nombre, p.sku_producto,
+                       SUM(op.cantidad)                       AS recibido,
+                       MAX(op.precio_unitario)                AS precio,
+                       MAX(p.cantidad_actual)                 AS stock,
+                       COALESCE((
+                           SELECT SUM(pdc.cantidad)
+                           FROM producto_devolucion_compra pdc
+                           JOIN devolucion_compra dc
+                             ON dc.id_devolucion_compra = pdc.id_devolucion_compra
+                           WHERE dc.id_orden = op.id_orden
+                             AND pdc.id_producto = op.id_producto
+                       ), 0)                                  AS ya_devuelto
+                FROM orden_producto op
+                JOIN productos p ON p.id_producto = op.id_producto
+                WHERE op.id_orden = %s AND op.cantidad IS NOT NULL
+                GROUP BY op.id_orden, op.id_producto, p.nombre, p.sku_producto
+                ORDER BY p.nombre
+            """, [orden.id_orden])
+            productos = []
+            for r in cursor.fetchall():
+                recibido, stock, ya_devuelto = int(r[3]), int(r[5]), int(r[6])
+                productos.append({
+                    'id_producto': r[0],
+                    'nombre': r[1],
+                    'sku': r[2],
+                    'recibido': recibido,
+                    'ya_devuelto': ya_devuelto,
+                    'stock_actual': stock,
+                    'precio_unitario': float(r[4] or 0),
+                    # El tope real: no se puede devolver lo que ya no está.
+                    'max_devolvible': max(0, min(recibido - ya_devuelto, stock)),
+                })
+
+        return Response({
+            'id_orden': orden.id_orden,
+            'puede_devolverse': any(p['max_devolvible'] > 0 for p in productos),
+            'productos': productos,
+        })
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
@@ -1212,3 +2139,159 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         user.save(update_fields=['password'])
         return Response({'status': 'Contraseña actualizada'})
 
+
+
+class SesionCajaViewSet(viewsets.ReadOnlyModelViewSet):
+    """Turnos de caja: abrir, cerrar, registrar movimientos y consultar arqueo.
+
+    - Listar/ver historial: solo admin (datos financieros, como los reportes).
+    - abrir / cerrar / movimientos / actual: cualquier usuario autenticado (el
+      operador maneja su propio turno).
+    """
+    queryset = SesionCaja.objects.select_related('usuario').all()
+    serializer_class = SesionCajaSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+    @action(detail=False, methods=['get'])
+    def actual(self, request):
+        """Devuelve la sesión abierta actual, o null si no hay ninguna."""
+        sesion = SesionCaja.objects.filter(estado='abierta').select_related('usuario').first()
+        if sesion is None:
+            return Response(None)
+        return Response(SesionCajaSerializer(sesion).data)
+
+    @action(detail=False, methods=['post'])
+    def abrir(self, request):
+        """Abre una nueva sesión de caja con un fondo inicial."""
+        serializer = AbrirCajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if SesionCaja.objects.filter(estado='abierta').exists():
+            return Response(
+                {'error': 'Ya hay una caja abierta. Ciérrala antes de abrir otra.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            sesion = SesionCaja.objects.create(
+                usuario=request.user,
+                monto_apertura=serializer.validated_data['monto_apertura'],
+                notas=serializer.validated_data.get('notas') or None,
+            )
+        except IntegrityError:
+            # Carrera: otro request abrió una sesión entre el check y el create.
+            return Response(
+                {'error': 'Ya hay una caja abierta. Ciérrala antes de abrir otra.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(SesionCajaSerializer(sesion).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def cerrar(self, request, pk=None):
+        """Cierra la sesión: congela el esperado y calcula la diferencia."""
+        from django.db import transaction
+        from django.utils import timezone
+        serializer = CerrarCajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            sesion = SesionCaja.objects.select_for_update().get(pk=pk)
+            if sesion.estado != 'abierta':
+                return Response(
+                    {'error': 'Esta caja ya está cerrada'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            contado = serializer.validated_data['monto_cierre_contado']
+            esperado = sesion.calcular_esperado()
+            sesion.monto_esperado = esperado
+            sesion.monto_cierre_contado = contado
+            sesion.diferencia = contado - esperado
+            sesion.fecha_cierre = timezone.now()
+            sesion.estado = 'cerrada'
+            if serializer.validated_data.get('notas'):
+                sesion.notas = serializer.validated_data['notas']
+            sesion.save()
+
+        return Response(SesionCajaSerializer(sesion).data)
+
+    @action(detail=True, methods=['get', 'post'])
+    def movimientos(self, request, pk=None):
+        """GET: lista los movimientos de la sesión. POST: registra uno nuevo."""
+        sesion = self.get_object()
+        if request.method == 'GET':
+            return Response(
+                MovimientoCajaSerializer(sesion.movimientos.all(), many=True).data
+            )
+
+        if sesion.estado != 'abierta':
+            return Response(
+                {'error': 'No se pueden registrar movimientos en una caja cerrada'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = MovimientoCajaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        mov = MovimientoCaja.objects.create(
+            sesion=sesion,
+            usuario=request.user,
+            tipo=serializer.validated_data['tipo'],
+            monto=serializer.validated_data['monto'],
+            motivo=serializer.validated_data['motivo'],
+        )
+        return Response(MovimientoCajaSerializer(mov).data, status=status.HTTP_201_CREATED)
+
+
+class CategoriaGastoViewSet(viewsets.ModelViewSet):
+    """Catálogo de categorías de gasto. Solo administradores."""
+    permission_classes = [IsAdminUser]
+    queryset = CategoriaGasto.objects.all()
+    serializer_class = CategoriaGastoSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['nombre']
+    ordering = ['nombre']
+
+
+class GastoViewSet(viewsets.ModelViewSet):
+    """Gastos operativos.
+
+    Registrar (create) lo puede hacer cualquier usuario autenticado — un gasto
+    en efectivo es un egreso del turno que el operador debe poder registrar
+    para que el arqueo cuadre. Ver el libro, editar y borrar son admin-only
+    (datos de la estructura de costos, como los reportes).
+    """
+    queryset = Gasto.objects.select_related('categoria', 'usuario').all()
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['descripcion', 'referencia']
+    ordering_fields = ['fecha', 'monto']
+    ordering = ['-fecha', '-created_at']
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated()]
+        return [IsAdminUser()]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return GastoCreateSerializer
+        return GastoSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        categoria = self.request.query_params.get('categoria')
+        if categoria:
+            qs = qs.filter(categoria_id=categoria)
+        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        if fecha_inicio:
+            qs = qs.filter(fecha__gte=fecha_inicio)
+        fecha_fin = self.request.query_params.get('fecha_fin')
+        if fecha_fin:
+            qs = qs.filter(fecha__lte=fecha_fin)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        gasto = serializer.save()
+        return Response(GastoSerializer(gasto).data, status=status.HTTP_201_CREATED)

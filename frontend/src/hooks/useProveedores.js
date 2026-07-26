@@ -76,3 +76,30 @@ export const useProveedorOrdenes = (id) => {
     enabled: !!id,
   })
 }
+
+// Los dos reportes son admin-only: se pasa `enabled` para no dispararle un 403
+// al operador, que sí puede usar el resto del módulo de compras.
+export const useDesempenoProveedores = (enabled = true) => {
+  return useQuery({
+    queryKey: ['desempeno-proveedores'],
+    queryFn: () => proveedoresService.getDesempeno().then(r => r.data),
+    enabled: !!enabled,
+  })
+}
+
+export const useComparacionPrecios = (enabled = true) => {
+  return useQuery({
+    queryKey: ['comparacion-precios'],
+    queryFn: () => proveedoresService.getComparacionPrecios().then(r => r.data),
+    enabled: !!enabled,
+  })
+}
+
+/** Precios históricos de un producto por proveedor (para el aviso al comprar). */
+export const usePreciosDeProducto = (idProducto) => {
+  return useQuery({
+    queryKey: ['precios-producto', idProducto],
+    queryFn: () => proveedoresService.getPreciosDeProducto(idProducto).then(r => r.data),
+    enabled: !!idProducto,
+  })
+}

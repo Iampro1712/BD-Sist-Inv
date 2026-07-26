@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useProveedores } from '../../hooks/useProveedores'
+import { useProveedores, usePreciosDeProducto } from '../../hooks/useProveedores'
 import { useProductos } from '../../hooks/useProductos'
 import { Button, Input } from '../ui'
+
+const formatCurrency = (v) =>
+  new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 
 const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }) => {
   const [formData, setFormData] = useState({
     proveedor: '',
     fecha: new Date().toISOString().split('T')[0],
+    fecha_esperada: '',
     notas: '',
     detalles: [],
   })
@@ -21,6 +25,18 @@ const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }
 
   const proveedores = proveedoresData?.results || []
   const productos   = productosData?.results   || []
+
+  // Historial de precios del producto que se está agregando. Es la única forma
+  // de ver que otro proveedor lo vendía más barato: el selector de productos
+  // está filtrado por proveedor, así que la competencia no se ve por ningún lado.
+  const { data: precios } = usePreciosDeProducto(selectedProducto || null)
+  const proveedorActualId = parseInt(formData.proveedor) || null
+  const precioDeEste = precios?.proveedores?.find(
+    (p) => p.id_proveedor === proveedorActualId)
+  const mejorOtro = precios?.proveedores?.find(
+    (p) => p.id_proveedor !== proveedorActualId)
+  const hayAhorro = precioDeEste && mejorOtro
+    && mejorOtro.ultimo_precio < precioDeEste.ultimo_precio
 
   useEffect(() => {
     if (orden) {
@@ -105,7 +121,14 @@ const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (validate()) onSubmit({ ...formData, subtotal: total, total })
+    if (!validate()) return
+    onSubmit({
+      ...formData,
+      // El input date vacío da '', que el backend rechaza como fecha.
+      fecha_esperada: formData.fecha_esperada || null,
+      subtotal: total,
+      total,
+    })
   }
 
   const formatCurrency = (v) =>
@@ -158,6 +181,25 @@ const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }
               className={inputCls(errors.fecha)}
             />
             {errors.fecha && <p className="mt-1 text-xs text-red-500">{errors.fecha}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">
+              Entrega prometida
+            </label>
+            <input
+              type="date"
+              name="fecha_esperada"
+              value={formData.fecha_esperada}
+              onChange={handleChange}
+              min={formData.fecha}
+              className={inputCls(false)}
+            />
+            {/* Sin esta fecha se puede medir cuánto tardó el proveedor, pero no
+                si cumplió lo que prometió. */}
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              Opcional. Es contra esto que se mide su puntualidad.
+            </p>
           </div>
         </div>
       </div>
@@ -229,6 +271,45 @@ const OrdenCompraForm = ({ orden = null, onSubmit, onCancel, isLoading = false }
               {addError.precioUnitario && <p className="mt-1 text-xs text-red-500">{addError.precioUnitario}</p>}
             </div>
           </div>
+
+          {/* Historial de precios: el único punto donde ver que otro proveedor
+              lo vendía más barato sirve para cambiar la decisión. */}
+          {selectedProducto && precios?.proveedores?.length > 0 && (
+            <div className={`rounded-lg border p-3 text-sm ${
+              hayAhorro
+                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                : 'bg-gray-50 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700'
+            }`}>
+              {hayAhorro ? (
+                <p className="text-amber-800 dark:text-amber-300">
+                  <strong>{mejorOtro.proveedor}</strong> te lo vendió a{' '}
+                  <strong>{formatCurrency(mejorOtro.ultimo_precio)}</strong>, contra{' '}
+                  {formatCurrency(precioDeEste.ultimo_precio)} de este proveedor:{' '}
+                  <strong>
+                    {formatCurrency(precioDeEste.ultimo_precio - mejorOtro.ultimo_precio)}
+                  </strong>{' '}
+                  más barato por unidad.
+                </p>
+              ) : precioDeEste ? (
+                <p className="text-gray-600 dark:text-gray-400">
+                  A este proveedor se lo compraste por última vez a{' '}
+                  <strong className="text-gray-900 dark:text-white">
+                    {formatCurrency(precioDeEste.ultimo_precio)}
+                  </strong>
+                  {precios.proveedores.length > 1 && ', y es el mejor precio que tenés'}.
+                </p>
+              ) : (
+                <p className="text-gray-600 dark:text-gray-400">
+                  A este proveedor nunca le compraste este producto. El mejor precio
+                  que tenés es{' '}
+                  <strong className="text-gray-900 dark:text-white">
+                    {formatCurrency(precios.mejor_precio)}
+                  </strong>{' '}
+                  de {precios.mejor_proveedor}.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Preview subtotal + botón */}
           <div className="flex items-center justify-between gap-3">

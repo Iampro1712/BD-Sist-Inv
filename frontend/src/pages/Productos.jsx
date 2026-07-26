@@ -12,11 +12,19 @@ import ImportarProductosModal from '../components/productos/ImportarProductosMod
 import Modal from '../components/ui/Modal'
 import { Button, Badge, Loader, Card, ConfirmDialog } from '../components/ui'
 import { fadeIn, staggerContainer } from '../utils/animations'
+import { useUbicaciones, useAsignarUbicacion } from '../hooks/useUbicaciones'
+import useAuthStore from '../hooks/useAuthStore'
 
 const Productos = () => {
   const [search, setSearch] = useState('')
-  const [filters, setFilters] = useState({ bajo_stock: '', proveedor: '', ordering: '' })
+  const [filters, setFilters] = useState({
+    bajo_stock: '', proveedor: '', ordering: '', ubicacion: '', sin_ubicacion: '',
+  })
   const [page, setPage] = useState(1)
+  // Selección para asignar ubicación en lote: ubicar 75 productos uno por uno
+  // es la fricción que deja estas funciones sin usar.
+  const [seleccion, setSeleccion] = useState([])
+  const [ubicacionLote, setUbicacionLote] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isDetalleModalOpen, setIsDetalleModalOpen] = useState(false)
@@ -44,10 +52,45 @@ const Productos = () => {
   const { data: proveedoresData } = useProveedores({ page_size: 200 })
   const proveedores = proveedoresData?.results || proveedoresData || []
 
+  const { data: ubicacionesData } = useUbicaciones()
+  const ubicaciones = Array.isArray(ubicacionesData)
+    ? ubicacionesData
+    : ubicacionesData?.results || []
+  const asignarUbicacion = useAsignarUbicacion()
+  const esAdmin = useAuthStore((s) => s.user?.is_staff)
+
   const productos = data?.results || []
   const totalCount = data?.count || 0
   const totalPages = totalCount ? Math.ceil(totalCount / 20) : 1
   const lowStockCount = Array.isArray(stockBajoData) ? stockBajoData.length : 0
+
+  const toggleUno = (id) =>
+    setSeleccion((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+
+  const toggleTodos = () => {
+    const ids = productos.map((p) => p.id_producto)
+    const todosMarcados = ids.every((id) => seleccion.includes(id))
+    setSeleccion((prev) => todosMarcados
+      ? prev.filter((id) => !ids.includes(id))
+      : [...new Set([...prev, ...ids])])
+  }
+
+  const handleAsignarLote = (desasignar = false) => {
+    asignarUbicacion.mutate({
+      productos: seleccion,
+      id_ubicacion: desasignar ? null : parseInt(ubicacionLote),
+    }, {
+      onSuccess: (res) => {
+        toast.success(desasignar
+          ? `${res.data.actualizados} producto(s) sin ubicación`
+          : `${res.data.actualizados} producto(s) ubicados`)
+        setSeleccion([])
+        setUbicacionLote('')
+      },
+      onError: (err) => toast.error(
+        err.response?.data?.error || 'No se pudo asignar la ubicación'),
+    })
+  }
 
   useEffect(() => {
     const productoId = searchParams.get('id')
@@ -57,6 +100,14 @@ const Productos = () => {
       setSearchParams({})
     }
   }, [searchParams, isDetalleModalOpen, setSearchParams])
+
+  // Permite entrar desde Ubicaciones con "productos sin ubicar" ya filtrado.
+  useEffect(() => {
+    if (searchParams.get('sin_ubicacion') === 'true') {
+      setFilters((prev) => ({ ...prev, sin_ubicacion: 'true' }))
+      setSearchParams({})
+    }
+  }, [searchParams, setSearchParams])
 
   const handleOpenModal = (producto = null) => {
     setSelectedProducto(producto)
@@ -239,6 +290,27 @@ const Productos = () => {
               ))}
             </select>
 
+            {/* Filtro ubicación */}
+            <select
+              value={filters.sin_ubicacion === 'true' ? 'sin' : filters.ubicacion}
+              onChange={(e) => {
+                const v = e.target.value
+                setPage(1)
+                setFilters((prev) => ({
+                  ...prev,
+                  ubicacion: v === 'sin' ? '' : v,
+                  sin_ubicacion: v === 'sin' ? 'true' : '',
+                }))
+              }}
+              className="flex-1 min-w-[160px] px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors"
+            >
+              <option value="">Todas las ubicaciones</option>
+              <option value="sin">Sin ubicar</option>
+              {ubicaciones.map((u) => (
+                <option key={u.id_ubicacion} value={u.id_ubicacion}>{u.codigo}</option>
+              ))}
+            </select>
+
             {/* Ordenar por */}
             <select
               value={filters.ordering}
@@ -308,6 +380,34 @@ const Productos = () => {
         </div>
       )}
 
+      {/* Asignación de ubicación en lote */}
+      {esAdmin && seleccion.length > 0 && (
+        <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-3 flex flex-wrap items-center gap-3">
+          <p className="text-sm font-medium text-primary-900 dark:text-primary-200">
+            {seleccion.length} producto(s) seleccionado(s)
+          </p>
+          <select value={ubicacionLote} onChange={(e) => setUbicacionLote(e.target.value)}
+            className="flex-1 min-w-[180px] px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-300">
+            <option value="">Elegí la ubicación...</option>
+            {ubicaciones.map((u) => (
+              <option key={u.id_ubicacion} value={u.id_ubicacion}>{u.codigo}</option>
+            ))}
+          </select>
+          <Button onClick={() => handleAsignarLote(false)}
+            disabled={!ubicacionLote || asignarUbicacion.isPending}>
+            {asignarUbicacion.isPending ? 'Asignando...' : 'Asignar'}
+          </Button>
+          <button onClick={() => handleAsignarLote(true)} disabled={asignarUbicacion.isPending}
+            className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:underline">
+            Quitar ubicación
+          </button>
+          <button onClick={() => setSeleccion([])}
+            className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:underline">
+            Limpiar
+          </button>
+        </div>
+      )}
+
       {/* Lista de productos */}
       {isLoading ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -352,6 +452,15 @@ const Productos = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-900/50">
                 <tr>
+                  {esAdmin && (
+                    <th className="px-4 py-3 w-10">
+                      <input type="checkbox"
+                        checked={productos.length > 0 && productos.every((p) => seleccion.includes(p.id_producto))}
+                        onChange={toggleTodos}
+                        title="Seleccionar todos los de esta página"
+                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500" />
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-32">
                     SKU
                   </th>
@@ -360,6 +469,9 @@ const Productos = () => {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-44">
                     Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">
+                    Ubicación
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-36">
                     Precio Venta
@@ -378,6 +490,14 @@ const Productos = () => {
                       variants={fadeIn}
                       className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
+                      {esAdmin && (
+                        <td className="px-4 py-4">
+                          <input type="checkbox"
+                            checked={seleccion.includes(producto.id_producto)}
+                            onChange={() => toggleUno(producto.id_producto)}
+                            className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500" />
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
                           {producto.sku_producto}
@@ -422,6 +542,15 @@ const Productos = () => {
                           />
                         </div>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">mín. {producto.cantidad_minima}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        {producto.ubicacion_codigo ? (
+                          <span className="text-xs font-mono text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                            {producto.ubicacion_codigo}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">Sin ubicar</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <p className="text-sm font-semibold text-green-600 dark:text-green-400">

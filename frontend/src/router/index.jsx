@@ -22,11 +22,19 @@ const Categorias = lazy(() => import('../pages/Categorias'))
 const LogsAuditoria = lazy(() => import('../pages/LogsAuditoria'))
 const Garantias = lazy(() => import('../pages/Garantias'))
 const CuentasCobrar = lazy(() => import('../pages/CuentasCobrar'))
+const CuentasPagar = lazy(() => import('../pages/CuentasPagar'))
 const Cotizaciones = lazy(() => import('../pages/Cotizaciones'))
 const Devoluciones = lazy(() => import('../pages/Devoluciones'))
 const Respaldos = lazy(() => import('../pages/Respaldos'))
 const Rentabilidad = lazy(() => import('../pages/Rentabilidad'))
 const POS = lazy(() => import('../pages/POS'))
+const Caja = lazy(() => import('../pages/Caja'))
+const Gastos = lazy(() => import('../pages/Gastos'))
+const Taller = lazy(() => import('../pages/Taller'))
+const MantenimientoPreventivo = lazy(() => import('../pages/MantenimientoPreventivo'))
+const Ubicaciones = lazy(() => import('../pages/Ubicaciones'))
+const ConteoFisico = lazy(() => import('../pages/ConteoFisico'))
+const AnalisisProveedores = lazy(() => import('../pages/AnalisisProveedores'))
 const Etiquetas = lazy(() => import('../pages/Etiquetas'))
 const NotFound = lazy(() => import('../pages/NotFound'))
 
@@ -144,6 +152,14 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: 'cuentas-pagar',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <CuentasPagar />
+          </Suspense>
+        ),
+      },
+      {
         path: 'cotizaciones',
         element: (
           <Suspense fallback={<PageLoader />}>
@@ -181,6 +197,70 @@ const router = createBrowserRouter([
           <Suspense fallback={<PageLoader />}>
             <POS />
           </Suspense>
+        ),
+      },
+      {
+        path: 'caja',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Caja />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'gastos',
+        element: (
+          <AdminRoute>
+            <Suspense fallback={<PageLoader />}>
+              <Gastos />
+            </Suspense>
+          </AdminRoute>
+        ),
+      },
+      {
+        path: 'taller',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Taller />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'preventivo',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <MantenimientoPreventivo />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'ubicaciones',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Ubicaciones />
+          </Suspense>
+        ),
+      },
+      {
+        // Los reportes que alimentan esta página son admin-only.
+        path: 'analisis-proveedores',
+        element: (
+          <AdminRoute>
+            <Suspense fallback={<PageLoader />}>
+              <AnalisisProveedores />
+            </Suspense>
+          </AdminRoute>
+        ),
+      },
+      {
+        // Mueve stock: solo admin.
+        path: 'conteo-fisico',
+        element: (
+          <AdminRoute>
+            <Suspense fallback={<PageLoader />}>
+              <ConteoFisico />
+            </Suspense>
+          </AdminRoute>
         ),
       },
       {

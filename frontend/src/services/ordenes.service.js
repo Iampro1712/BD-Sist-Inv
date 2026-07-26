@@ -28,6 +28,11 @@ export const ordenesCompraService = {
   cancelar: (id, motivo) => {
     return api.post(`/ordenes-compra/${id}/cancelar/`, { motivo })
   },
+
+  // Pagos a proveedor (cuentas por pagar)
+  getPagos: (idOrden) => api.get(`/ordenes-compra/${idOrden}/pagos/`),
+  registrarPago: (idOrden, data) => api.post(`/ordenes-compra/${idOrden}/registrar-pago/`, data),
+  eliminarPago: (idOrden, idPago) => api.delete(`/ordenes-compra/${idOrden}/pagos/${idPago}/`),
 }
 
 export const ordenesVentaService = {

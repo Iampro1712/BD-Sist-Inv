@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useProveedores } from '../../hooks/useProveedores'
+import { useUbicaciones } from '../../hooks/useUbicaciones'
 import { Input, Button } from '../ui'
 
 const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }) => {
@@ -15,11 +16,16 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
     meses_garantia: 0,
     tipo_garantia: '',
     descripcion_garantia: '',
+    id_ubicacion: '',
   })
 
   const [errors, setErrors] = useState({})
   const { data: proveedoresData } = useProveedores()
   const proveedores = proveedoresData?.results || []
+  const { data: ubicacionesData } = useUbicaciones()
+  const ubicaciones = Array.isArray(ubicacionesData)
+    ? ubicacionesData
+    : ubicacionesData?.results || []
 
   useEffect(() => {
     if (producto) {
@@ -35,6 +41,7 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
         meses_garantia: producto.meses_garantia ?? 0,
         tipo_garantia: producto.tipo_garantia || '',
         descripcion_garantia: producto.descripcion_garantia || '',
+        id_ubicacion: producto.id_ubicacion || '',
       })
     }
   }, [producto])
@@ -67,7 +74,9 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (validate()) onSubmit(formData)
+    if (!validate()) return
+    // El select vacío da '', que el backend rechaza como clave foránea.
+    onSubmit({ ...formData, id_ubicacion: formData.id_ubicacion || null })
   }
 
   const formatCurrency = (value) => {
@@ -140,6 +149,24 @@ const ProductoForm = ({ producto = null, onSubmit, onCancel, isLoading = false }
             <option key={p.id_proveedor} value={p.id_proveedor}>{p.nombre_empresa}</option>
           ))}
         </select>
+
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mt-3 mb-1">
+          Ubicación física
+        </label>
+        <select
+          name="id_ubicacion"
+          value={formData.id_ubicacion}
+          onChange={handleChange}
+          className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600 transition-colors"
+        >
+          <option value="">Sin ubicación</option>
+          {ubicaciones.map(u => (
+            <option key={u.id_ubicacion} value={u.id_ubicacion}>{u.codigo}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+          Los lugares se administran en Ubicaciones.
+        </p>
       </div>
 
       {/* Precios */}

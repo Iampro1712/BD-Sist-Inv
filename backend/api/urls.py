@@ -10,8 +10,9 @@ from .views import (
     MovimientoInventarioViewSet, MotoViewSet, ServicioMotoViewSet, ServicioViewSet,
     BitacoraServicioViewSet, ServicioMotoConBitacoraViewSet, AuditoriaProductoViewSet,
     GarantiaViewSet, ReclamacionViewSet,
-    CotizacionViewSet, DevolucionViewSet,
-    UsuarioViewSet,
+    CotizacionViewSet, DevolucionViewSet, DevolucionCompraViewSet,
+    UsuarioViewSet, SesionCajaViewSet,
+    CategoriaGastoViewSet, GastoViewSet, UbicacionViewSet,
 )
 from .auth_views import LoginView, logout_view, me_view
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -23,6 +24,14 @@ from .reportes_views import (
     cuentas_por_cobrar,
     reporte_rentabilidad,
     reporte_stock_muerto,
+    reporte_estado_resultados,
+    reporte_cuentas_por_pagar,
+    reporte_agenda_taller,
+    reporte_mantenimiento_preventivo,
+    reporte_conteo_fisico,
+    reporte_desempeno_proveedores,
+    reporte_comparacion_precios,
+    reporte_devoluciones_proveedor,
 )
 from .backup_views import exportar_backup
 
@@ -34,6 +43,7 @@ router.register(r'proveedores', ProveedorViewSet, basename='proveedor')
 router.register(r'marcas', MarcaViewSet, basename='marca')
 router.register(r'categorias', CategoriaViewSet, basename='categoria')
 router.register(r'productos', ProductoViewSet, basename='producto')
+router.register(r'ubicaciones', UbicacionViewSet, basename='ubicacion')
 router.register(r'clientes', ClienteViewSet, basename='cliente')
 router.register(r'ordenes-compra', OrdenCompraViewSet, basename='orden-compra')
 router.register(r'ordenes-venta', OrdenVentaViewSet, basename='orden-venta')
@@ -48,7 +58,12 @@ router.register(r'garantias', GarantiaViewSet, basename='garantia')
 router.register(r'reclamaciones', ReclamacionViewSet, basename='reclamacion')
 router.register(r'cotizaciones', CotizacionViewSet, basename='cotizacion')
 router.register(r'devoluciones', DevolucionViewSet, basename='devolucion')
+router.register(r'devoluciones-compra', DevolucionCompraViewSet,
+                basename='devolucion-compra')
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
+router.register(r'caja', SesionCajaViewSet, basename='caja')
+router.register(r'categorias-gasto', CategoriaGastoViewSet, basename='categoria-gasto')
+router.register(r'gastos', GastoViewSet, basename='gasto')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -65,5 +80,17 @@ urlpatterns = [
     path('reportes/cuentas-por-cobrar/', cuentas_por_cobrar, name='cuentas-por-cobrar'),
     path('reportes/rentabilidad/', reporte_rentabilidad, name='reporte-rentabilidad'),
     path('reportes/stock-muerto/', reporte_stock_muerto, name='reporte-stock-muerto'),
+    path('reportes/estado-resultados/', reporte_estado_resultados, name='reporte-estado-resultados'),
+    path('reportes/cuentas-por-pagar/', reporte_cuentas_por_pagar, name='cuentas-por-pagar'),
+    path('reportes/agenda-taller/', reporte_agenda_taller, name='reporte-agenda-taller'),
+    path('reportes/conteo-fisico/', reporte_conteo_fisico, name='reporte-conteo-fisico'),
+    path('reportes/desempeno-proveedores/', reporte_desempeno_proveedores,
+         name='reporte-desempeno-proveedores'),
+    path('reportes/comparacion-precios/', reporte_comparacion_precios,
+         name='reporte-comparacion-precios'),
+    path('reportes/devoluciones-proveedor/', reporte_devoluciones_proveedor,
+         name='reporte-devoluciones-proveedor'),
+    path('reportes/mantenimiento-preventivo/', reporte_mantenimiento_preventivo,
+         name='reporte-mantenimiento-preventivo'),
     path('backup/', exportar_backup, name='backup'),
 ]

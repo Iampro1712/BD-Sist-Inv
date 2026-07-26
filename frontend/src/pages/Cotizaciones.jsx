@@ -15,6 +15,18 @@ const formatCurrency = (v) =>
 const formatDate = (d) =>
   new Date(d).toLocaleDateString('es-NI', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
 
+/** Aviso por WhatsApp de que el documento está listo. El PDF se adjunta a mano. */
+const whatsappLink = (cot) => {
+  if (!cot?.cliente_telefono) return null
+  const tel = String(cot.cliente_telefono).replace(/\D/g, '')
+  if (!tel) return null
+  const numero = tel.length === 8 ? `505${tel}` : tel  // Nicaragua: 8 dígitos
+  const msg = cot.tipo === 'reparacion'
+    ? `Hola ${cot.cliente_nombre}, le compartimos el presupuesto de la reparación de su ${cot.moto_info || 'moto'}: ${formatCurrency(cot.total)}. Válido por ${cot.validez_dias} día(s). ¿Nos autoriza a proceder?`
+    : `Hola ${cot.cliente_nombre}, le compartimos la cotización #${cot.id_cotizacion} por ${formatCurrency(cot.total)}. Válida por ${cot.validez_dias} día(s). ¡Gracias!`
+  return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`
+}
+
 const estadoBadge = (estado) => ({
   pendiente:  'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
   aprobada:   'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
@@ -24,6 +36,7 @@ const estadoBadge = (estado) => ({
 
 const Cotizaciones = () => {
   const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [tipoFiltro, setTipoFiltro] = useState('')
   const [page, setPage] = useState(1)
   const [isNewOpen, setIsNewOpen] = useState(false)
   const [isDetalleOpen, setIsDetalleOpen] = useState(false)
@@ -31,7 +44,11 @@ const Cotizaciones = () => {
   const [convertId, setConvertId] = useState(null)
   const toast = useToast()
 
-  const { data, isLoading, error } = useCotizaciones({ estado: estadoFiltro || undefined, page })
+  const { data, isLoading, error } = useCotizaciones({
+    estado: estadoFiltro || undefined,
+    tipo: tipoFiltro || undefined,
+    page,
+  })
   const { data: detalle } = useCotizacion(selectedId)
   const createMutation = useCreateCotizacion()
   const convertirMutation = useConvertirCotizacion()
@@ -79,14 +96,16 @@ const Cotizaciones = () => {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cotizaciones</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Proformas para clientes; conviértelas en venta con un clic</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cotizaciones y presupuestos</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Proformas de productos y presupuestos de reparación del taller
+          </p>
         </div>
         <Button onClick={() => setIsNewOpen(true)} className="shrink-0">+ Nueva cotización</Button>
       </div>
 
-      {/* Filtro */}
-      <div className="flex gap-2">
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-2">
         <select value={estadoFiltro} onChange={(e) => { setEstadoFiltro(e.target.value); setPage(1) }}
           className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500">
           <option value="">Todos los estados</option>
@@ -94,6 +113,12 @@ const Cotizaciones = () => {
           <option value="aprobada">Aprobada</option>
           <option value="rechazada">Rechazada</option>
           <option value="convertida">Convertida</option>
+        </select>
+        <select value={tipoFiltro} onChange={(e) => { setTipoFiltro(e.target.value); setPage(1) }}
+          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500">
+          <option value="">Todos los tipos</option>
+          <option value="producto">Proformas de productos</option>
+          <option value="reparacion">Presupuestos de reparación</option>
         </select>
       </div>
 
@@ -123,6 +148,7 @@ const Cotizaciones = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"># Cot.</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo / Moto</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha</th>
                   <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
@@ -136,6 +162,20 @@ const Cotizaciones = () => {
                       <span className="text-sm font-mono font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">#{c.id_cotizacion}</span>
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{c.cliente_nombre}</td>
+                    <td className="px-6 py-4">
+                      {c.tipo === 'reparacion' ? (
+                        <>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
+                            Reparación
+                          </span>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{c.moto_info}</div>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                          Productos
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(c.fecha)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${estadoBadge(c.estado)}`}>
@@ -179,45 +219,115 @@ const Cotizaciones = () => {
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">#{detalle.id_cotizacion}</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{detalle.cliente_nombre} · {formatDate(detalle.fecha)}</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Válida por {detalle.validez_dias} día(s)</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  {detalle.tipo_display} · válida por {detalle.validez_dias} día(s)
+                  {detalle.vencido && ' · vencida'}
+                </p>
+                {detalle.moto_detalle && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                    {detalle.moto_detalle.marca} {detalle.moto_detalle.modelo}
+                    {detalle.moto_detalle.anio ? ` (${detalle.moto_detalle.anio})` : ''}
+                    {' · '}placa {detalle.moto_detalle.placa}
+                    {detalle.moto_detalle.km_actual
+                      ? ` · ${Number(detalle.moto_detalle.km_actual).toLocaleString('es-NI')} km`
+                      : ''}
+                  </p>
+                )}
               </div>
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${estadoBadge(detalle.estado)}`}>
                 {detalle.estado_display || detalle.estado}
               </span>
             </div>
 
-            {/* Productos */}
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900/50">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Producto</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-16">Cant.</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-28">Precio</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-28">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
-                  {(detalle.productos || []).map((p, i) => (
-                    <tr key={i}>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{p.nombre}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-700 dark:text-gray-300">{p.cantidad}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">{formatCurrency(p.precio_unitario)}</td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(p.subtotal)}</td>
+            {detalle.diagnostico && (
+              <div className="bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Diagnóstico</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{detalle.diagnostico}</p>
+              </div>
+            )}
+
+            {/* Mano de obra */}
+            {(detalle.servicios || []).length > 0 && (
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-900/50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Mano de obra</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-16">Cant.</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-28">Precio</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-28">Subtotal</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-900 dark:bg-gray-700">
-                  <tr>
-                    <td colSpan={3} className="px-4 py-3 text-sm font-medium text-gray-300">Total</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-white">{formatCurrency(detalle.total)}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+                    {detalle.servicios.map((s) => (
+                      <tr key={s.id_servicio_cotizacion}>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{s.servicio_nombre}</td>
+                        <td className="px-4 py-3 text-right text-sm text-gray-700 dark:text-gray-300">{s.cantidad}</td>
+                        <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">{formatCurrency(s.precio_unitario)}</td>
+                        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(s.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 dark:bg-gray-900/50">
+                    <tr>
+                      <td colSpan={3} className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">Subtotal mano de obra</td>
+                      <td className="px-4 py-2.5 text-right text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(detalle.subtotal_mano_obra)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            {/* Productos / repuestos. Un presupuesto puede ser solo de mano de
+                obra, así que la tabla no se dibuja si no hay líneas. */}
+            {(detalle.productos || []).length > 0 && (
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-900/50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                        {detalle.tipo === 'reparacion' ? 'Repuestos' : 'Producto'}
+                      </th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-16">Cant.</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-28">Precio</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider w-28">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
+                    {detalle.productos.map((p, i) => (
+                      <tr key={i}>
+                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{p.nombre}</td>
+                        <td className="px-4 py-3 text-right text-sm text-gray-700 dark:text-gray-300">{p.cantidad}</td>
+                        <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">{formatCurrency(p.precio_unitario)}</td>
+                        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(p.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 dark:bg-gray-900/50">
+                    <tr>
+                      <td colSpan={3} className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {detalle.tipo === 'reparacion' ? 'Subtotal repuestos' : 'Subtotal'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(detalle.subtotal_repuestos)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            <div className="rounded-xl bg-gray-900 dark:bg-gray-700 px-4 py-3 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-300">Total</span>
+              <span className="text-lg font-bold text-white">{formatCurrency(detalle.total)}</span>
             </div>
 
             {detalle.id_venta && (
               <p className="text-sm text-green-600 dark:text-green-400">✓ Convertida en venta #{detalle.id_venta}</p>
+            )}
+
+            {detalle.tipo === 'reparacion' && detalle.cargado_a_orden && (
+              <p className="text-sm text-green-600 dark:text-green-400">
+                ✓ Autorizado y cargado a la orden de trabajo #{detalle.id_servicio}. Se factura al entregar la moto.
+              </p>
             )}
 
             {/* Acciones */}
@@ -226,6 +336,12 @@ const Cotizaciones = () => {
                 className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                 📄 Descargar PDF
               </button>
+              {whatsappLink(detalle) && (
+                <a href={whatsappLink(detalle)} target="_blank" rel="noopener noreferrer"
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50">
+                  Avisar por WhatsApp
+                </a>
+              )}
               {detalle.estado !== 'convertida' && (
                 <>
                   {detalle.estado !== 'aprobada' && (
@@ -234,7 +350,11 @@ const Cotizaciones = () => {
                   {detalle.estado !== 'rechazada' && (
                     <Button variant="danger" size="md" onClick={() => handleCambiarEstado('rechazada')} loading={cambiarEstadoMutation.isPending}>Rechazar</Button>
                   )}
-                  <Button onClick={() => setConvertId(detalle.id_cotizacion)}>Convertir en venta</Button>
+                  {/* Un presupuesto de reparación se factura al entregar la moto,
+                      no acá: convertirlo ahora duplicaría la venta. */}
+                  {detalle.tipo !== 'reparacion' && (
+                    <Button onClick={() => setConvertId(detalle.id_cotizacion)}>Convertir en venta</Button>
+                  )}
                 </>
               )}
             </div>

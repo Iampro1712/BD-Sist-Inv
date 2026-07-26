@@ -471,6 +471,11 @@ export const generarReciboPagoPDF = async (venta, pago) => {
 
 /** Cotización / proforma imprimible. */
 export const generarCotizacionPDF = async (cot) => {
+  // Un presupuesto de reparación necesita otro cuerpo: la moto, el diagnóstico
+  // que justifica el precio, mano de obra y repuestos separados, y una firma de
+  // autorización. Comparte el encabezado y los helpers con la proforma.
+  if (cot.tipo === 'reparacion') return generarPresupuestoPDF(cot)
+
   const { jsPDF, autoTable } = await loadPdf()
   const doc = new jsPDF()
   let y = _encabezadoPDF(doc)
@@ -513,6 +518,124 @@ export const generarCotizacionPDF = async (cot) => {
   doc.setTextColor(0)
 
   doc.save(`cotizacion-${cot.id_cotizacion}.pdf`)
+}
+
+/**
+ * Presupuesto de reparación: el documento que el cliente firma para autorizar
+ * el trabajo. Se llama desde generarCotizacionPDF cuando tipo === 'reparacion'.
+ */
+export const generarPresupuestoPDF = async (cot) => {
+  const { jsPDF, autoTable } = await loadPdf()
+  const doc = new jsPDF()
+  const y = _encabezadoPDF(doc)
+
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('Presupuesto de reparación', 14, y + 6)
+  doc.setFont(undefined, 'normal')
+
+  // Datos en dos columnas para no estirar la hoja.
+  doc.setFontSize(10)
+  doc.text(`N° Presupuesto: #${cot.id_cotizacion}`, 14, y + 14)
+  doc.text(`Fecha: ${_fechaCorta(cot.fecha)}`, 14, y + 20)
+  doc.text(`Cliente: ${cot.cliente_nombre || '—'}`, 14, y + 26)
+
+  const m = cot.moto_detalle
+  if (m) {
+    doc.text(`Moto: ${m.marca} ${m.modelo}${m.anio ? ` (${m.anio})` : ''}`, 110, y + 14)
+    doc.text(`Placa: ${m.placa || '—'}`, 110, y + 20)
+    if (m.km_actual) {
+      doc.text(`Kilometraje: ${Number(m.km_actual).toLocaleString('es-NI')} km`, 110, y + 26)
+    }
+  }
+
+  let cursor = y + 34
+
+  // Diagnóstico: es lo que justifica el precio ante el cliente.
+  if (cot.diagnostico) {
+    doc.setFont(undefined, 'bold')
+    doc.setFontSize(10)
+    doc.text('Diagnóstico', 14, cursor)
+    doc.setFont(undefined, 'normal')
+    doc.setFontSize(9)
+    const lineas = doc.splitTextToSize(cot.diagnostico, 182)
+    doc.text(lineas, 14, cursor + 5)
+    cursor += 5 + lineas.length * 4 + 4
+  }
+
+  const manoObra = cot.servicios || []
+  const repuestos = cot.productos || []
+
+  if (manoObra.length) {
+    autoTable(doc, {
+      startY: cursor,
+      head: [['Mano de obra', 'Cant.', 'Precio Unit.', 'Subtotal']],
+      body: manoObra.map((s) => [
+        s.servicio_nombre,
+        s.cantidad,
+        formatCurrency(s.precio_unitario),
+        formatCurrency(s.subtotal),
+      ]),
+      foot: [['', '', 'Subtotal mano de obra', formatCurrency(cot.subtotal_mano_obra)]],
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [99, 102, 241] },
+      footStyles: { fillColor: [238, 242, 255], textColor: 40, fontStyle: 'bold' },
+    })
+    cursor = doc.lastAutoTable.finalY + 6
+  }
+
+  if (repuestos.length) {
+    autoTable(doc, {
+      startY: cursor,
+      head: [['Repuestos', 'Cant.', 'Precio Unit.', 'Subtotal']],
+      body: repuestos.map((p) => [
+        p.nombre,
+        p.cantidad,
+        formatCurrency(p.precio_unitario),
+        formatCurrency(p.subtotal),
+      ]),
+      foot: [['', '', 'Subtotal repuestos', formatCurrency(cot.subtotal_repuestos)]],
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [13, 148, 136] },
+      footStyles: { fillColor: [240, 253, 250], textColor: 40, fontStyle: 'bold' },
+    })
+    cursor = doc.lastAutoTable.finalY + 6
+  }
+
+  doc.setFontSize(13)
+  doc.setFont(undefined, 'bold')
+  doc.text(`Total a pagar: ${formatCurrency(cot.total)}`, 14, cursor + 4)
+  doc.setFont(undefined, 'normal')
+  doc.setFontSize(9)
+  doc.text(`Presupuesto válido por ${cot.validez_dias} día(s).`, 14, cursor + 11)
+  cursor += 11
+
+  if (cot.notas) {
+    doc.setFontSize(9)
+    const notas = doc.splitTextToSize(`Notas: ${cot.notas}`, 182)
+    doc.text(notas, 14, cursor + 7)
+    cursor += 7 + notas.length * 4
+  }
+
+  // Firma de autorización: sin esto el taller no empieza a trabajar.
+  const firmaY = Math.min(cursor + 22, 262)
+  doc.setLineWidth(0.3)
+  doc.line(14, firmaY, 95, firmaY)
+  doc.line(110, firmaY, 196, firmaY)
+  doc.setFontSize(8)
+  doc.text('Firma del cliente (autorizo la reparación)', 14, firmaY + 5)
+  doc.text('Fecha', 110, firmaY + 5)
+
+  doc.setTextColor(120)
+  doc.text(
+    'Documento no fiscal. Los trabajos inician una vez autorizado este presupuesto.',
+    14, firmaY + 14,
+  )
+  doc.setTextColor(0)
+
+  doc.save(`presupuesto-${cot.id_cotizacion}.pdf`)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

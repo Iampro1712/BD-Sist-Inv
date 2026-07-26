@@ -1,11 +1,27 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { fadeIn } from '../../utils/animations'
 import { useRegistrarPago, useEliminarPago } from '../../hooks/useOrdenesVenta'
+import { useCajaActual } from '../../hooks/useCaja'
 import { useToast } from '../../hooks/useToast'
 import { Button, Modal, ConfirmDialog } from '../ui'
 import PagoForm from '../forms/PagoForm'
 import { generarReciboVentaPDF, generarReciboPagoPDF } from '../../utils/exportReportes'
+
+// Extrae el primer mensaje de error legible de la respuesta del backend
+// (custom_exception_handler anida los detalles en error.details.<campo>,
+// como string o como array según el validador que lo haya lanzado).
+const extraerMensajeError = (err, fallback) => {
+  const details = err.response?.data?.error?.details
+  if (details && typeof details === 'object') {
+    const primero = Object.values(details)[0]
+    if (primero) return Array.isArray(primero) ? primero[0] : primero
+  }
+  const message = err.response?.data?.error?.message
+  if (typeof message === 'string') return message
+  return fallback
+}
 
 const OrdenVentaDetalle = ({ orden }) => {
   const [isPagoModalOpen, setIsPagoModalOpen] = useState(false)
@@ -14,6 +30,8 @@ const OrdenVentaDetalle = ({ orden }) => {
 
   const registrarPagoMutation = useRegistrarPago()
   const eliminarPagoMutation = useEliminarPago()
+  const { data: cajaActual } = useCajaActual()
+  const cajaAbierta = !!cajaActual
 
   const pagos = orden.pagos || []
   const montoPagado = orden.monto_pagado || 0
@@ -31,8 +49,7 @@ const OrdenVentaDetalle = ({ orden }) => {
       setIsPagoModalOpen(false)
       toast.success('Pago registrado exitosamente')
     } catch (err) {
-      const msg = err.response?.data?.monto || err.response?.data?.error || 'Error al registrar el pago'
-      toast.error(Array.isArray(msg) ? msg[0] : msg)
+      toast.error(extraerMensajeError(err, 'Error al registrar el pago'))
     }
   }
 
@@ -43,8 +60,7 @@ const OrdenVentaDetalle = ({ orden }) => {
       toast.success('Pago eliminado exitosamente')
       setPagoToDelete(null)
     } catch (err) {
-      const msg = err.response?.data?.error || 'Error al eliminar el pago'
-      toast.error(msg)
+      toast.error(extraerMensajeError(err, 'Error al eliminar el pago'))
       setPagoToDelete(null)
     }
   }
@@ -171,11 +187,24 @@ const OrdenVentaDetalle = ({ orden }) => {
             Estado de pago
           </p>
           {orden.estado_pago !== 'pagado' && (
-            <Button size="sm" onClick={() => setIsPagoModalOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => setIsPagoModalOpen(true)}
+              disabled={!cajaAbierta}
+              title={!cajaAbierta ? 'Abre la caja para registrar pagos' : undefined}
+            >
               + Registrar pago
             </Button>
           )}
         </div>
+
+        {/* Aviso: sin caja abierta no se pueden registrar pagos */}
+        {orden.estado_pago !== 'pagado' && !cajaAbierta && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+            No hay caja abierta.{' '}
+            <Link to="/caja" className="font-medium underline">Abre la caja</Link> para poder registrar pagos.
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 p-3">

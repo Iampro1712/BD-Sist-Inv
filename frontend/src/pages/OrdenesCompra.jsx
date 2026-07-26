@@ -33,6 +33,26 @@ const estadoConfig = {
   cancelada: { badge: 'danger',  label: 'Cancelada', icon: '✖' },
 }
 
+/** Saca el mensaje que manda el backend, que explica el motivo real del rechazo. */
+const mensajeError = (err, fallback) => {
+  const data = err?.response?.data
+  const message = data?.error?.message
+  if (typeof message === 'string') return message
+  if (typeof data?.error === 'string') return data.error
+  const details = data?.error?.details
+  if (details && typeof details === 'object') {
+    const primero = Object.values(details)[0]
+    if (primero) return Array.isArray(primero) ? primero[0] : primero
+  }
+  return fallback
+}
+
+const pagoConfig = {
+  pagado:    { label: 'Pagado',    cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
+  parcial:   { label: 'Parcial',   cls: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+  pendiente: { label: 'Por pagar', cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
+}
+
 const OrdenesCompra = () => {
   const [search, setSearch] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState('')
@@ -99,18 +119,24 @@ const OrdenesCompra = () => {
       await confirmarMutation.mutateAsync(selectedOrdenId)
       toast.success('Orden confirmada correctamente')
       setConfirmDialog({ open: false, type: null })
-    } catch {
-      toast.error('Error al confirmar la orden')
+    } catch (err) {
+      toast.error(mensajeError(err, 'Error al confirmar la orden'))
     }
   }
 
   const handleRecibir = async () => {
     try {
-      await recibirMutation.mutateAsync(selectedOrdenId)
-      toast.success('Orden recibida — stock actualizado')
+      const res = await recibirMutation.mutateAsync(selectedOrdenId)
+      const d = res?.data || {}
+      toast.success(d.unidades_ingresadas
+        ? `Orden recibida: ${d.unidades_ingresadas} unidad(es) sumadas al inventario`
+        : 'Orden recibida')
       setConfirmDialog({ open: false, type: null })
-    } catch {
-      toast.error('Error al recibir la orden')
+    } catch (err) {
+      // El backend explica por qué no se pudo (por ejemplo, una orden vieja sin
+      // cantidades registradas); tragarse ese mensaje dejaba al usuario a ciegas.
+      toast.error(mensajeError(err, 'Error al recibir la orden'))
+      setConfirmDialog({ open: false, type: null })
     }
   }
 
@@ -294,6 +320,9 @@ const OrdenesCompra = () => {
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-36">
                     Total
                   </th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">
+                    Pago
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">
                     Acciones
                   </th>
@@ -341,6 +370,17 @@ const OrdenesCompra = () => {
                         <span className="text-sm font-bold text-gray-900 dark:text-white">
                           {formatCurrency(orden.total)}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        {orden.total > 0 && orden.estado !== 'cancelada' ? (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            (pagoConfig[orden.estado_pago] || pagoConfig.pendiente).cls
+                          }`}>
+                            {(pagoConfig[orden.estado_pago] || pagoConfig.pendiente).label}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <button

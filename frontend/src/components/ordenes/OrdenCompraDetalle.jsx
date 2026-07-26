@@ -1,8 +1,30 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Button } from '../ui'
+import { Button, Modal } from '../ui'
 import ProveedorLogo from '../ui/ProveedorLogo'
+import PagoForm from '../forms/PagoForm'
 import { fadeIn } from '../../utils/animations'
+import { useRegistrarPagoCompra } from '../../hooks/useOrdenesCompra'
+import { useCajaActual } from '../../hooks/useCaja'
+import { useToast } from '../../hooks/useToast'
+
+// Extrae el primer mensaje legible del formato de error del backend.
+const extraerMensajeError = (err, fallback) => {
+  const details = err.response?.data?.error?.details
+  if (details && typeof details === 'object') {
+    const primero = Object.values(details)[0]
+    if (primero) return Array.isArray(primero) ? primero[0] : primero
+  }
+  const message = err.response?.data?.error?.message
+  return typeof message === 'string' ? message : fallback
+}
+
+const pagoBadge = {
+  pagado: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', label: '✓ Pagado completo' },
+  parcial: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-400', label: '◐ Pago parcial' },
+  pendiente: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400', label: '○ Pendiente de pago' },
+}
 
 const estadoConfig = {
   pendiente: { bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-800', text: 'text-yellow-700 dark:text-yellow-300', dot: 'bg-yellow-400', label: 'Pendiente' },
@@ -14,6 +36,27 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
   const [showCancelarInput, setShowCancelarInput] = useState(false)
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
   const [motivoError, setMotivoError] = useState('')
+  const [isPagoModalOpen, setIsPagoModalOpen] = useState(false)
+  const toast = useToast()
+  const registrarPago = useRegistrarPagoCompra()
+  const { data: cajaActual } = useCajaActual()
+  const cajaAbierta = !!cajaActual
+
+  const montoPagado = orden.monto_pagado || 0
+  const saldoPendiente = orden.saldo_pendiente ?? orden.total ?? 0
+  const saldoAFavor = orden.saldo_a_favor ?? 0
+  const totalDevuelto = orden.total_devuelto ?? 0
+  const pcfg = pagoBadge[orden.estado_pago] || pagoBadge.pendiente
+
+  const handleRegistrarPago = async (data) => {
+    try {
+      await registrarPago.mutateAsync({ idOrden: orden.id_orden, data })
+      setIsPagoModalOpen(false)
+      toast.success('Pago registrado exitosamente')
+    } catch (err) {
+      toast.error(extraerMensajeError(err, 'Error al registrar el pago'))
+    }
+  }
 
   const formatCurrency = (v) =>
     new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
@@ -124,6 +167,67 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
         <span className="text-2xl font-bold text-white">{formatCurrency(orden.total)}</span>
       </motion.div>
 
+      {/* Estado de pago al proveedor (cuentas por pagar) — no aplica si cancelada */}
+      {orden.estado !== 'cancelada' && orden.total > 0 && (
+        <motion.div variants={fadeIn} className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Pago al proveedor
+            </p>
+            {orden.estado_pago !== 'pagado' && (
+              <Button size="sm" onClick={() => setIsPagoModalOpen(true)}>
+                + Registrar pago
+              </Button>
+            )}
+          </div>
+
+          {orden.estado_pago !== 'pagado' && !cajaAbierta && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Para pagar en efectivo necesitas una <Link to="/caja" className="underline font-medium">caja abierta</Link>. Por transferencia/cheque no hace falta.
+            </p>
+          )}
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Total</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(orden.total)}</p>
+            </div>
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 p-3">
+              <p className="text-xs text-green-600 dark:text-green-400 mb-1">Pagado</p>
+              <p className="text-lg font-bold text-green-700 dark:text-green-300">{formatCurrency(montoPagado)}</p>
+            </div>
+            {/* Un saldo negativo no es una deuda: es plata que el proveedor
+                debe por mercadería devuelta y no reembolsada. */}
+            {saldoAFavor > 0 ? (
+              <div className="rounded-lg border p-3 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                <p className="text-xs mb-1 text-blue-600 dark:text-blue-400">Te debe</p>
+                <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                  {formatCurrency(saldoAFavor)}
+                </p>
+              </div>
+            ) : (
+              <div className={`rounded-lg border p-3 ${saldoPendiente > 0 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700'}`}>
+                <p className={`text-xs mb-1 ${saldoPendiente > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>Saldo por pagar</p>
+                <p className={`text-lg font-bold ${saldoPendiente > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-gray-500 dark:text-gray-400'}`}>{formatCurrency(saldoPendiente)}</p>
+              </div>
+            )}
+          </div>
+
+          {totalDevuelto > 0 && (
+            <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+              Se devolvieron {formatCurrency(totalDevuelto)} de mercadería a este
+              proveedor, y ya no se deben.
+            </p>
+          )}
+
+          <div className="flex justify-center">
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${pcfg.bg} ${pcfg.text}`}>
+              {pcfg.label}
+            </span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Notas */}
       {orden.notas && (
         <motion.div variants={fadeIn} className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 flex gap-3">
@@ -134,6 +238,15 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
             <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Notas</p>
             <p className="text-sm text-amber-800 dark:text-amber-300">{orden.notas}</p>
           </div>
+        </motion.div>
+      )}
+
+      {orden.estado === 'pendiente' && orden.puede_recibirse === false && (
+        <motion.div variants={fadeIn}
+          className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-300">
+          El detalle de esta orden no tiene cantidades registradas, así que no se
+          puede saber cuánto stock sumar al recibirla. Es una orden creada antes de
+          que el sistema guardara las cantidades por línea.
         </motion.div>
       )}
 
@@ -150,22 +263,34 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
               >
                 Cancelar orden
               </button>
-              <Button onClick={onConfirmar} loading={isLoading} disabled={isLoading}>
+              {/* Llama a `recibir`, que es lo que suma el stock. Antes este mismo
+                  botón llamaba a `confirmar`, que solo cambiaba el estado. */}
+              <Button onClick={onRecibir} loading={isLoading}
+                disabled={isLoading || orden.puede_recibirse === false}>
                 <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
-                Marcar como recibida
+                Recibir y sumar al inventario
               </Button>
             </>
           )}
 
           {orden.estado === 'recibida' && (
-            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-medium">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              Orden completada — stock actualizado
-            </div>
+            orden.stock_aplicado ? (
+              <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-medium">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Orden completada — stock sumado al inventario
+              </div>
+            ) : (
+              // Las órdenes recibidas antes de este arreglo nunca movieron
+              // inventario; decir "stock actualizado" sería falso.
+              <div className="text-sm text-amber-600 dark:text-amber-400 text-right">
+                Orden completada. El stock de esta orden no quedó registrado en
+                el inventario (se recibió antes de que el sistema lo hiciera).
+              </div>
+            )
           )}
 
           {orden.estado === 'cancelada' && (
@@ -213,6 +338,16 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
           </div>
         </motion.div>
       )}
+
+      {/* Modal registrar pago a proveedor */}
+      <Modal isOpen={isPagoModalOpen} onClose={() => setIsPagoModalOpen(false)} title="Registrar pago a proveedor" size="md">
+        <PagoForm
+          orden={orden}
+          onSubmit={handleRegistrarPago}
+          onCancel={() => setIsPagoModalOpen(false)}
+          isLoading={registrarPago.isPending}
+        />
+      </Modal>
 
     </div>
   )
