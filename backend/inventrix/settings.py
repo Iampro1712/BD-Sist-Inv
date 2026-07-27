@@ -381,6 +381,20 @@ R2_BACKUP_BUCKET = os.getenv('R2_BACKUP_BUCKET')
 # contacto cifrados en la base (ni al revés).
 BACKUP_ENCRYPTION_KEY = os.getenv('BACKUP_ENCRYPTION_KEY', '')
 
+# Pronóstico de demanda: parámetros del cálculo de recompra.
+#
+# Plazo de entrega por defecto, en días, cuando un proveedor no tiene el suyo
+# cargado ni recepciones medidas. 15 días es un supuesto conservador para
+# Nicaragua contemplando proveedores locales e importadores; el reporte declara
+# cuándo usó este valor en vez de un dato real, para no confundirlos.
+PRONOSTICO_PLAZO_DEFAULT_DIAS = int(os.getenv('PRONOSTICO_PLAZO_DEFAULT_DIAS') or 15)
+
+# Días extra de inventario sobre el plazo de entrega, para absorber que la
+# demanda no llega parejo. Con 2-3 ventas al mes por producto la desviación
+# estándar es ruido, así que se usa un margen en días en vez de una fórmula
+# estadística que daría una precisión falsa.
+PRONOSTICO_COLCHON_DIAS = int(os.getenv('PRONOSTICO_COLCHON_DIAS') or 7)
+
 # Clave de cifrado en reposo (R06) para columnas de contacto sensibles
 # (telefono/email de clientes y proveedores). Ver inventory/encryption.py.
 FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', '')

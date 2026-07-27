@@ -1,14 +1,20 @@
 """
 Vistas para reportes del sistema
 """
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from django.conf import settings
 from django.db import connection
+from django.utils import timezone
 from decimal import Decimal
+import json
+import math
 
 from inventory.encryption import decrypt_value
+from inventory.models import ConfiguracionIA
+from .ia_cliente import preguntar_json
 
 # Nota: antes estos reportes usaban @cache_page, pero cachea por URL sin
 # distinguir usuario — servía la respuesta cacheada de un admin a un no-admin,
@@ -1179,4 +1185,429 @@ def reporte_devoluciones_proveedor(request):
         'por_proveedor': por_proveedor,
         'productos': productos,
         'motivos': motivos,
+    })
+
+
+# ============================================================================
+# PRONÓSTICO DE DEMANDA
+#
+# Responde "qué recomprar, cuándo y cuánto". Reemplaza en la práctica a
+# `cantidad_minima`, que es un umbral fijo puesto a mano y no sabe nada de
+# velocidad: hoy hay productos que rotan 40% más rápido que otros y tienen el
+# umbral más bajo, o sea al revés de lo que debería.
+#
+# El cálculo es aritmética determinista a propósito. Con 2-3 ventas mensuales
+# por producto no hay señal para un modelo estadístico —ni para un LLM— y un
+# número que decide cuánta plata inmovilizar tiene que ser auditable y dar lo
+# mismo dos veces. La IA se usa aparte (ver `analizar_pronostico_ia`) para lo
+# que los datos no pueden contener: estacionalidad local y explicación.
+# ============================================================================
+
+# Meses con datos que hacen falta para confiar en un promedio.
+_CONFIANZA = ((6, 'alta'), (3, 'media'), (1, 'baja'))
+
+# Se promedia por mes y no por día calendario. Ver `_meses_activos`.
+DIAS_POR_MES = 30
+
+
+def _confianza(meses_con_venta):
+    """Qué tan sólido es el promedio de un producto.
+
+    Un producto que vendió una vez en un año no puede mostrar un pronóstico con
+    la misma cara que uno que vendió todos los meses. Sin esto, el número más
+    frágil se ve idéntico al más firme.
+    """
+    for minimo, etiqueta in _CONFIANZA:
+        if meses_con_venta >= minimo:
+            return etiqueta
+    return 'sin_datos'
+
+
+def _meses_activos(cursor, dias):
+    """Meses en los que el negocio efectivamente vendió algo, dentro de la ventana.
+
+    Existe por un problema real de estos datos: hay meses completos sin una sola
+    venta (el sistema estuvo sin uso). Promediar sobre meses calendario cuenta
+    esos ceros como si el local hubiera estado abierto y subestima la demanda
+    —con el historial actual, alrededor de un 27%—. Así que el divisor son los
+    meses con actividad, no los transcurridos.
+    """
+    cursor.execute("""
+        SELECT DISTINCT to_char(fecha, 'YYYY-MM')
+        FROM ventas
+        WHERE fecha >= CURRENT_DATE - %s::int
+        ORDER BY 1
+    """, [dias])
+    return [r[0] for r in cursor.fetchall()]
+
+
+def _plazos_por_proveedor(cursor):
+    """Días de entrega por proveedor, con la fuente del dato.
+
+    Tres fuentes en orden de preferencia, y se informa cuál se usó para que
+    nadie confunda un supuesto con una medición:
+
+    1. `medido`   — promedio de recepciones reales (hace falta más de una para
+                    que un caso raro no defina el plazo).
+    2. `estimado` — el campo que carga el usuario en el proveedor.
+    3. `default`  — el valor del sistema, cuando no hay ninguno de los dos.
+    """
+    cursor.execute("""
+        SELECT pr.id_proveedor,
+               pr.dias_entrega_estimado,
+               COUNT(*) FILTER (WHERE oc.fecha_recepcion IS NOT NULL)          AS recibidas,
+               AVG((oc.fecha_recepcion AT TIME ZONE %s)::date - oc.fecha_creacion)
+                   FILTER (WHERE oc.fecha_recepcion IS NOT NULL)               AS medido
+        FROM proveedores pr
+        LEFT JOIN orden_compra oc
+               ON oc.id_proveedor = pr.id_proveedor
+              AND oc.id_estado <> 1          -- las canceladas no dicen nada
+        GROUP BY pr.id_proveedor, pr.dias_entrega_estimado
+    """, [settings.TIME_ZONE])
+
+    default = int(getattr(settings, 'PRONOSTICO_PLAZO_DEFAULT_DIAS', 15))
+    plazos = {}
+    for id_prov, estimado, recibidas, medido in cursor.fetchall():
+        if recibidas and recibidas >= 2 and medido is not None:
+            # Un plazo medido menor a un día se redondearía a 0 y volvería el
+            # punto de reorden 0, o sea "nunca pidas".
+            plazos[id_prov] = (max(1, int(round(float(medido)))), 'medido')
+        elif estimado:
+            plazos[id_prov] = (int(estimado), 'estimado')
+        else:
+            plazos[id_prov] = (default, 'default')
+    return plazos, default
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def reporte_pronostico_demanda(request):
+    """Qué recomprar, cuándo y cuánto, con la confianza de cada número.
+
+    Parámetros: `dias` (ventana de historial, default 365) y `horizonte` (días
+    de inventario que se quiere tener después de reponer, default 30).
+
+    No llama a ninguna IA: son cuentas. La interpretación opcional está en
+    `analizar_pronostico_ia`, que es otro endpoint para que un proveedor caído o
+    sin saldo no pueda tumbar esta pantalla.
+    """
+    try:
+        dias = int(request.GET.get('dias', 365))
+    except (ValueError, TypeError):
+        dias = 365
+    if dias < 30:
+        dias = 365
+
+    try:
+        horizonte = int(request.GET.get('horizonte', 30))
+    except (ValueError, TypeError):
+        horizonte = 30
+    if horizonte < 1:
+        horizonte = 30
+
+    colchon = int(getattr(settings, 'PRONOSTICO_COLCHON_DIAS', 7))
+
+    with connection.cursor() as cursor:
+        meses_activos = _meses_activos(cursor, dias)
+        plazos, plazo_default = _plazos_por_proveedor(cursor)
+
+        # Unidades por producto y por mes: hace falta el detalle mensual para
+        # saber en cuántos meses distintos se vendió (la confianza) y desde
+        # cuándo existe el producto.
+        cursor.execute("""
+            SELECT pv.id_producto, to_char(v.fecha, 'YYYY-MM'), SUM(pv.cantidad)
+            FROM producto_venta pv
+            JOIN ventas v ON v.id_venta = pv.id_venta
+            WHERE v.fecha >= CURRENT_DATE - %s::int
+            GROUP BY 1, 2
+        """, [dias])
+        ventas_mes = {}
+        for id_prod, mes, unidades in cursor.fetchall():
+            ventas_mes.setdefault(id_prod, {})[mes] = int(unidades or 0)
+
+        # Lo que ya está pedido y no llegó. Sin restarlo, el reporte manda a
+        # comprar de nuevo algo que viene en camino: es plata gastada dos veces.
+        cursor.execute("""
+            SELECT op.id_producto, SUM(op.cantidad)
+            FROM orden_producto op
+            JOIN orden_compra oc ON oc.id_orden = op.id_orden
+            WHERE oc.id_estado = 2                        -- pendiente de recibir
+              AND NOT COALESCE(oc.stock_aplicado, false)
+            GROUP BY 1
+        """)
+        en_camino = {r[0]: int(r[1] or 0) for r in cursor.fetchall()}
+
+        cursor.execute("""
+            SELECT p.id_producto, p.nombre, p.sku_producto,
+                   COALESCE(p.cantidad_actual, 0),
+                   COALESCE(p.precio_compra_unitario, 0),
+                   COALESCE(p.cantidad_minima, 0),
+                   p.id_proveedor, pr.nombre_empresa,
+                   u.bodega, u.pasillo, u.estante, u.gaveta
+            FROM productos p
+            LEFT JOIN proveedores pr ON pr.id_proveedor = p.id_proveedor
+            LEFT JOIN ubicacion u ON u.id_ubicacion = p.id_ubicacion
+            ORDER BY p.nombre
+        """)
+        filas = cursor.fetchall()
+
+    productos, sin_historial = [], []
+    for (id_prod, nombre, sku, stock, costo, minima, id_prov, proveedor,
+         bodega, pasillo, estante, gaveta) in filas:
+        stock = int(stock)
+        costo = float(costo)
+        por_mes = ventas_mes.get(id_prod, {})
+        pedido = en_camino.get(id_prod, 0)
+        plazo, fuente_plazo = plazos.get(
+            id_prov, (plazo_default, 'default'))
+
+        base = {
+            'id_producto': id_prod,
+            'nombre': nombre,
+            'sku': sku,
+            'stock': stock,
+            'costo': costo,
+            'proveedor': proveedor,
+            'en_camino': pedido,
+            'ubicacion': _codigo_ubicacion(bodega, pasillo, estante, gaveta),
+        }
+
+        if not por_mes:
+            # Nunca se vendió en la ventana. No se le inventa una demanda de
+            # cero disfrazada de pronóstico: va a una lista aparte, porque el
+            # motivo puede ser que es nuevo o que nadie lo quiere, y eso lo
+            # decide una persona (o el reporte de stock muerto).
+            sin_historial.append({**base, 'capital_inmovilizado': round(stock * costo, 2)})
+            continue
+
+        # El divisor arranca en el primer mes en que este producto se vendió, no
+        # al inicio de la ventana: a un producto que entró hace dos meses no se
+        # le puede repartir la demanda entre doce.
+        primer_mes = min(por_mes)
+        meses_base = [m for m in meses_activos if m >= primer_mes] or [primer_mes]
+
+        unidades = sum(por_mes.values())
+        velocidad = unidades / (len(meses_base) * DIAS_POR_MES)
+
+        # Cuánto tarda en reponerse desde que se decide pedir.
+        dias_reposicion = plazo + colchon
+        punto_reorden = velocidad * dias_reposicion
+        # Lo que hay que tener para cubrir la reposición más el horizonte.
+        objetivo = velocidad * (dias_reposicion + horizonte)
+        sugerido = max(0, math.ceil(objetivo - stock - pedido))
+
+        cobertura = (stock / velocidad) if velocidad > 0 else None
+
+        if stock <= 0:
+            urgencia = 'sin_stock'
+        elif stock + pedido <= punto_reorden:
+            urgencia = 'critico'
+        elif cobertura is not None and cobertura <= dias_reposicion + horizonte:
+            urgencia = 'proximo'
+        else:
+            urgencia = 'ok'
+
+        productos.append({
+            **base,
+            'unidades_vendidas': unidades,
+            'meses_con_venta': len(por_mes),
+            'meses_base': len(meses_base),
+            'velocidad_mensual': round(velocidad * DIAS_POR_MES, 2),
+            'dias_cobertura': (round(cobertura) if cobertura is not None else None),
+            'plazo_entrega_dias': plazo,
+            'fuente_plazo': fuente_plazo,
+            'punto_reorden': math.ceil(punto_reorden),
+            'cantidad_sugerida': sugerido,
+            'inversion': round(sugerido * costo, 2),
+            'urgencia': urgencia,
+            'confianza': _confianza(len(por_mes)),
+            # Para poder contrastar el umbral viejo con el calculado: es lo que
+            # muestra si `cantidad_minima` estaba mal puesto.
+            'cantidad_minima_actual': int(minima),
+        })
+
+    # Primero lo que urge, y dentro de cada nivel lo que más plata mueve.
+    orden = {'sin_stock': 0, 'critico': 1, 'proximo': 2, 'ok': 3}
+    productos.sort(key=lambda p: (orden[p['urgencia']], -p['inversion']))
+
+    a_recomprar = [p for p in productos if p['cantidad_sugerida'] > 0]
+    meses_sin_actividad = []
+    if meses_activos:
+        # Huecos entre el primer y el último mes con ventas: son los meses que
+        # se excluyeron del promedio, y conviene que se vean.
+        anio, mes = (int(x) for x in meses_activos[0].split('-'))
+        ultimo = meses_activos[-1]
+        actual = f'{anio:04d}-{mes:02d}'
+        while actual < ultimo:
+            mes += 1
+            if mes > 12:
+                anio, mes = anio + 1, 1
+            actual = f'{anio:04d}-{mes:02d}'
+            if actual < ultimo and actual not in meses_activos:
+                meses_sin_actividad.append(actual)
+
+    return Response({
+        'parametros': {
+            'dias': dias,
+            'horizonte_dias': horizonte,
+            'colchon_dias': colchon,
+            'plazo_default_dias': plazo_default,
+        },
+        'contexto': {
+            'meses_con_actividad': len(meses_activos),
+            'meses_sin_actividad': meses_sin_actividad,
+            'primer_mes': meses_activos[0] if meses_activos else None,
+            'ultimo_mes': meses_activos[-1] if meses_activos else None,
+            # El promedio se calcula sobre meses con actividad; se explicita
+            # para que el número no parezca salido de la nada.
+            'nota_metodo': (
+                'El promedio se calcula sobre los meses que tuvieron ventas, no '
+                'sobre los meses transcurridos.'
+            ),
+        },
+        'resumen': {
+            'productos_analizados': len(productos),
+            'productos_a_recomprar': len(a_recomprar),
+            'inversion_sugerida': round(sum(p['inversion'] for p in a_recomprar), 2),
+            'sin_stock': sum(1 for p in productos if p['urgencia'] == 'sin_stock'),
+            'criticos': sum(1 for p in productos if p['urgencia'] == 'critico'),
+            'confianza_baja': sum(1 for p in productos
+                                  if p['confianza'] in ('baja', 'sin_datos')),
+            'sin_historial': len(sin_historial),
+        },
+        'productos': productos,
+        'sin_historial': sin_historial,
+    })
+
+
+# Lo que se le pide a la IA. Es explícito sobre qué NO debe hacer porque un
+# modelo, si se lo dejás, recalcula las cantidades y devuelve números distintos
+# a los del reporte: entonces la pantalla mostraría dos verdades.
+_INSTRUCCION_IA = """\
+Eres asesor de compras de un taller de repuestos de motos en Nicaragua.
+
+Recibís un pronóstico de recompra YA CALCULADO. Tu trabajo es interpretarlo con
+conocimiento del mercado nicaragüense, NO recalcularlo.
+
+Reglas estrictas:
+- NUNCA propongas cantidades ni corrijas los números que te dan. Ya están
+  calculados con el historial real y el plazo de cada proveedor.
+- Tu aporte es lo que los datos NO pueden saber: estacionalidad local
+  (temporada lluviosa de mayo a octubre desgasta frenos, cadenas y llantas; la
+  seca de noviembre a abril ensucia filtros de aire por el polvo; diciembre
+  mueve accesorios y mantenimiento previo a viajes; el inicio de clases sube el
+  uso de motos de bajo cilindraje), y agrupar productos que conviene pedir
+  juntos.
+- Si un producto viene marcado con confianza baja o sin_datos, decilo en vez de
+  opinar como si el número fuera firme.
+- Escribí en español de Nicaragua, claro y corto. Nada de jerga técnica ni de
+  fórmulas.
+
+Respondé SOLO un objeto JSON con esta forma exacta, sin texto alrededor y sin
+bloques de código:
+{
+  "resumen": "2 o 3 oraciones sobre la situación general de recompra",
+  "estacionalidad": "qué se viene en las próximas semanas según la época del año",
+  "notas": [
+    {"producto": "nombre exacto tal como te lo pasaron",
+     "nota": "una oración de contexto o advertencia"}
+  ],
+  "agrupaciones": [
+    {"titulo": "por qué van juntos", "productos": ["nombre", "nombre"]}
+  ]
+}
+Como máximo 8 notas: las que más aporten. Si algo no aplica, devolvé lista vacía."""
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def analizar_pronostico_ia(request):
+    """Le pide al proveedor de IA activo que interprete el pronóstico.
+
+    Va aparte del reporte a propósito: así la pantalla muestra sus números al
+    instante y esto llega después. Si el proveedor está caído, lento o sin
+    saldo, el pronóstico sigue sirviendo — la IA solo agrega notas.
+
+    Sobre privacidad: se le manda **nombre de producto, cantidades y meses**.
+    Ningún dato de cliente sale del sistema; no hace falta para esto.
+    """
+    config = ConfiguracionIA.objects.filter(activo=True).first()
+    if not config or not config.api_key:
+        return Response({
+            'error': 'No hay proveedor de IA activo. Configuralo en Configuración.',
+        }, status=status.HTTP_409_CONFLICT)
+    if not config.modelo:
+        return Response({
+            'error': f'{config.nombre_proveedor} no tiene modelo elegido.',
+        }, status=status.HTTP_409_CONFLICT)
+
+    productos = request.data.get('productos') or []
+    if not isinstance(productos, list) or not productos:
+        return Response({'error': 'No hay productos que analizar.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    contexto = request.data.get('contexto') or {}
+
+    # Se recorta a lo que de verdad hace falta: los que urgen. Mandar 75
+    # productos costaría tokens sin mejorar el consejo, y un prompt largo
+    # diluye la respuesta.
+    recorte = []
+    for p in productos[:25]:
+        if not isinstance(p, dict):
+            continue
+        recorte.append({
+            'producto': str(p.get('nombre', ''))[:120],
+            'stock': p.get('stock'),
+            'vende_por_mes': p.get('velocidad_mensual'),
+            'dias_de_cobertura': p.get('dias_cobertura'),
+            'sugerido': p.get('cantidad_sugerida'),
+            'urgencia': p.get('urgencia'),
+            'confianza': p.get('confianza'),
+            'meses_con_venta': p.get('meses_con_venta'),
+        })
+    if not recorte:
+        return Response({'error': 'Los productos enviados no tienen forma válida.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    hoy = timezone.localdate()
+    prompt = json.dumps({
+        'fecha_de_hoy': hoy.isoformat(),
+        'mes_actual': hoy.strftime('%B'),
+        'meses_con_datos': contexto.get('meses_con_actividad'),
+        'meses_sin_actividad': contexto.get('meses_sin_actividad'),
+        'productos': recorte,
+    }, ensure_ascii=False)
+
+    datos, error = preguntar_json(config, _INSTRUCCION_IA, prompt)
+    if error:
+        # 502: el fallo es del proveedor externo, no de esta petición. Importa
+        # para que el frontend lo muestre como "la IA no pudo" y no como un
+        # error del pronóstico.
+        return Response({'error': error, 'proveedor': config.nombre_proveedor},
+                        status=status.HTTP_502_BAD_GATEWAY)
+
+    # Se normaliza lo que vino: el modelo puede omitir campos o cambiar tipos, y
+    # el frontend no debería tener que defenderse de eso.
+    notas = []
+    for n in (datos.get('notas') or [])[:8]:
+        if isinstance(n, dict) and n.get('producto') and n.get('nota'):
+            notas.append({'producto': str(n['producto'])[:120],
+                          'nota': str(n['nota'])[:400]})
+
+    agrupaciones = []
+    for g in (datos.get('agrupaciones') or [])[:5]:
+        if isinstance(g, dict) and isinstance(g.get('productos'), list):
+            agrupaciones.append({
+                'titulo': str(g.get('titulo', ''))[:120],
+                'productos': [str(x)[:120] for x in g['productos'][:8]],
+            })
+
+    return Response({
+        'resumen': str(datos.get('resumen', ''))[:1000],
+        'estacionalidad': str(datos.get('estacionalidad', ''))[:1000],
+        'notas': notas,
+        'agrupaciones': agrupaciones,
+        'proveedor': config.nombre_proveedor,
+        'modelo': config.modelo,
+        'analizados': len(recorte),
     })

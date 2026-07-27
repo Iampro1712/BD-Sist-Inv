@@ -33,6 +33,8 @@ from .reportes_views import (
     reporte_desempeno_proveedores,
     reporte_comparacion_precios,
     reporte_devoluciones_proveedor,
+    reporte_pronostico_demanda,
+    analizar_pronostico_ia,
 )
 from .backup_views import exportar_backup
 
@@ -91,6 +93,12 @@ urlpatterns = [
          name='reporte-desempeno-proveedores'),
     path('reportes/comparacion-precios/', reporte_comparacion_precios,
          name='reporte-comparacion-precios'),
+    path('reportes/pronostico-demanda/', reporte_pronostico_demanda,
+         name='reporte-pronostico-demanda'),
+    # La interpretación con IA va aparte del cálculo: si el proveedor de IA
+    # falla, el pronóstico sigue respondiendo.
+    path('reportes/pronostico-demanda/analizar/', analizar_pronostico_ia,
+         name='analizar-pronostico-ia'),
     path('reportes/devoluciones-proveedor/', reporte_devoluciones_proveedor,
          name='reporte-devoluciones-proveedor'),
     path('reportes/mantenimiento-preventivo/', reporte_mantenimiento_preventivo,

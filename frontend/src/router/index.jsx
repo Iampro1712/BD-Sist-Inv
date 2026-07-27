@@ -34,6 +34,7 @@ const Taller = lazy(() => import('../pages/Taller'))
 const MantenimientoPreventivo = lazy(() => import('../pages/MantenimientoPreventivo'))
 const Ubicaciones = lazy(() => import('../pages/Ubicaciones'))
 const Configuracion = lazy(() => import('../pages/Configuracion'))
+const PronosticoDemanda = lazy(() => import('../pages/PronosticoDemanda'))
 const ConteoFisico = lazy(() => import('../pages/ConteoFisico'))
 const AnalisisProveedores = lazy(() => import('../pages/AnalisisProveedores'))
 const Etiquetas = lazy(() => import('../pages/Etiquetas'))
@@ -278,6 +279,17 @@ const router = createBrowserRouter([
           <AdminRoute>
             <Suspense fallback={<PageLoader />}>
               <Usuarios />
+            </Suspense>
+          </AdminRoute>
+        ),
+      },
+      {
+        // Expone costos de compra y márgenes: información de dueño.
+        path: 'pronostico-demanda',
+        element: (
+          <AdminRoute>
+            <Suspense fallback={<PageLoader />}>
+              <PronosticoDemanda />
             </Suspense>
           </AdminRoute>
         ),

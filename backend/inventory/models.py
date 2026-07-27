@@ -20,6 +20,18 @@ class Proveedor(models.Model):
     telefono = EncryptedCharField(max_length=50, blank=True, null=True)
     email = EncryptedEmailField(max_length=255, blank=True, null=True)
     direccion = models.TextField(blank=True, null=True)
+    # Cuántos días tarda habitualmente en entregar. Lo usa el pronóstico de
+    # demanda para saber con cuánta antelación recomprar: sin plazo solo se
+    # puede decir "te quedan N días", no "pedí hoy".
+    #
+    # Es una estimación a mano porque el plazo medido sale de `fecha_recepcion`,
+    # que existe desde 1.7.0 pero todavía sin historial. Cuando haya recepciones
+    # reales el pronóstico prefiere el promedio medido y este campo pasa a ser
+    # el respaldo.
+    dias_entrega_estimado = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text='Días que suele tardar en entregar. Vacío = se usa el valor '
+                  'por defecto del sistema.')
 
     class Meta:
         db_table = 'proveedores'

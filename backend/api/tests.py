@@ -2850,3 +2850,497 @@ class ModelosIATestCase(APITestCase):
             self.client.get(f'/api/configuracion-ia/{config.pk}/modelos/')
 
         self.assertIn(f'key={clave}', mock.call_args[0][0].full_url)
+
+
+class PronosticoDemandaTestCase(APITestCase):
+    """Qué recomprar, cuándo y cuánto.
+
+    Los números de este reporte deciden cuánta plata se inmoviliza en
+    inventario, así que las pruebas verifican la **aritmética exacta** con casos
+    calculables a mano, no solo que el endpoint responda 200.
+
+    Escenario base: 40 unidades vendidas repartidas en 4 meses con actividad
+    (10 por mes → 0,3333 por día), plazo de entrega 15 días, colchón 7,
+    horizonte 30.
+
+        punto_reorden = 0,3333 × (15 + 7)      = 7,33 → 8
+        objetivo      = 0,3333 × (15 + 7 + 30) = 17,33
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='jefe_compras', password='x', is_staff=True)
+        self.operador = User.objects.create_user(
+            username='vendedor', password='x', is_staff=False)
+        self.client.force_authenticate(user=self.admin)
+
+        # La tabla catálogo `estado` (FK de orden_compra.id_estado) tiene datos
+        # en producción, pero el snapshot de esquema para tests viene vacío.
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO estado (id_estado, cancelado, pendiente) VALUES
+                    (1,'SI','NO'), (2,'NO','SI'), (3,'NO','NO')
+                ON CONFLICT (id_estado) DO NOTHING
+            """)
+
+        self.proveedor = Proveedor.objects.create(
+            nombre_empresa='Repuestos Managua', dias_entrega_estimado=15)
+        self.cliente = Cliente.objects.create(nombre='Cliente de prueba')
+
+        self.hoy = timezone.localdate()
+        # Cuatro meses con actividad y un hueco deliberado en el medio: es la
+        # forma que tienen los datos reales del negocio.
+        self.meses = [self.hoy - datetime.timedelta(days=d)
+                      for d in (300, 270, 60, 30)]
+
+    def _producto(self, nombre, stock, costo=100):
+        return Producto.objects.create(
+            sku_producto=f'SKU-{nombre}', nombre=nombre,
+            cantidad_actual=stock, cantidad_total=stock, cantidad_minima=3,
+            precio_compra_unitario=costo, precio_final='200.00',
+            id_proveedor=self.proveedor)
+
+    def _vender(self, producto, fecha, cantidad):
+        venta = OrdenVenta.objects.create(
+            id_cliente=self.cliente.id_cliente, fecha=fecha, total=0)
+        with connection.cursor() as c:
+            c.execute('INSERT INTO producto_venta '
+                      '(id_venta, id_producto, cantidad, precio_unitario) '
+                      'VALUES (%s, %s, %s, 200)',
+                      [venta.id_venta, producto.id_producto, cantidad])
+        return venta
+
+    def _historial(self, producto, por_mes=10):
+        """10 unidades en cada uno de los 4 meses con actividad."""
+        for fecha in self.meses:
+            self._vender(producto, fecha, por_mes)
+
+    def _orden_compra(self, estado, recibida=None, creada=None):
+        """Crea una orden de compra por el ORM.
+
+        Por el ORM y no con SQL crudo a propósito: `orden_compra` tiene varias
+        columnas NOT NULL con default (monto_pagado, saldo_pendiente,
+        estado_pago) y armarlas a mano en el INSERT se rompe cada vez que se
+        agrega una.
+        """
+        orden = OrdenCompra.objects.create(
+            id_proveedor=self.proveedor.id_proveedor, id_estado=estado,
+            fecha_creacion=creada or self.hoy,
+            fecha_recepcion=recibida,
+            stock_aplicado=bool(recibida))
+        return orden.id_orden
+
+    def _linea_compra(self, id_orden, producto, cantidad):
+        """Línea de una orden de compra (`orden_producto` no tiene modelo)."""
+        with connection.cursor() as c:
+            c.execute('INSERT INTO orden_producto '
+                      '(id_orden, id_producto, cantidad, precio_unitario) '
+                      'VALUES (%s, %s, %s, 100)',
+                      [id_orden, producto.id_producto, cantidad])
+
+    def _pedir_pendiente(self, producto, cantidad):
+        """Una orden de compra pendiente de recibir."""
+        self._linea_compra(self._orden_compra(2), producto, cantidad)
+
+    def _reporte(self, **params):
+        r = self.client.get('/api/reportes/pronostico-demanda/', params)
+        self.assertEqual(r.status_code, 200)
+        return r.json()
+
+    def _fila(self, datos, nombre):
+        for p in datos['productos']:
+            if p['nombre'] == nombre:
+                return p
+        self.fail(f'{nombre} no salió en el reporte')
+
+    # -- La aritmética ---------------------------------------------------------
+
+    def test_la_velocidad_excluye_los_meses_sin_actividad(self):
+        """El divisor son los meses que vendieron, no los transcurridos.
+
+        Es el detalle que más cambia el resultado: hay meses enteros sin una
+        sola venta. Contarlos como ceros haría ver la demanda más baja de lo que
+        es y el sistema recomendaría comprar de menos.
+        """
+        producto = self._producto('Filtro de Aceite Honda', 20)
+        self._historial(producto)   # 40 uds en 4 meses con actividad
+
+        datos = self._reporte()
+        fila = self._fila(datos, 'Filtro de Aceite Honda')
+
+        # 40 uds / 4 meses = 10 por mes. Si dividiera por los ~10 meses
+        # calendario que abarca la ventana daría 4 y sería falso.
+        self.assertEqual(fila['unidades_vendidas'], 40)
+        self.assertEqual(fila['meses_base'], 4)
+        self.assertEqual(fila['velocidad_mensual'], 10.0)
+        # Y el hueco queda declarado, no escondido.
+        self.assertTrue(datos['contexto']['meses_sin_actividad'])
+
+    def test_punto_de_reorden_y_cantidad_sugerida(self):
+        """0,3333/día × 22 días de reposición = 7,33 → 8."""
+        producto = self._producto('Bujía NGK Iridium', 5)
+        self._historial(producto)
+
+        fila = self._fila(self._reporte(), 'Bujía NGK Iridium')
+
+        self.assertEqual(fila['punto_reorden'], 8)
+        self.assertEqual(fila['plazo_entrega_dias'], 15)
+        # objetivo 17,33 − stock 5 = 12,33 → se redondea hacia arriba: comprar
+        # de menos deja al cliente sin repuesto.
+        self.assertEqual(fila['cantidad_sugerida'], 13)
+        self.assertEqual(fila['inversion'], 1300.0)   # 13 × C$100
+        self.assertEqual(fila['urgencia'], 'critico')
+
+    def test_stock_holgado_no_manda_a_comprar(self):
+        producto = self._producto('Aceite Motul 10W40', 20)
+        self._historial(producto)
+
+        fila = self._fila(self._reporte(), 'Aceite Motul 10W40')
+
+        # 20 en stock supera el objetivo de 17,33: no hay nada que pedir.
+        self.assertEqual(fila['cantidad_sugerida'], 0)
+        self.assertEqual(fila['urgencia'], 'ok')
+        self.assertEqual(fila['dias_cobertura'], 60)   # 20 / 0,3333
+
+    def test_lo_ya_pedido_se_descuenta(self):
+        """Sin esto el reporte manda a comprar algo que viene en camino.
+
+        Es plata gastada dos veces y el error es silencioso: el stock se ve bajo
+        porque la mercadería todavía no llegó.
+        """
+        producto = self._producto('Guaya de Embrague', 5)
+        self._historial(producto)
+        self._pedir_pendiente(producto, 10)
+
+        fila = self._fila(self._reporte(), 'Guaya de Embrague')
+
+        self.assertEqual(fila['en_camino'], 10)
+        # objetivo 17,33 − stock 5 − en camino 10 = 2,33 → 3
+        self.assertEqual(fila['cantidad_sugerida'], 3)
+        # Y ya no es crítico: con lo que viene supera el punto de reorden.
+        self.assertNotEqual(fila['urgencia'], 'critico')
+
+    def test_una_orden_recibida_no_cuenta_como_en_camino(self):
+        """Solo lo pendiente está en camino; lo recibido ya está en el stock."""
+        producto = self._producto('Pastillas de Freno', 5)
+        self._historial(producto)
+        self._linea_compra(self._orden_compra(3, recibida=self.hoy), producto, 50)
+
+        fila = self._fila(self._reporte(), 'Pastillas de Freno')
+        self.assertEqual(fila['en_camino'], 0)
+
+    def test_una_orden_cancelada_no_cuenta_como_en_camino(self):
+        producto = self._producto('Llanta Michelin 130/70-17', 5)
+        self._historial(producto)
+        self._linea_compra(self._orden_compra(1), producto, 99)
+
+        fila = self._fila(self._reporte(), 'Llanta Michelin 130/70-17')
+        self.assertEqual(fila['en_camino'], 0)
+
+    def test_un_producto_nuevo_no_se_promedia_contra_meses_en_que_no_existia(self):
+        """A un producto que entró hace poco no se le reparte la demanda entre
+        todos los meses: se lo mediría como mucho más lento de lo que es."""
+        nuevo = self._producto('Kit Arrastre Completo', 5)
+        # Solo en los dos meses recientes, 10 unidades cada uno.
+        for fecha in self.meses[2:]:
+            self._vender(nuevo, fecha, 10)
+        # Otro producto vende en los 4, para que el negocio tenga 4 meses activos.
+        self._historial(self._producto('Aceite Castrol 20W50', 50))
+
+        datos = self._reporte()
+        self.assertEqual(datos['contexto']['meses_con_actividad'], 4)
+
+        fila = self._fila(datos, 'Kit Arrastre Completo')
+        # 20 uds sobre 2 meses = 10/mes, no 20/4 = 5/mes.
+        self.assertEqual(fila['meses_base'], 2)
+        self.assertEqual(fila['velocidad_mensual'], 10.0)
+
+    def test_el_horizonte_cambia_cuanto_se_sugiere(self):
+        producto = self._producto('Cadena 428H', 5)
+        self._historial(producto)
+
+        corto = self._fila(self._reporte(horizonte=15), 'Cadena 428H')
+        largo = self._fila(self._reporte(horizonte=60), 'Cadena 428H')
+
+        self.assertLess(corto['cantidad_sugerida'], largo['cantidad_sugerida'])
+        # 0,3333 × (22+60) = 27,33 − 5 = 22,33 → 23
+        self.assertEqual(largo['cantidad_sugerida'], 23)
+
+    # -- Confianza: no todos los números valen lo mismo ------------------------
+
+    def test_la_confianza_refleja_cuantos_meses_hay_detras(self):
+        """Un producto con una sola venta no puede verse igual que uno estable."""
+        firme = self._producto('Filtro de Aire Yamaha', 5)
+        for dias in (300, 270, 240, 210, 180, 60):
+            self._vender(firme, self.hoy - datetime.timedelta(days=dias), 5)
+
+        flojo = self._producto('Chaqueta Yamaha Racing', 5)
+        self._vender(flojo, self.hoy - datetime.timedelta(days=30), 1)
+
+        datos = self._reporte()
+        self.assertEqual(self._fila(datos, 'Filtro de Aire Yamaha')['confianza'], 'alta')
+        self.assertEqual(self._fila(datos, 'Chaqueta Yamaha Racing')['confianza'], 'baja')
+        self.assertEqual(datos['resumen']['confianza_baja'], 1)
+
+    def test_un_producto_sin_ventas_no_recibe_pronostico_inventado(self):
+        """Va a una lista aparte: puede ser nuevo o puede ser que nadie lo
+        quiera, y eso lo decide una persona."""
+        self._historial(self._producto('Bombillo LED H4', 20))
+        jamas = self._producto('Casco Yamaha Talla L', 8, costo=500)
+
+        datos = self._reporte()
+
+        nombres = [p['nombre'] for p in datos['productos']]
+        self.assertNotIn('Casco Yamaha Talla L', nombres)
+
+        sin_historial = {p['nombre']: p for p in datos['sin_historial']}
+        self.assertIn('Casco Yamaha Talla L', sin_historial)
+        self.assertEqual(sin_historial['Casco Yamaha Talla L']['capital_inmovilizado'],
+                         4000.0)   # 8 × C$500
+        self.assertEqual(datos['resumen']['sin_historial'], 1)
+
+    # -- Plazo de entrega: se declara de dónde salió ---------------------------
+
+    def test_sin_dato_del_proveedor_se_usa_el_default_y_se_dice(self):
+        sin_plazo = Proveedor.objects.create(nombre_empresa='Importadora Sin Datos')
+        producto = Producto.objects.create(
+            sku_producto='SKU-SP', nombre='Empaque de Motor', cantidad_actual=5,
+            cantidad_total=5, cantidad_minima=2, precio_compra_unitario=100,
+            precio_final='200.00', id_proveedor=sin_plazo)
+        self._historial(producto)
+
+        datos = self._reporte()
+        fila = self._fila(datos, 'Empaque de Motor')
+
+        self.assertEqual(fila['fuente_plazo'], 'default')
+        self.assertEqual(fila['plazo_entrega_dias'],
+                         datos['parametros']['plazo_default_dias'])
+
+    def test_el_plazo_cargado_a_mano_se_usa_y_se_marca_como_estimado(self):
+        producto = self._producto('Disco de Freno 220mm', 5)
+        self._historial(producto)
+        fila = self._fila(self._reporte(), 'Disco de Freno 220mm')
+
+        self.assertEqual(fila['fuente_plazo'], 'estimado')
+        self.assertEqual(fila['plazo_entrega_dias'], 15)
+
+    def test_el_plazo_medido_le_gana_al_cargado_a_mano(self):
+        """Dos recepciones reales valen más que una estimación: el sistema
+        prefiere el dato medido y lo declara."""
+        for dias_atras, tardanza in ((100, 30), (80, 30)):
+            creada = self.hoy - datetime.timedelta(days=dias_atras)
+            self._orden_compra(3, creada=creada,
+                               recibida=creada + datetime.timedelta(days=tardanza))
+
+        producto = self._producto('Piston Yamaha YBR125', 5)
+        self._historial(producto)
+
+        fila = self._fila(self._reporte(), 'Piston Yamaha YBR125')
+        self.assertEqual(fila['fuente_plazo'], 'medido')
+        self.assertEqual(fila['plazo_entrega_dias'], 30)   # no el 15 estimado
+        # Con plazo 30 el punto de reorden sube: 0,3333 × 37 = 12,33 → 13
+        self.assertEqual(fila['punto_reorden'], 13)
+
+    def test_una_sola_recepcion_no_alcanza_para_definir_el_plazo(self):
+        """Un caso aislado puede ser un atraso raro, no el comportamiento."""
+        creada = self.hoy - datetime.timedelta(days=100)
+        self._orden_compra(3, creada=creada,
+                           recibida=creada + datetime.timedelta(days=90))
+
+        producto = self._producto('Estator Suzuki GN125', 5)
+        self._historial(producto)
+
+        fila = self._fila(self._reporte(), 'Estator Suzuki GN125')
+        self.assertEqual(fila['fuente_plazo'], 'estimado')
+        self.assertEqual(fila['plazo_entrega_dias'], 15)
+
+    # -- Orden, resumen y permisos --------------------------------------------
+
+    def test_lo_urgente_aparece_primero(self):
+        agotado = self._producto('Refrigerante Motor', 0)
+        self._historial(agotado)
+        holgado = self._producto('Grasa para Rodamientos', 100)
+        self._historial(holgado)
+
+        datos = self._reporte()
+        self.assertEqual(datos['productos'][0]['nombre'], 'Refrigerante Motor')
+        self.assertEqual(datos['productos'][0]['urgencia'], 'sin_stock')
+        self.assertEqual(datos['resumen']['sin_stock'], 1)
+
+    def test_la_inversion_sugerida_suma_solo_lo_que_hay_que_comprar(self):
+        comprar = self._producto('Zapatas de Freno', 5, costo=200)
+        self._historial(comprar)
+        no_comprar = self._producto('Limpiador de Cadena', 100, costo=50)
+        self._historial(no_comprar)
+
+        datos = self._reporte()
+        # 13 uds × C$200; el que no hay que comprar no suma nada.
+        self.assertEqual(datos['resumen']['productos_a_recomprar'], 1)
+        self.assertEqual(datos['resumen']['inversion_sugerida'], 2600.0)
+
+    def test_la_base_vacia_no_revienta(self):
+        datos = self._reporte()
+        self.assertEqual(datos['productos'], [])
+        self.assertEqual(datos['resumen']['inversion_sugerida'], 0)
+        self.assertIsNone(datos['contexto']['primer_mes'])
+
+    def test_el_operador_no_ve_el_pronostico(self):
+        """Expone costos y márgenes de compra: es información de dueño."""
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get('/api/reportes/pronostico-demanda/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_se_expone_el_umbral_viejo_para_poder_compararlo(self):
+        """`cantidad_minima` era un número fijo puesto a mano; mostrarlo al lado
+        del punto de reorden calculado es lo que revela si estaba mal."""
+        producto = self._producto('Manigueta de Embrague', 5)
+        producto.cantidad_minima = 99
+        producto.save()
+        self._historial(producto)
+
+        fila = self._fila(self._reporte(), 'Manigueta de Embrague')
+        self.assertEqual(fila['cantidad_minima_actual'], 99)
+        self.assertEqual(fila['punto_reorden'], 8)
+
+
+class AnalisisIAPronosticoTestCase(APITestCase):
+    """La IA interpreta el pronóstico; no lo calcula ni lo puede romper."""
+
+    CLAVE = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123'
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='jefa_ia', password='x', is_staff=True)
+        self.operador = User.objects.create_user(
+            username='cajero', password='x', is_staff=False)
+        self.client.force_authenticate(user=self.admin)
+
+        self.productos = [{
+            'nombre': 'Pastillas de Freno Delanteras', 'stock': 5,
+            'velocidad_mensual': 10.0, 'dias_cobertura': 15,
+            'cantidad_sugerida': 13, 'urgencia': 'critico',
+            'confianza': 'alta', 'meses_con_venta': 8,
+        }]
+
+    def _activar_ia(self):
+        return ConfiguracionIA.objects.create(
+            proveedor='anthropic', api_key=self.CLAVE,
+            modelo='claude-sonnet-5', activo=True)
+
+    def _analizar(self, cuerpo=None):
+        return self.client.post(
+            '/api/reportes/pronostico-demanda/analizar/',
+            cuerpo if cuerpo is not None else {'productos': self.productos},
+            format='json')
+
+    def test_sin_proveedor_activo_lo_dice_sin_romperse(self):
+        """Y con 409, no 500: falta configuración, no es una falla."""
+        r = self._analizar()
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('Configuración', r.json()['error'])
+
+    def test_sin_modelo_elegido_tampoco_llama_al_proveedor(self):
+        ConfiguracionIA.objects.create(
+            proveedor='anthropic', api_key=self.CLAVE, activo=True)
+        with patch('api.reportes_views.preguntar_json') as mock:
+            r = self._analizar()
+        self.assertEqual(r.status_code, 409)
+        mock.assert_not_called()
+
+    def test_devuelve_las_notas_del_proveedor(self):
+        self._activar_ia()
+        respuesta = {
+            'resumen': 'Hay 1 producto crítico.',
+            'estacionalidad': 'Entrando a temporada lluviosa suben los frenos.',
+            'notas': [{'producto': 'Pastillas de Freno Delanteras',
+                       'nota': 'Con las lluvias se desgastan más rápido.'}],
+            'agrupaciones': [{'titulo': 'Sistema de frenos',
+                              'productos': ['Pastillas de Freno Delanteras']}],
+        }
+        with patch('api.reportes_views.preguntar_json',
+                   return_value=(respuesta, None)):
+            r = self._analizar()
+
+        self.assertEqual(r.status_code, 200)
+        datos = r.json()
+        self.assertIn('crítico', datos['resumen'])
+        self.assertEqual(len(datos['notas']), 1)
+        self.assertEqual(datos['proveedor'], 'Anthropic (Claude)')
+        self.assertEqual(datos['modelo'], 'claude-sonnet-5')
+
+    def test_no_se_le_manda_ningun_dato_de_cliente(self):
+        """La IA necesita productos y cantidades; los clientes no son asunto de
+        un proveedor externo."""
+        self._activar_ia()
+        with patch('api.reportes_views.preguntar_json',
+                   return_value=({'resumen': 'ok'}, None)) as mock:
+            self._analizar()
+
+        prompt = mock.call_args[0][2]
+        for palabra in ('cliente', 'telefono', 'email', 'cedula'):
+            self.assertNotIn(palabra, prompt.lower())
+
+    def test_la_clave_no_viaja_en_la_respuesta(self):
+        self._activar_ia()
+        with patch('api.reportes_views.preguntar_json',
+                   return_value=({'resumen': 'ok'}, None)):
+            r = self._analizar()
+        self.assertNotIn(self.CLAVE, r.content.decode())
+
+    def test_si_el_proveedor_falla_se_informa_como_falla_externa(self):
+        """502 y no 500: el pronóstico está bien, el que no pudo es el proveedor."""
+        self._activar_ia()
+        with patch('api.reportes_views.preguntar_json',
+                   return_value=(None, 'La cuenta del proveedor no tiene saldo.')):
+            r = self._analizar()
+
+        self.assertEqual(r.status_code, 502)
+        self.assertIn('saldo', r.json()['error'])
+
+    def test_una_respuesta_con_basura_no_llega_al_frontend(self):
+        """El modelo puede omitir campos o cambiar tipos; se normaliza acá."""
+        self._activar_ia()
+        respuesta = {
+            'resumen': 'algo',
+            'notas': [
+                {'producto': 'Válido', 'nota': 'sirve'},
+                {'producto': 'Sin nota'},          # incompleta
+                'esto no es un objeto',            # tipo equivocado
+            ],
+            'agrupaciones': [{'titulo': 'x', 'productos': 'no es lista'}],
+        }
+        with patch('api.reportes_views.preguntar_json',
+                   return_value=(respuesta, None)):
+            r = self._analizar()
+
+        datos = r.json()
+        self.assertEqual(len(datos['notas']), 1)
+        self.assertEqual(datos['notas'][0]['producto'], 'Válido')
+        self.assertEqual(datos['agrupaciones'], [])
+
+    def test_se_recorta_cuantos_productos_se_mandan(self):
+        """Mandar el catálogo entero cuesta tokens y diluye el consejo."""
+        self._activar_ia()
+        muchos = [dict(self.productos[0], nombre=f'Producto {i}')
+                  for i in range(60)]
+        with patch('api.reportes_views.preguntar_json',
+                   return_value=({'resumen': 'ok'}, None)):
+            r = self._analizar({'productos': muchos})
+
+        self.assertEqual(r.json()['analizados'], 25)
+
+    def test_sin_productos_no_se_gasta_una_llamada(self):
+        self._activar_ia()
+        with patch('api.reportes_views.preguntar_json') as mock:
+            r = self._analizar({'productos': []})
+        self.assertEqual(r.status_code, 400)
+        mock.assert_not_called()
+
+    def test_el_operador_no_puede_gastar_la_clave_de_ia(self):
+        """Cada análisis cuesta dinero de la cuenta del proveedor."""
+        self._activar_ia()
+        self.client.force_authenticate(user=self.operador)
+        r = self._analizar()
+        self.assertEqual(r.status_code, 403)

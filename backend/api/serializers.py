@@ -84,7 +84,7 @@ class ProveedorListSerializer(serializers.ModelSerializer):
         model = Proveedor
         fields = [
             'id_proveedor', 'nombre_empresa', 'persona_contacto', 'telefono',
-            'email', 'direccion'
+            'email', 'direccion', 'dias_entrega_estimado'
         ]
 
 
@@ -95,7 +95,7 @@ class ProveedorDetailSerializer(serializers.ModelSerializer):
         model = Proveedor
         fields = [
             'id_proveedor', 'nombre_empresa', 'persona_contacto', 'telefono', 'email',
-            'direccion'
+            'direccion', 'dias_entrega_estimado'
         ]
 
 # MasterDev

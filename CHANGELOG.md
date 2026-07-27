@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.9.0-4F46E5?style=flat-square)](#190---2026-07-26)
+[![Version](https://img.shields.io/badge/version-1.10.0-4F46E5?style=flat-square)](#1100---2026-07-27)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,23 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.10.0] - 2026-07-27
+
+### Added
+
+- **Pronóstico de demanda:** nueva pantalla (solo administradores) que responde qué recomprar, cuándo y cuánto. Hasta ahora esa decisión la guiaba `cantidad_minima`, un umbral fijo escrito a mano que no sabe nada de velocidad de venta: había productos que rotaban 40% más rápido que otros y tenían el umbral **más bajo**, o sea al revés de lo que correspondía.
+- **Punto de reorden calculado con el plazo real de cada proveedor.** Ya no es "avisame cuando queden 5", sino "a esta velocidad y con lo que tarda este proveedor, hay que pedir hoy". Se muestran los días de cobertura que quedan y la cantidad a comprar.
+- **Se descuenta lo que ya está pedido y no llegó.** Sin esto el sistema manda a comprar de nuevo mercadería que viene en camino: es plata gastada dos veces y el error es silencioso, porque el stock se ve bajo justamente porque el pedido no llegó.
+- **Cada número dice de qué se sostiene.** Un producto que vendió una vez en el año no se muestra igual que uno que vendió todos los meses: la confianza (alta, media, baja) va al lado de la cifra. Los productos sin ninguna venta **no reciben un pronóstico inventado**, van a una lista aparte con su capital inmovilizado, porque decidir si son nuevos o si nadie los quiere requiere criterio.
+- **El promedio excluye los meses sin actividad.** La base tiene meses completos sin una sola venta; contarlos como ceros haría ver la demanda un 27% más baja de lo real y llevaría a comprar de menos. La pantalla declara arriba cuántos meses se usaron y cuáles se excluyeron.
+- **Días de entrega por proveedor** (campo nuevo, editable). El pronóstico prefiere el **plazo medido** en recepciones reales cuando hay al menos dos; si no, usa el estimado cargado a mano; y si tampoco, un valor por defecto del sistema. Siempre informa cuál de los tres usó, para que un supuesto no se confunda con una medición.
+- **Interpretación con IA, estrenando el apartado de 1.9.0.** Agrega lo que los datos no pueden contener: la estacionalidad de Nicaragua (la temporada lluviosa desgasta frenos, cadenas y llantas; la seca tapa filtros de aire con polvo; diciembre mueve accesorios) y agrupa lo que conviene pedir junto. **No toca las cantidades**: los números son cuentas y la IA los anota, no los reescribe.
+- **La IA es opcional y no puede romper el pronóstico.** Va en un endpoint aparte y se dispara a pedido: la pantalla muestra sus números al instante y, si el proveedor está caído, lento o sin saldo, la función sigue sirviendo igual. A la IA solo se le mandan productos y cantidades — **ningún dato de cliente sale del sistema**.
+- **`seed_demanda_demo`**: comando para sembrar historial de ventas con la estacionalidad nicaragüense y poder ver la función funcionando. Se niega a correr contra producción sin `--forzar`, marca lo que crea y sabe deshacerlo con `--limpiar`. No modifica el stock: son ventas retroactivas y descontar inventario corrompería el conteo físico.
+- Campo nuevo `proveedores.dias_entrega_estimado` (migración `0024`, aditiva).
 
 ---
 

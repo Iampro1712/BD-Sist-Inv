@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   getReporteInventario,
   getReporteVentas,
   getReporteCompras,
   getProductosMasVendidos,
+  getPronosticoDemanda,
+  analizarPronosticoIA,
 } from '../services/reportes.service'
 
 /**
@@ -50,5 +52,29 @@ export const useProductosMasVendidos = (params, enabled = false) => {
     queryFn: () => getProductosMasVendidos(params),
     enabled: Boolean(enabled),
     staleTime: 1000 * 60 * 5,
+  })
+}
+
+/**
+ * Pronóstico de demanda. Son cuentas deterministas: mismos datos, mismo
+ * resultado, sin llamadas a proveedores externos.
+ */
+export const usePronosticoDemanda = (params = {}) => {
+  return useQuery({
+    queryKey: ['pronostico-demanda', params],
+    queryFn: () => getPronosticoDemanda(params),
+  })
+}
+
+/**
+ * Interpretación con IA, bajo demanda.
+ *
+ * Es una mutación y no una consulta a propósito: cada análisis cuesta dinero de
+ * la cuenta del proveedor, así que se dispara sólo cuando el usuario lo pide y
+ * no automáticamente al abrir la pantalla.
+ */
+export const useAnalisisIAPronostico = () => {
+  return useMutation({
+    mutationFn: (payload) => analizarPronosticoIA(payload),
   })
 }
