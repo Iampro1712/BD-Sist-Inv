@@ -13,6 +13,7 @@ from .views import (
     CotizacionViewSet, DevolucionViewSet, DevolucionCompraViewSet,
     UsuarioViewSet, SesionCajaViewSet,
     CategoriaGastoViewSet, GastoViewSet, UbicacionViewSet,
+    ConfiguracionIAViewSet,
 )
 from .auth_views import LoginView, logout_view, me_view
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -64,6 +65,8 @@ router.register(r'usuarios', UsuarioViewSet, basename='usuario')
 router.register(r'caja', SesionCajaViewSet, basename='caja')
 router.register(r'categorias-gasto', CategoriaGastoViewSet, basename='categoria-gasto')
 router.register(r'gastos', GastoViewSet, basename='gasto')
+router.register(r'configuracion-ia', ConfiguracionIAViewSet,
+                basename='configuracion-ia')
 
 urlpatterns = [
     path('', include(router.urls)),

@@ -1376,3 +1376,69 @@ class PagoCompra(models.Model):
 
     def __str__(self):
         return f"Pago #{self.id_pago} - Compra #{self.id_orden_id} - C${self.monto}"
+
+
+class ConfiguracionIA(models.Model):
+    """Credenciales y modelo elegido de cada proveedor de IA.
+
+    Una fila por proveedor: así se pueden dejar cargadas varias claves y
+    cambiar de proveedor sin volver a escribirlas. Solo una queda `activa`.
+
+    Sobre la clave: se guarda cifrada (mismo mecanismo que protege teléfonos y
+    correos) y **nunca sale del backend**. La API devuelve únicamente una
+    versión enmascarada. Una clave de IA es dinero: quien la tenga puede gastar
+    de la cuenta.
+
+    La tabla está excluida del respaldo (ver `api/backup_utils.EXCLUIR`).
+    """
+    id_configuracion = models.AutoField(primary_key=True)
+    # Los valores válidos salen del catálogo, para no mantener dos listas.
+    proveedor = models.CharField(max_length=30, unique=True)
+    # Cifrada en reposo. Es TEXT en la base: el cifrado agrega ~60 caracteres.
+    api_key = EncryptedCharField(max_length=500, blank=True, null=True)
+    modelo = models.CharField(max_length=100, blank=True, null=True)
+    # Solo un proveedor activo a la vez (garantizado por constraint).
+    activo = models.BooleanField(default=False)
+
+    # Resultado de la última prueba de conexión: evita descubrir que la clave
+    # estaba mal recién cuando una función de IA falla frente al usuario.
+    verificada = models.BooleanField(default=False)
+    verificada_en = models.DateTimeField(null=True, blank=True)
+    ultimo_error = models.TextField(null=True, blank=True)
+
+    actualizado_por = models.CharField(max_length=255, null=True, blank=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'configuracion_ia'
+        verbose_name = 'Configuración de IA'
+        verbose_name_plural = 'Configuración de IA'
+        ordering = ['proveedor']
+        constraints = [
+            # Un solo proveedor activo. Sin esto, dos filas activas dejarían el
+            # sistema eligiendo una al azar.
+            models.UniqueConstraint(
+                fields=['activo'],
+                condition=Q(activo=True),
+                name='un_solo_proveedor_ia_activo',
+            ),
+        ]
+
+    @property
+    def nombre_proveedor(self):
+        from api.ia_catalogo import PROVEEDORES
+        return PROVEEDORES.get(self.proveedor, {}).get('nombre', self.proveedor)
+
+    @property
+    def api_key_enmascarada(self):
+        from api.ia_catalogo import enmascarar
+        return enmascarar(self.api_key)
+
+    @property
+    def tiene_clave(self):
+        return bool(self.api_key)
+
+    def __str__(self):
+        estado = 'activo' if self.activo else 'inactivo'
+        return f"{self.nombre_proveedor} ({estado})"

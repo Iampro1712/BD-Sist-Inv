@@ -5,17 +5,22 @@ pagos. Corren contra una base de datos Postgres real con el esquema híbrido
 para cómo se bootstrapea en CI).
 """
 import datetime
+import json
+import urllib.error
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from inventory.models import (
     Proveedor, Producto, Cliente, MovimientoInventario, OrdenVenta, SesionCaja,
     CategoriaGasto, OrdenCompra, Moto, Servicio, ServicioMoto, BitacoraServicio,
-    Cotizacion, Ubicacion, DevolucionCompra, AuditoriaProducto,
+    Cotizacion, Ubicacion, DevolucionCompra, AuditoriaProducto, ConfiguracionIA,
 )
+from .ia_catalogo import PROVEEDORES
 
 
 class VentaStockTestCase(APITestCase):
@@ -2333,3 +2338,515 @@ class AuditoriaUsuarioTestCase(APITestCase):
                 WHERE table_name = 'auditoria_productos' AND column_name = 'usuario'
             """)
             self.assertIsNone(c.fetchone()[0])
+
+
+class ConfiguracionIATestCase(APITestCase):
+    """Claves de proveedores de IA: cifradas, enmascaradas y fuera del respaldo.
+
+    Una clave de API de IA es dinero directo: quien la tenga puede gastar de la
+    cuenta. Por eso las pruebas se concentran en que **nunca salga del backend**
+    y en que no viaje en los respaldos, más que en el CRUD.
+    """
+
+    CLAVE_OPENAI = 'sk-proj-abcdefghijklmnopqrstuvwxyz0123456789'
+    CLAVE_ANTHROPIC = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123'
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_ia', password='x', is_staff=True)
+        self.operador = User.objects.create_user(
+            username='operador_ia', password='x', is_staff=False)
+        self.client.force_authenticate(user=self.admin)
+
+    def _guardar(self, **datos):
+        return self.client.post('/api/configuracion-ia/guardar/', datos, format='json')
+
+    # -- Lo esencial: la clave no sale ----------------------------------------
+
+    def test_la_api_nunca_devuelve_la_clave_completa(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI,
+                      modelo='gpt-4o-mini')
+
+        # Se revisa el cuerpo crudo de las tres respuestas que exponen la
+        # configuración: basta que una filtre la clave para que el resto no sirva.
+        cuerpos = [
+            self.client.get('/api/configuracion-ia/').content.decode(),
+            self.client.get('/api/configuracion-ia/estado/').content.decode(),
+            self._guardar(proveedor='openai', modelo='gpt-4o').content.decode(),
+        ]
+        for cuerpo in cuerpos:
+            self.assertNotIn(self.CLAVE_OPENAI, cuerpo)
+            self.assertNotIn('sk-proj-abcdef', cuerpo)
+
+        datos = self.client.get('/api/configuracion-ia/').json()
+        fila = datos['results'][0] if isinstance(datos, dict) else datos[0]
+        self.assertEqual(fila['api_key_enmascarada'], 'sk-…6789')
+        self.assertTrue(fila['tiene_clave'])
+        self.assertNotIn('api_key', fila)
+
+    def test_la_clave_se_guarda_cifrada_en_la_base(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+
+        with connection.cursor() as c:
+            c.execute('SELECT api_key FROM configuracion_ia WHERE proveedor = %s',
+                      ['openai'])
+            crudo = c.fetchone()[0]
+
+        # En disco no está el texto plano, pero el ORM la lee de vuelta entera:
+        # si esto último fallara, el cifrado sería inútil porque no se podría usar.
+        self.assertNotEqual(crudo, self.CLAVE_OPENAI)
+        self.assertNotIn('sk-proj', crudo)
+        self.assertEqual(
+            ConfiguracionIA.objects.get(proveedor='openai').api_key,
+            self.CLAVE_OPENAI)
+
+    def test_la_tabla_esta_excluida_del_respaldo(self):
+        """Cifrada o no, una credencial no tiene por qué viajar en un respaldo."""
+        from .backup_utils import EXCLUIR, generar_backup_json
+
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+        self.assertIn('configuracion_ia', EXCLUIR)
+
+        contenido = json.dumps(generar_backup_json())
+        self.assertNotIn('configuracion_ia', contenido)
+        self.assertNotIn(self.CLAVE_OPENAI, contenido)
+
+    # -- Reglas de uso ---------------------------------------------------------
+
+    def test_solo_puede_haber_un_proveedor_activo(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI,
+                      modelo='gpt-4o-mini', activo=True)
+        self._guardar(proveedor='anthropic', api_key=self.CLAVE_ANTHROPIC,
+                      modelo='claude-sonnet-5', activo=True)
+
+        activos = list(ConfiguracionIA.objects.filter(activo=True)
+                       .values_list('proveedor', flat=True))
+        self.assertEqual(activos, ['anthropic'])
+
+        estado = self.client.get('/api/configuracion-ia/estado/').json()
+        self.assertEqual(estado['proveedor'], 'anthropic')
+        self.assertTrue(estado['hay_proveedor_activo'])
+
+    def test_activar_apaga_al_anterior(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI,
+                      modelo='gpt-4o-mini', activo=True)
+        anthropic = ConfiguracionIA.objects.create(
+            proveedor='anthropic', api_key=self.CLAVE_ANTHROPIC,
+            modelo='claude-sonnet-5')
+
+        r = self.client.post(f'/api/configuracion-ia/{anthropic.pk}/activar/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            list(ConfiguracionIA.objects.filter(activo=True)
+                 .values_list('proveedor', flat=True)),
+            ['anthropic'])
+
+    def test_no_se_puede_activar_un_proveedor_sin_clave(self):
+        vacio = ConfiguracionIA.objects.create(proveedor='gemini')
+        r = self.client.post(f'/api/configuracion-ia/{vacio.pk}/activar/')
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(ConfiguracionIA.objects.get(pk=vacio.pk).activo)
+
+    def test_editar_el_modelo_conserva_la_clave(self):
+        """Cambiar de modelo no debería obligar a ir a buscar la clave otra vez."""
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI,
+                      modelo='gpt-4o-mini')
+        r = self._guardar(proveedor='openai', modelo='gpt-4o')
+
+        self.assertEqual(r.status_code, 200)
+        config = ConfiguracionIA.objects.get(proveedor='openai')
+        self.assertEqual(config.modelo, 'gpt-4o')
+        self.assertEqual(config.api_key, self.CLAVE_OPENAI)
+
+    def test_cambiar_la_clave_invalida_la_verificacion_anterior(self):
+        """Lo verificado antes no dice nada de una clave nueva."""
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+        ConfiguracionIA.objects.filter(proveedor='openai').update(
+            verificada=True, verificada_en=timezone.now())
+
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI + 'XY')
+
+        config = ConfiguracionIA.objects.get(proveedor='openai')
+        self.assertFalse(config.verificada)
+        self.assertIsNone(config.verificada_en)
+
+    def test_sin_clave_previa_la_clave_es_obligatoria(self):
+        r = self._guardar(proveedor='gemini', modelo='gemini-2.0-flash')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('api_key', r.json()['error']['details'])
+
+    def test_el_alta_no_inventa_un_modelo(self):
+        """Guardar la clave no elige modelo: la lista la da el proveedor después.
+
+        Antes se ponía un sugerido escrito a mano, que podía estar retirado o no
+        estar habilitado en esa cuenta.
+        """
+        self._guardar(proveedor='anthropic', api_key=self.CLAVE_ANTHROPIC)
+        config = ConfiguracionIA.objects.get(proveedor='anthropic')
+        self.assertFalse(config.modelo)
+        self.assertFalse(config.activo)
+
+        estado = self.client.get('/api/configuracion-ia/estado/').json()
+        self.assertFalse(estado['hay_proveedor_activo'])
+
+    # -- Errores de pegado ------------------------------------------------------
+
+    def test_rechaza_la_clave_de_otro_proveedor(self):
+        """`AIza...` en OpenAI es un pegado equivocado, no una clave rara."""
+        r = self._guardar(proveedor='openai',
+                          api_key='AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('sk-', str(r.json()['error']['details']['api_key']))
+        self.assertFalse(ConfiguracionIA.objects.filter(proveedor='openai').exists())
+
+    def test_rechaza_que_le_peguen_la_version_enmascarada(self):
+        """Copiar lo que muestra la pantalla es el error más fácil de cometer."""
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+        r = self._guardar(proveedor='openai', api_key='sk-…6789xxxxxxxxxxxx')
+
+        self.assertEqual(r.status_code, 400)
+        # Y sobre todo: no pisó la clave buena con la basura.
+        self.assertEqual(
+            ConfiguracionIA.objects.get(proveedor='openai').api_key,
+            self.CLAVE_OPENAI)
+
+    def test_rechaza_un_proveedor_inexistente(self):
+        r = self._guardar(proveedor='chatgpt-pirata', api_key=self.CLAVE_OPENAI)
+        self.assertEqual(r.status_code, 400)
+
+    # -- Permisos ---------------------------------------------------------------
+
+    def test_el_operador_no_ve_ni_toca_la_configuracion(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+        self.client.force_authenticate(user=self.operador)
+
+        for metodo, url in [
+            ('get', '/api/configuracion-ia/'),
+            ('get', '/api/configuracion-ia/estado/'),
+            ('get', '/api/configuracion-ia/catalogo/'),
+            ('post', '/api/configuracion-ia/guardar/'),
+        ]:
+            r = getattr(self.client, metodo)(url, {}, format='json')
+            self.assertEqual(r.status_code, 403, f'{metodo.upper()} {url}')
+
+    def test_sin_autenticar_no_se_llega(self):
+        self.client.force_authenticate(user=None)
+        r = self.client.get('/api/configuracion-ia/')
+        self.assertIn(r.status_code, (401, 403))
+
+    # -- Catálogo ---------------------------------------------------------------
+
+    def test_el_catalogo_trae_los_cuatro_proveedores_sin_datos_internos(self):
+        r = self.client.get('/api/configuracion-ia/catalogo/')
+        self.assertEqual(r.status_code, 200)
+
+        proveedores = r.json()['proveedores']
+        self.assertEqual({p['id'] for p in proveedores},
+                         {'openai', 'gemini', 'deepseek', 'anthropic'})
+        for p in proveedores:
+            self.assertTrue(p['prefijo_clave'], f"{p['id']} sin prefijo")
+            self.assertTrue(p['donde_obtenerla'], f"{p['id']} sin enlace")
+            # Los modelos NO viajan acá: se piden al proveedor con la clave.
+            self.assertNotIn('modelos', p)
+        self.assertNotIn('url_base', r.content.decode())
+
+    def test_agregar_un_proveedor_no_requiere_migracion(self):
+        """El catálogo es la única fuente: sumar uno es una entrada en el dict.
+
+        Se comprueba que el campo `proveedor` no tenga los valores clavados en la
+        base (choices o CHECK): si los tuviera, cada proveedor nuevo obligaría a
+        una migración, que es justo lo que se quiso evitar.
+        """
+        config = ConfiguracionIA(proveedor='proveedor-futuro',
+                                 api_key=self.CLAVE_OPENAI, modelo='modelo-x')
+        config.full_clean()
+        config.save()
+        self.assertTrue(ConfiguracionIA.objects.filter(
+            proveedor='proveedor-futuro').exists())
+
+    # -- Probar la clave --------------------------------------------------------
+
+    def test_probar_guarda_el_resultado_sin_filtrar_el_cuerpo_del_error(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+        config = ConfiguracionIA.objects.get(proveedor='openai')
+
+        with patch('api.views.probar_credencial',
+                   return_value=(False, 'El proveedor rechazó la clave: está mal '
+                                        'copiada o fue revocada.')) as mock:
+            r = self.client.post(f'/api/configuracion-ia/{config.pk}/probar/')
+
+        # La clave se le pasa al probador (es quien habla con el proveedor), pero
+        # no aparece en lo que se devuelve ni en lo que queda guardado.
+        mock.assert_called_once_with('openai', self.CLAVE_OPENAI)
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(r.json()['ok'])
+        self.assertNotIn(self.CLAVE_OPENAI, r.content.decode())
+
+        config.refresh_from_db()
+        self.assertFalse(config.verificada)
+        self.assertIn('rechazó la clave', config.ultimo_error)
+
+    def test_probar_con_exito_marca_verificada_y_limpia_el_error(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+        config = ConfiguracionIA.objects.get(proveedor='openai')
+        ConfiguracionIA.objects.filter(pk=config.pk).update(
+            ultimo_error='fallo anterior')
+
+        with patch('api.views.probar_credencial',
+                   return_value=(True, 'La clave funciona.')):
+            r = self.client.post(f'/api/configuracion-ia/{config.pk}/probar/')
+
+        self.assertEqual(r.status_code, 200)
+        config.refresh_from_db()
+        self.assertTrue(config.verificada)
+        self.assertIsNotNone(config.verificada_en)
+        self.assertIsNone(config.ultimo_error)
+
+    def test_el_limite_de_uso_no_significa_que_la_clave_sea_mala(self):
+        """Un 429 dice que la cuenta llegó al tope, no que la clave esté mal."""
+        import urllib.error
+
+        from .ia_catalogo import probar_credencial as probar_real
+
+        with patch('urllib.request.urlopen',
+                   side_effect=urllib.error.HTTPError(
+                       'https://x', 429, 'Too Many Requests', {}, None)):
+            ok, detalle = probar_real('openai', self.CLAVE_OPENAI)
+        self.assertTrue(ok)
+        self.assertIn('límite', detalle)
+
+        with patch('urllib.request.urlopen',
+                   side_effect=urllib.error.HTTPError(
+                       'https://x', 401, 'Unauthorized', {}, None)):
+            ok, _ = probar_real('openai', self.CLAVE_OPENAI)
+        self.assertFalse(ok)
+
+    def test_borrar_la_configuracion_borra_la_clave(self):
+        self._guardar(proveedor='openai', api_key=self.CLAVE_OPENAI)
+        config = ConfiguracionIA.objects.get(proveedor='openai')
+
+        r = self.client.delete(f'/api/configuracion-ia/{config.pk}/')
+        self.assertEqual(r.status_code, 204)
+        self.assertFalse(ConfiguracionIA.objects.filter(pk=config.pk).exists())
+
+
+class _RespuestaFalsa:
+    """Imita lo que devuelve `urlopen`: se usa como context manager y se lee."""
+
+    def __init__(self, cuerpo, status=200):
+        self._cuerpo = json.dumps(cuerpo).encode('utf-8')
+        self.status = status
+
+    def read(self):
+        return self._cuerpo
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class ModelosIATestCase(APITestCase):
+    """La lista de modelos la da el proveedor, no una lista escrita a mano.
+
+    Los proveedores sacan modelos nuevos cada pocos meses y retiran otros, así
+    que una lista local termina ofreciendo modelos muertos y escondiendo los
+    nuevos. Además la lista depende de la cuenta: dos claves del mismo proveedor
+    pueden tener acceso a modelos distintos según el plan. De ahí que el modelo
+    solo se pueda elegir después de cargar la clave.
+    """
+
+    CLAVE_OPENAI = 'sk-proj-abcdefghijklmnopqrstuvwxyz0123456789'
+    CLAVE_ANTHROPIC = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123'
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_modelos', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+    def _config(self, proveedor='openai', clave=None, modelo=None):
+        return ConfiguracionIA.objects.create(
+            proveedor=proveedor, api_key=clave or self.CLAVE_OPENAI, modelo=modelo)
+
+    def _pedir_modelos(self, config, respuesta):
+        with patch('urllib.request.urlopen', return_value=_RespuestaFalsa(respuesta)):
+            return self.client.get(f'/api/configuracion-ia/{config.pk}/modelos/')
+
+    # -- Sin clave no hay lista ------------------------------------------------
+
+    def test_sin_clave_no_se_pueden_pedir_modelos(self):
+        """Es la razón por la que el modelo se elige en un segundo paso."""
+        vacio = ConfiguracionIA.objects.create(proveedor='gemini')
+        r = self.client.get(f'/api/configuracion-ia/{vacio.pk}/modelos/')
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('clave', r.json()['error'].lower())
+
+    def test_no_se_puede_activar_sin_haber_elegido_modelo(self):
+        """Un proveedor "en uso" sin modelo no sirve para llamar a nada."""
+        config = self._config(proveedor='openai')
+        r = self.client.post(f'/api/configuracion-ia/{config.pk}/activar/')
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('modelo', r.json()['error'].lower())
+        self.assertFalse(ConfiguracionIA.objects.get(pk=config.pk).activo)
+
+    def test_guardar_tampoco_deja_activar_sin_modelo(self):
+        """El mismo guarda por el otro camino, si no se cuela por ahí."""
+        r = self.client.post('/api/configuracion-ia/guardar/', {
+            'proveedor': 'anthropic', 'api_key': self.CLAVE_ANTHROPIC, 'activo': True,
+        }, format='json')
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('modelo', r.json()['error']['details'])
+        self.assertFalse(ConfiguracionIA.objects.filter(activo=True).exists())
+
+    # -- Lectura de la respuesta de cada proveedor -----------------------------
+
+    def test_anthropic_usa_el_nombre_para_mostrar_que_da_la_api(self):
+        config = self._config('anthropic', self.CLAVE_ANTHROPIC)
+        r = self._pedir_modelos(config, {'data': [
+            {'id': 'claude-sonnet-5', 'display_name': 'Claude Sonnet 5'},
+            {'id': 'claude-opus-4-8', 'display_name': 'Claude Opus 4.8'},
+        ]})
+
+        self.assertEqual(r.status_code, 200)
+        datos = r.json()
+        self.assertTrue(datos['ok'])
+        self.assertEqual([m['id'] for m in datos['modelos']],
+                         ['claude-sonnet-5', 'claude-opus-4-8'])
+        self.assertEqual(datos['modelos'][0]['nombre'], 'Claude Sonnet 5')
+
+    def test_openai_descarta_lo_que_no_sirve_para_conversar(self):
+        """La API mezcla chat con imágenes, audio y embeddings sin distinguirlos."""
+        config = self._config('openai')
+        r = self._pedir_modelos(config, {'data': [
+            {'id': 'gpt-4o'},
+            {'id': 'gpt-4o-mini'},
+            {'id': 'o3-mini'},
+            {'id': 'text-embedding-3-small'},
+            {'id': 'whisper-1'},
+            {'id': 'dall-e-3'},
+            {'id': 'tts-1'},
+            {'id': 'gpt-4o-audio-preview'},
+            {'id': 'omni-moderation-latest'},
+        ]})
+
+        ids = [m['id'] for m in r.json()['modelos']]
+        self.assertEqual(set(ids), {'gpt-4o', 'gpt-4o-mini', 'o3-mini'})
+
+    def test_gemini_descarta_los_modelos_que_no_generan_texto(self):
+        config = self._config('gemini', 'AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ0123')
+        r = self._pedir_modelos(config, {'models': [
+            {'name': 'models/gemini-2.0-flash', 'displayName': 'Gemini 2.0 Flash',
+             'supportedGenerationMethods': ['generateContent']},
+            {'name': 'models/text-embedding-004', 'displayName': 'Embeddings',
+             'supportedGenerationMethods': ['embedContent']},
+        ]})
+
+        modelos = r.json()['modelos']
+        # Se queda con el nombre pelado, sin el prefijo "models/" de la API.
+        self.assertEqual([m['id'] for m in modelos], ['gemini-2.0-flash'])
+        self.assertEqual(modelos[0]['nombre'], 'Gemini 2.0 Flash')
+
+    def test_el_sugerido_aparece_primero_si_la_cuenta_lo_tiene(self):
+        """Para que el que abre el selector no tenga que buscarlo."""
+        sugerido = PROVEEDORES['openai']['modelo_sugerido']
+        config = self._config('openai')
+        r = self._pedir_modelos(config, {'data': [
+            {'id': 'gpt-4o'}, {'id': 'gpt-4-turbo'}, {'id': sugerido},
+        ]})
+
+        ids = [m['id'] for m in r.json()['modelos']]
+        self.assertEqual(ids[0], sugerido)
+        self.assertEqual(ids[1:], sorted(['gpt-4o', 'gpt-4-turbo']))
+
+    def test_aparecen_modelos_nuevos_sin_tocar_el_codigo(self):
+        """Es el punto de consultar en vivo: no esperar una actualización."""
+        config = self._config('anthropic', self.CLAVE_ANTHROPIC)
+        r = self._pedir_modelos(config, {'data': [
+            {'id': 'claude-modelo-del-futuro-9', 'display_name': 'Claude del futuro'},
+        ]})
+
+        self.assertEqual([m['id'] for m in r.json()['modelos']],
+                         ['claude-modelo-del-futuro-9'])
+
+    # -- Cuando el proveedor falla ---------------------------------------------
+
+    def test_si_el_proveedor_cambia_el_formato_se_avisa_sin_reventar(self):
+        config = self._config('anthropic', self.CLAVE_ANTHROPIC)
+        r = self._pedir_modelos(config, {'otra_cosa': 'formato nuevo'})
+
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(r.json()['ok'])
+        self.assertEqual(r.json()['modelos'], [])
+
+    def test_una_clave_rechazada_se_explica_y_no_filtra_el_cuerpo(self):
+        config = self._config('openai')
+        with patch('urllib.request.urlopen',
+                   side_effect=urllib.error.HTTPError(
+                       'https://x', 401, 'Unauthorized', {}, None)):
+            r = self.client.get(f'/api/configuracion-ia/{config.pk}/modelos/')
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('rechazó la clave', r.json()['detalle'])
+        self.assertNotIn(self.CLAVE_OPENAI, r.content.decode())
+
+    def test_una_cuenta_sin_modelos_de_chat_se_avisa(self):
+        config = self._config('openai')
+        r = self._pedir_modelos(config, {'data': [{'id': 'text-embedding-3-small'}]})
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('ningún modelo', r.json()['detalle'])
+
+    def test_si_el_proveedor_no_responde_se_dice_asi(self):
+        config = self._config('openai')
+        with patch('urllib.request.urlopen', side_effect=TimeoutError()):
+            r = self.client.get(f'/api/configuracion-ia/{config.pk}/modelos/')
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('no respondió a tiempo', r.json()['detalle'])
+
+    # -- La clave sigue sin salir ----------------------------------------------
+
+    def test_pedir_modelos_no_devuelve_la_clave(self):
+        config = self._config('anthropic', self.CLAVE_ANTHROPIC)
+        r = self._pedir_modelos(config, {'data': [{'id': 'claude-sonnet-5'}]})
+        self.assertNotIn(self.CLAVE_ANTHROPIC, r.content.decode())
+
+    def test_la_clave_se_manda_al_proveedor_en_la_cabecera_que_espera(self):
+        """Si va en la cabecera equivocada, el proveedor responde 401 sin decir por qué."""
+        config = self._config('anthropic', self.CLAVE_ANTHROPIC)
+        with patch('urllib.request.urlopen',
+                   return_value=_RespuestaFalsa({'data': [{'id': 'claude-sonnet-5'}]})) as mock:
+            self.client.get(f'/api/configuracion-ia/{config.pk}/modelos/')
+
+        peticion = mock.call_args[0][0]
+        self.assertEqual(peticion.get_header('X-api-key'), self.CLAVE_ANTHROPIC)
+        self.assertEqual(peticion.get_header('Anthropic-version'), '2023-06-01')
+        # Anthropic no usa Bearer: mandarlo así es el error clásico al copiar
+        # el código de OpenAI.
+        self.assertIsNone(peticion.get_header('Authorization'))
+
+    def test_openai_manda_la_clave_como_bearer(self):
+        config = self._config('openai')
+        with patch('urllib.request.urlopen',
+                   return_value=_RespuestaFalsa({'data': [{'id': 'gpt-4o'}]})) as mock:
+            self.client.get(f'/api/configuracion-ia/{config.pk}/modelos/')
+
+        peticion = mock.call_args[0][0]
+        self.assertEqual(peticion.get_header('Authorization'),
+                         f'Bearer {self.CLAVE_OPENAI}')
+
+    def test_gemini_manda_la_clave_en_la_url(self):
+        """Gemini no usa cabecera: la clave va como parámetro."""
+        clave = 'AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ0123'
+        config = self._config('gemini', clave)
+        with patch('urllib.request.urlopen',
+                   return_value=_RespuestaFalsa({'models': []})) as mock:
+            self.client.get(f'/api/configuracion-ia/{config.pk}/modelos/')
+
+        self.assertIn(f'key={clave}', mock.call_args[0][0].full_url)

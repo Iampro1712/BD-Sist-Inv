@@ -85,11 +85,48 @@ class R2Storage:
             logger.error(f"Error inesperado al subir: {str(e)}")
             return None
     
+    def subir_respaldo(self, contenido_bytes, nombre):
+        """Sube un respaldo de la base a un bucket PRIVADO. Devuelve la clave.
+
+        Deliberadamente separado de `upload_file`: aquel sube al bucket con
+        dominio público (correcto para las fotos de la bitácora, que la
+        aplicación muestra). Un respaldo ahí queda descargable por cualquiera
+        que tenga la URL — que es exactamente lo que pasó: se encontraron 13
+        respaldos con la base completa y tokens de sesión vigentes accesibles
+        sin autenticación.
+
+        Si no hay bucket privado configurado, NO sube nada. Es preferible tener
+        solo la copia local a tener una copia remota expuesta.
+        """
+        bucket = getattr(settings, 'R2_BACKUP_BUCKET', None)
+        if not self.enabled or not bucket:
+            return None
+        try:
+            clave = f"backups/{nombre}"
+            self.client.put_object(
+                Bucket=bucket,
+                Key=clave,
+                Body=contenido_bytes,
+                ContentType='application/octet-stream',
+                # Sin CacheControl público y sin devolver URL: este contenido
+                # solo se baja con credenciales.
+                CacheControl='no-store',
+            )
+            logger.info("Respaldo subido al bucket privado: %s", clave)
+            return clave
+        except ClientError as e:
+            logger.error("Error al subir el respaldo: %s",
+                         e.response.get('Error', {}).get('Message', str(e)))
+            return None
+        except Exception as e:
+            logger.error("Error inesperado al subir el respaldo: %s", e)
+            return None
+
     def delete_file(self, file_url):
         """Elimina un archivo de R2"""
         if not self.enabled or not file_url:
             return
-            
+
         try:
             filename = file_url.replace(f"{self.public_url}/", "")
             self.client.delete_object(Bucket=self.bucket_name, Key=filename)

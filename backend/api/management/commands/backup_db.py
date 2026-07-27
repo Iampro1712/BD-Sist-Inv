@@ -34,25 +34,43 @@ class Command(BaseCommand):
         destino.write_text(contenido, encoding='utf-8')
         self.stdout.write(self.style.SUCCESS(f'Respaldo local creado: {destino}'))
 
-        # Redundancia en R2 si está configurado.
+        # Copia remota, solo a un bucket PRIVADO y con el contenido cifrado.
+        #
+        # Antes esto subía el volcado al bucket con dominio público, así que la
+        # base entera quedaba descargable sin autenticación. Ahora hacen falta
+        # dos cosas y, si falta alguna, no se sube: es mejor tener solo la copia
+        # local que una copia remota expuesta.
         try:
             from api.storage import r2_storage
-            if r2_storage.enabled:
-                # BufferedReader (open()) no permite fijar atributos arbitrarios
-                # como .name/.content_type; se envuelve en BytesIO para poder
-                # reusar r2_storage.upload_file tal cual lo espera.
-                buf = io.BytesIO(destino.read_bytes())
-                buf.name = nombre
-                buf.content_type = 'application/json'
-                url = r2_storage.upload_file(buf, folder='backups')
-                if url:
-                    self.stdout.write(self.style.SUCCESS(f'Subido a R2: {url}'))
-                else:
-                    self.stderr.write('No se pudo subir el respaldo a R2 (revisar logs).')
+
+            bucket = getattr(settings, 'R2_BACKUP_BUCKET', None)
+            clave_cifrado = getattr(settings, 'BACKUP_ENCRYPTION_KEY', None)
+
+            if not bucket:
+                self.stdout.write(
+                    'Sin R2_BACKUP_BUCKET: el respaldo queda solo en disco local. '
+                    'Configurá un bucket privado (no el del CDN público) para '
+                    'tener copia remota.')
+            elif not clave_cifrado:
+                self.stderr.write(self.style.WARNING(
+                    'Sin BACKUP_ENCRYPTION_KEY: no se sube. El respaldo lleva '
+                    'datos de clientes y precios; se cifra antes de salir del '
+                    'servidor. Generá una clave con:\n'
+                    '  python -c "from cryptography.fernet import Fernet; '
+                    'print(Fernet.generate_key().decode())"'))
+            elif not r2_storage.enabled:
+                self.stderr.write('R2 no configurado: el respaldo queda en disco local.')
             else:
-                self.stdout.write('R2 no configurado: el respaldo solo queda en disco local.')
+                from cryptography.fernet import Fernet
+                cifrado = Fernet(clave_cifrado).encrypt(destino.read_bytes())
+                clave = r2_storage.subir_respaldo(cifrado, nombre + '.enc')
+                if clave:
+                    self.stdout.write(self.style.SUCCESS(
+                        f'Respaldo cifrado en bucket privado: {clave}'))
+                else:
+                    self.stderr.write('No se pudo subir el respaldo (revisar logs).')
         except Exception as e:
-            self.stderr.write(f'Error al subir respaldo a R2: {e}')
+            self.stderr.write(f'Error al subir el respaldo: {e}')
 
         # Retención: conservar solo los N más recientes.
         retener = options['retener']

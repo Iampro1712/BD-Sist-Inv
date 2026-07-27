@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.8.1-4F46E5?style=flat-square)](#181---2026-07-26)
+[![Version](https://img.shields.io/badge/version-1.9.0-4F46E5?style=flat-square)](#190---2026-07-26)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,34 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.9.0] - 2026-07-26
+
+### Security
+
+- **Los respaldos automáticos quedaron públicos y se corrigió.** Se subían al mismo bucket que sirve las fotos de la bitácora, que tiene dominio público, así que **13 volcados completos de la base eran descargables sin contraseña**: clientes, ventas, precios de compra, motos con placa y empleados. Lo más grave no eran los datos sino **tres tokens de sesión vigentes** que permitían entrar al sistema. Se borraron los 13 respaldos, se **rotó la clave de firma** —lo que invalidó todos los tokens filtrados— y se purgaron los registros de tokens de la base.
+- **Las credenciales ya no viajan en los respaldos.** Las tablas de tokens de sesión y de claves de IA quedaron excluidas: son credenciales, no datos del negocio, y nunca debieron estar ahí.
+- **El respaldo ya no sube a un destino público.** Ahora exige un bucket privado y se **cifra antes de salir del servidor**. Si falta cualquiera de las dos cosas no sube y avisa: es preferible tener solo la copia local a una copia remota expuesta.
+- **`RESPALDOS.md`** documenta qué pasó, cómo terminar de configurarlo y las opciones de destino ordenadas de gratis a premium. Incluye una advertencia que conviene leer antes de necesitarla: **el respaldo actual es solo datos y no restaura la base por sí solo**.
+- Como efecto de rotar la clave de firma, **todos tienen que volver a iniciar sesión** después del despliegue.
+
+### Added
+
+- **Configuración de proveedores de IA:** nueva sección (solo administradores) para cargar la clave de **OpenAI, Google Gemini, DeepSeek o Anthropic (Claude)** y elegir el modelo de cada uno. Queda para las funciones con IA que vienen después; por ahora es solo la configuración.
+- **La lista de modelos la da el proveedor, no el sistema.** Se le pregunta con tu clave cada vez, así que aparecen los modelos nuevos apenas salen y no se ofrecen los que ya retiraron. También refleja **a cuáles tiene acceso tu cuenta**, que depende del plan contratado. Por eso el alta es en dos pasos: primero la clave, después el modelo — antes de tener la clave no hay a quién preguntarle. Si el proveedor no responde, se puede escribir el nombre del modelo a mano.
+- **Un proveedor activo a la vez**, con el modelo elegido. La base lo impone, no solo la pantalla. No se puede activar un proveedor sin modelo: quedaría "en uso" sin poder llamar a nada.
+- **La clave nunca vuelve del backend.** Se guarda cifrada y la pantalla solo muestra algo como `sk-…4f2a`, lo justo para reconocer cuál está cargada. Una clave de IA permite gastar dinero de la cuenta, así que no hay motivo para devolverla ni a un administrador. Tampoco viaja en los respaldos.
+- **Probar la clave** contra el proveedor antes de depender de ella: sin eso, una clave mal pegada se descubre recién cuando una función falla frente al usuario. La prueba la hace el servidor, porque hacerla desde el navegador obligaría a mandarle la clave.
+- **Avisos al pegar la clave equivocada:** si se pega una de Gemini en OpenAI, o lo que muestra la pantalla en vez de la clave real, se rechaza antes de guardar y **sin pisar la que ya estaba**.
+- **Agregar un proveedor nuevo no requiere migración:** todo lo específico de cada proveedor vive en un solo archivo.
+- **Selector de modelo con buscador:** la lista de un proveedor como OpenAI puede traer decenas de variantes (`gpt-4.1`, `gpt-4.1-2025-04-14`, `gpt-3.5-turbo-16k`...); el selector nativo obligaba a leerlas todas una por una. El nuevo combobox deja escribir para filtrar y marca el modelo recomendado con una insignia en vez de pegarlo al nombre.
+- Tabla nueva `configuracion_ia` (migración `0023`, aditiva).
+
+### Fixed
+
+- **Borrar la clave de un proveedor no mostraba ningún aviso de progreso.** El diálogo de confirmación pasaba la propiedad equivocada al botón y encima se cerraba apenas se hacía clic, así que la eliminación quedaba corriendo en silencio. Ahora el diálogo se queda abierto con el botón en "Borrando..." hasta que termina, y la tarjeta del proveedor se atenúa mientras tanto.
 
 ---
 

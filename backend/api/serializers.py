@@ -15,8 +15,9 @@ from inventory.models import (
     AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta,
     Cotizacion, Devolucion, SesionCaja, MovimientoCaja,
     CategoriaGasto, Gasto, PagoCompra, ServicioRepuesto, ServicioCotizacion,
-    Ubicacion, DevolucionCompra, ProductoDevolucionCompra,
+    Ubicacion, DevolucionCompra, ProductoDevolucionCompra, ConfiguracionIA,
 )
+from .ia_catalogo import PROVEEDORES
 
 
 # ============================================================================
@@ -2136,3 +2137,84 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
 
     def to_representation(self, instance):
         return DevolucionCompraSerializer(instance).data
+
+
+# ============================================================================
+# CONFIGURACIÓN DE PROVEEDORES DE IA
+# ============================================================================
+
+class ConfiguracionIASerializer(serializers.ModelSerializer):
+    """Lectura de la configuración de un proveedor.
+
+    `api_key` NO está en `fields` a propósito: la clave nunca sale del backend,
+    ni siquiera para un administrador. Se devuelve `api_key_enmascarada`
+    (`sk-…4f2a`), que alcanza para reconocer cuál está cargada. Una clave de IA
+    permite gastar dinero de la cuenta, así que no hay motivo para exponerla:
+    quien necesite la original la tiene en el panel del proveedor.
+    """
+    nombre_proveedor = serializers.CharField(read_only=True)
+    api_key_enmascarada = serializers.CharField(read_only=True)
+    tiene_clave = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ConfiguracionIA
+        fields = [
+            'id_configuracion', 'proveedor', 'nombre_proveedor',
+            'api_key_enmascarada', 'tiene_clave', 'modelo', 'activo',
+            'verificada', 'verificada_en', 'ultimo_error',
+            'actualizado_por', 'actualizado_en',
+        ]
+
+
+class ConfiguracionIAGuardarSerializer(serializers.Serializer):
+    """Alta o actualización de un proveedor."""
+    proveedor = serializers.ChoiceField(choices=[k for k in PROVEEDORES])
+    # Opcional al editar: si no viene, se conserva la clave ya guardada. Así se
+    # puede cambiar el modelo sin volver a pegar la clave.
+    api_key = serializers.CharField(required=False, allow_blank=True,
+                                    trim_whitespace=True, write_only=True)
+    modelo = serializers.CharField(required=False, allow_blank=True)
+    activo = serializers.BooleanField(required=False, default=False)
+
+    def validate_api_key(self, value):
+        if not value:
+            return value
+        value = value.strip()
+        # Un pegado incompleto o con el placeholder de la interfaz es el error
+        # más común; se avisa antes de guardar algo que no va a funcionar.
+        if '…' in value or '•' in value:
+            raise serializers.ValidationError(
+                'Parece la clave enmascarada que muestra la pantalla, no la real. '
+                'Pegá la clave completa del proveedor.')
+        if len(value) < 15:
+            raise serializers.ValidationError('La clave es demasiado corta.')
+        return value
+
+    def validate(self, data):
+        proveedor = data['proveedor']
+        clave = data.get('api_key')
+        esperado = PROVEEDORES[proveedor]['prefijo_clave']
+        if clave and esperado and not clave.startswith(esperado):
+            raise serializers.ValidationError({'api_key': (
+                f'Las claves de {PROVEEDORES[proveedor]["nombre"]} empiezan con '
+                f'"{esperado}". Revisá que no hayas pegado la de otro proveedor.'
+            )})
+
+        existente = ConfiguracionIA.objects.filter(proveedor=proveedor).first()
+        if not clave and (existente is None or not existente.api_key):
+            raise serializers.ValidationError(
+                {'api_key': 'Hace falta la clave para configurar este proveedor.'})
+
+        # Activar sin modelo dejaría un proveedor "en uso" con el que no se
+        # puede llamar a nada. Y el modelo sale de la lista del proveedor, que
+        # solo se puede consultar con la clave ya guardada: por eso el alta es
+        # en dos pasos (guardar clave, después elegir modelo y activar).
+        if data.get('activo') and not (data.get('modelo') or
+                                       (existente and existente.modelo)):
+            raise serializers.ValidationError({'modelo': (
+                'Elegí un modelo antes de activar el proveedor. La lista de '
+                'modelos la da el proveedor una vez guardada la clave.'
+            )})
+
+        data['_existente'] = existente
+        return data

@@ -15,6 +15,18 @@ EXCLUIR = {
     'django_session', 'auth_group', 'auth_group_permissions',
     'auth_permission', 'auth_user', 'auth_user_groups',
     'auth_user_user_permissions',
+
+    # Credenciales: NO son datos de negocio y su filtración permite entrar al
+    # sistema. Los tokens JWT de estas tablas sirven tal cual para pedir un
+    # token de acceso, así que un respaldo que los incluya es una llave de la
+    # casa. Se excluyeron después de encontrarlos en un respaldo público.
+    'token_blacklist_outstandingtoken',
+    'token_blacklist_blacklistedtoken',
+
+    # Claves de API de proveedores de IA: aunque están cifradas en la base, no
+    # tienen por qué viajar en un respaldo. Restaurar sin ellas solo obliga a
+    # volver a cargarlas desde Configuración.
+    'configuracion_ia',
 }
 
 

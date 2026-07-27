@@ -370,6 +370,17 @@ R2_BUCKET_NAME = os.getenv('R2_BUCKET_NAME')
 R2_PUBLIC_URL = os.getenv('R2_PUBLIC_URL')
 R2_ACCESS_URI = os.getenv('R2_ACCESS_URI')
 
+# Bucket PRIVADO para los respaldos de la base. Va aparte de R2_BUCKET_NAME a
+# propósito: ese tiene un dominio público (sirve las fotos de la bitácora) y
+# cualquier respaldo ahí queda descargable sin autenticación. Sin esta variable
+# el respaldo no sale del servidor.
+R2_BACKUP_BUCKET = os.getenv('R2_BACKUP_BUCKET')
+
+# Cifra el volcado antes de subirlo. Es independiente de FIELD_ENCRYPTION_KEY
+# para que una filtración de respaldos no comprometa también los datos de
+# contacto cifrados en la base (ni al revés).
+BACKUP_ENCRYPTION_KEY = os.getenv('BACKUP_ENCRYPTION_KEY', '')
+
 # Clave de cifrado en reposo (R06) para columnas de contacto sensibles
 # (telefono/email de clientes y proveedores). Ver inventory/encryption.py.
 FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', '')

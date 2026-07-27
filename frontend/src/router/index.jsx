@@ -33,6 +33,7 @@ const Gastos = lazy(() => import('../pages/Gastos'))
 const Taller = lazy(() => import('../pages/Taller'))
 const MantenimientoPreventivo = lazy(() => import('../pages/MantenimientoPreventivo'))
 const Ubicaciones = lazy(() => import('../pages/Ubicaciones'))
+const Configuracion = lazy(() => import('../pages/Configuracion'))
 const ConteoFisico = lazy(() => import('../pages/ConteoFisico'))
 const AnalisisProveedores = lazy(() => import('../pages/AnalisisProveedores'))
 const Etiquetas = lazy(() => import('../pages/Etiquetas'))
@@ -277,6 +278,17 @@ const router = createBrowserRouter([
           <AdminRoute>
             <Suspense fallback={<PageLoader />}>
               <Usuarios />
+            </Suspense>
+          </AdminRoute>
+        ),
+      },
+      {
+        // Guarda claves de API de proveedores de IA: solo administradores.
+        path: 'configuracion',
+        element: (
+          <AdminRoute>
+            <Suspense fallback={<PageLoader />}>
+              <Configuracion />
             </Suspense>
           </AdminRoute>
         ),

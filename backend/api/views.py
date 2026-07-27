@@ -26,7 +26,10 @@ from inventory.models import (
     BitacoraServicio, AuditoriaProducto, Garantia, ReclamacionGarantia, PagoVenta,
     Cotizacion, Devolucion, SesionCaja, MovimientoCaja,
     CategoriaGasto, Gasto, PagoCompra, ServicioRepuesto, Ubicacion,
-    DevolucionCompra,
+    DevolucionCompra, ConfiguracionIA,
+)
+from .ia_catalogo import (
+    PROVEEDORES, catalogo_publico, listar_modelos, probar_credencial,
 )
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
@@ -50,6 +53,7 @@ from .serializers import (
     PagoCompraSerializer, PagoCompraCreateSerializer,
     ServicioRepuestoSerializer, UbicacionSerializer,
     DevolucionCompraSerializer, DevolucionCompraCreateSerializer,
+    ConfiguracionIASerializer, ConfiguracionIAGuardarSerializer,
 )
 
 # MasterDev
@@ -2295,3 +2299,155 @@ class GastoViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         gasto = serializer.save()
         return Response(GastoSerializer(gasto).data, status=status.HTTP_201_CREATED)
+
+
+class ConfiguracionIAViewSet(viewsets.ModelViewSet):
+    """Claves y modelo de cada proveedor de IA. Solo administradores.
+
+    La clave se guarda cifrada y nunca se devuelve: la API responde con una
+    versión enmascarada. La tabla además está excluida del respaldo.
+    """
+    permission_classes = [IsAdminUser]
+    queryset = ConfiguracionIA.objects.all()
+    serializer_class = ConfiguracionIASerializer
+    # Se administra con las acciones de abajo (guardar/activar/probar), que
+    # manejan la clave con cuidado; el CRUD genérico de escritura no aplica.
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    @action(detail=False, methods=['get'])
+    def catalogo(self, request):
+        """Proveedores y modelos disponibles, para poblar los selectores."""
+        return Response({'proveedores': catalogo_publico()})
+
+    @action(detail=False, methods=['get'])
+    def estado(self, request):
+        """Qué proveedor está activo y con qué modelo.
+
+        Es lo que consultarán las funciones de IA cuando existan.
+        """
+        activo = ConfiguracionIA.objects.filter(activo=True).first()
+        return Response({
+            # Hace falta clave *y* modelo: con uno solo de los dos no se puede
+            # llamar al proveedor, así que decir que hay proveedor activo sería
+            # mentira.
+            'hay_proveedor_activo': (
+                activo is not None and bool(activo.api_key) and bool(activo.modelo)),
+            'proveedor': activo.proveedor if activo else None,
+            'nombre_proveedor': activo.nombre_proveedor if activo else None,
+            'modelo': activo.modelo if activo else None,
+            'verificada': activo.verificada if activo else False,
+            'configurados': ConfiguracionIA.objects.exclude(
+                api_key__isnull=True).count(),
+        })
+
+    @action(detail=False, methods=['post'])
+    def guardar(self, request):
+        """Crea o actualiza un proveedor. Si no viene clave, conserva la actual."""
+        serializer = ConfiguracionIAGuardarSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        datos = serializer.validated_data
+
+        proveedor = datos['proveedor']
+        existente = datos.pop('_existente', None)
+        usuario = request.user.get_full_name() or request.user.username
+
+        with transaction.atomic():
+            config = existente or ConfiguracionIA(proveedor=proveedor)
+            clave_nueva = datos.get('api_key')
+            if clave_nueva:
+                config.api_key = clave_nueva
+                # La clave cambió: lo verificado antes ya no dice nada de esta.
+                config.verificada = False
+                config.verificada_en = None
+                config.ultimo_error = None
+
+            # Si no viene modelo se deja como está (o sin nada en un alta): la
+            # lista de modelos se pide al proveedor con esta clave, así que
+            # recién se puede elegir uno después de guardarla.
+            config.modelo = datos.get('modelo') or config.modelo
+            config.actualizado_por = usuario
+
+            if datos.get('activo'):
+                # Solo uno activo: se apagan los demás antes, porque hay un
+                # constraint en la base que lo impone.
+                ConfiguracionIA.objects.exclude(proveedor=proveedor).update(activo=False)
+                config.activo = True
+            config.save()
+
+        return Response(ConfiguracionIASerializer(config).data,
+                        status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def activar(self, request, pk=None):
+        """Marca este proveedor como el que usarán las funciones de IA."""
+        config = self.get_object()
+        if not config.api_key:
+            return Response(
+                {'error': 'Este proveedor no tiene clave configurada.'},
+                status=status.HTTP_400_BAD_REQUEST)
+        if not config.modelo:
+            return Response(
+                {'error': 'Elegí primero un modelo para este proveedor.'},
+                status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            ConfiguracionIA.objects.exclude(pk=config.pk).update(activo=False)
+            config.activo = True
+            config.actualizado_por = request.user.get_full_name() or request.user.username
+            config.save(update_fields=['activo', 'actualizado_por', 'actualizado_en'])
+        return Response(ConfiguracionIASerializer(config).data)
+
+    @action(detail=True, methods=['get'])
+    def modelos(self, request, pk=None):
+        """Modelos que el proveedor ofrece hoy para esta clave.
+
+        Se consulta en vivo en vez de guardar una lista: los proveedores sacan
+        modelos nuevos cada pocos meses y retiran otros, así que una lista
+        escrita a mano termina ofreciendo modelos muertos y escondiendo los
+        nuevos. Por eso también hace falta la clave antes de poder elegir: sin
+        ella no hay a quién preguntarle.
+        """
+        config = self.get_object()
+        if not config.api_key:
+            return Response(
+                {'error': 'Cargá primero la clave: la lista de modelos la da el proveedor.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        ok, modelos, detalle = listar_modelos(config.proveedor, config.api_key)
+        return Response({
+            'ok': ok,
+            'detalle': detalle,
+            'modelos': modelos,
+            'modelo_actual': config.modelo,
+            'modelo_sugerido': PROVEEDORES[config.proveedor]['modelo_sugerido']
+                               if config.proveedor in PROVEEDORES else None,
+        }, status=status.HTTP_200_OK if ok else status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def probar(self, request, pk=None):
+        """Comprueba contra el proveedor que la clave sirve.
+
+        Sin esto, una clave mal pegada se descubre recién cuando una función de
+        IA falla frente al usuario. La llamada la hace el backend: si la hiciera
+        el navegador, la clave tendría que viajar hasta ahí.
+        """
+        config = self.get_object()
+        if not config.api_key:
+            return Response({'error': 'No hay clave que probar.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        ok, detalle = probar_credencial(config.proveedor, config.api_key)
+
+        config.verificada = ok
+        config.verificada_en = timezone.now() if ok else None
+        config.ultimo_error = None if ok else detalle
+        config.save(update_fields=['verificada', 'verificada_en', 'ultimo_error'])
+
+        return Response({
+            'ok': ok,
+            'detalle': detalle,
+            'configuracion': ConfiguracionIASerializer(config).data,
+        }, status=status.HTTP_200_OK if ok else status.HTTP_400_BAD_REQUEST)
+
+    def perform_destroy(self, instance):
+        """Borrar la configuración también borra la clave (queda desconfigurado)."""
+        instance.delete()
