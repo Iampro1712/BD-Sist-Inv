@@ -135,7 +135,11 @@ const ProveedorDetalle = ({
                         {producto.cantidad_actual}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-white">
-                        {formatCurrency(producto.precio_compra_unitario)}
+                        {/* null para no-administradores: el costo es dato de
+                            dueño, y un C$0.00 acá sería un dato falso. */}
+                        {producto.precio_compra_unitario != null
+                          ? formatCurrency(producto.precio_compra_unitario)
+                          : <span className="text-gray-400 dark:text-gray-500">—</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-white">
                         {formatCurrency(producto.precio_final)}

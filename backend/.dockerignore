@@ -40,3 +40,14 @@ htmlcov/
 # Environment
 .env
 .env.local
+
+# Respaldos de la base: NO van en la imagen.
+# El Dockerfile hace `COPY . .`, así que sin esto los volcados locales
+# (clientes, empleados con salario, precios de compra) quedan horneados en la
+# imagen y visibles para cualquiera que pueda inspeccionar sus capas.
+backups/
+*.dump
+*.dump.enc
+
+# Credenciales que solo deben vivir en el gestor de contraseñas.
+CREDENCIALES_RESET.txt

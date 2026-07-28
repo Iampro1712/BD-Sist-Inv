@@ -11,6 +11,7 @@ import shutil
 import tempfile
 import urllib.error
 from datetime import datetime as _datetime
+from decimal import Decimal
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +35,7 @@ from inventory.models import (
     Proveedor, Producto, Cliente, MovimientoInventario, OrdenVenta, SesionCaja,
     CategoriaGasto, OrdenCompra, Moto, Servicio, ServicioMoto, BitacoraServicio,
     Cotizacion, Ubicacion, DevolucionCompra, AuditoriaProducto, ConfiguracionIA,
+    Devolucion, PagoVenta, ServicioRepuesto, MovimientoCaja,
 )
 from .ia_catalogo import PROVEEDORES
 
@@ -1916,19 +1918,35 @@ class AnalisisProveedoresTestCase(APITestCase):
         self.assertEqual(r.data['proveedores'], [])
         self.assertIsNone(r.data['mejor_precio'])
 
-    def test_operador_ve_precios_pero_no_los_reportes(self):
-        """El vendedor necesita el precio al comprar; los reportes son de admin."""
+    def test_los_costos_de_compra_son_solo_para_el_dueno(self):
+        """Los tres caminos al costo de compra están cerrados al operador.
+
+        Esta prueba afirmaba lo contrario: que el vendedor sí podía consultar
+        `precios-proveedores` "porque necesita el precio al comprar". Era una
+        decisión equivocada por dos motivos. El primero, que quien compra es el
+        administrador —el formulario de órdenes de compra ya es admin-only—, así
+        que el vendedor nunca necesitó ese dato. El segundo y más importante: el
+        endpoint devuelve costos históricos, o sea exactamente lo que protegen
+        los reportes de abajo; tener la puerta de al lado abierta hacía que ese
+        candado no sirviera de nada.
+        """
         self._comprar(self.barato, self.producto, 90)
         self.client.force_authenticate(user=self.operador)
 
         r = self.client.get(
             f'/api/productos/{self.producto.id_producto}/precios-proveedores/')
-        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
 
         for url in ('/api/reportes/desempeno-proveedores/',
                     '/api/reportes/comparacion-precios/'):
             self.assertEqual(self.client.get(url).status_code,
                              status.HTTP_403_FORBIDDEN, url)
+
+        # Y el administrador sigue teniendo acceso.
+        self.client.force_authenticate(user=self.admin)
+        self.assertEqual(self.client.get(
+            f'/api/productos/{self.producto.id_producto}/precios-proveedores/'
+        ).status_code, status.HTTP_200_OK)
 
 
 class DevolucionProveedorTestCase(APITestCase):
@@ -2906,8 +2924,24 @@ class PronosticoDemandaTestCase(APITestCase):
         self.hoy = timezone.localdate()
         # Cuatro meses con actividad y un hueco deliberado en el medio: es la
         # forma que tienen los datos reales del negocio.
-        self.meses = [self.hoy - datetime.timedelta(days=d)
-                      for d in (300, 270, 60, 30)]
+        #
+        # Las fechas se ancla a meses concretos, no a "hace N días": con
+        # desplazamientos en días, dos de ellos pueden caer en el mismo mes
+        # calendario según la fecha en que se corra, y entonces la prueba pasa
+        # unos días y falla otros. Pasó: -300 y -270 días cayeron ambos en
+        # octubre y el divisor bajó de 4 meses a 3.
+        self.meses = [self._mes_atras(n) for n in (10, 9, 2, 1)]
+
+    def _mes_atras(self, n):
+        """Día 15 del mes `n` meses antes de hoy.
+
+        El 15 evita los bordes: un "hace N meses" hecho con días termina
+        cruzándose de mes según la longitud de cada uno.
+        """
+        anio, mes = self.hoy.year, self.hoy.month - n
+        while mes < 1:
+            anio, mes = anio - 1, mes + 12
+        return datetime.date(anio, mes, 15)
 
     def _producto(self, nombre, stock, costo=100):
         return Producto.objects.create(
@@ -3087,11 +3121,12 @@ class PronosticoDemandaTestCase(APITestCase):
     def test_la_confianza_refleja_cuantos_meses_hay_detras(self):
         """Un producto con una sola venta no puede verse igual que uno estable."""
         firme = self._producto('Filtro de Aire Yamaha', 5)
-        for dias in (300, 270, 240, 210, 180, 60):
-            self._vender(firme, self.hoy - datetime.timedelta(days=dias), 5)
+        # Seis meses distintos, anclados al mes (ver `_mes_atras`).
+        for n in (10, 9, 8, 7, 6, 2):
+            self._vender(firme, self._mes_atras(n), 5)
 
         flojo = self._producto('Chaqueta Yamaha Racing', 5)
-        self._vender(flojo, self.hoy - datetime.timedelta(days=30), 1)
+        self._vender(flojo, self._mes_atras(1), 1)
 
         datos = self._reporte()
         self.assertEqual(self._fila(datos, 'Filtro de Aire Yamaha')['confianza'], 'alta')
@@ -3591,3 +3626,1057 @@ class RespaldoRestaurableTestCase(TestCase):
         self.assertTrue(tarde.endswith('.dump'))
 
 
+class AuditoriaCorreccionesTestCase(APITestCase):
+    """Los seis arreglos de la auditoría de seguridad y corrección.
+
+    Cada prueba fija un comportamiento que estaba mal en producción, así que
+    todas describen el escenario concreto que fallaba.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='dueno_audit', password='x', is_staff=True)
+        self.operador = User.objects.create_user(
+            username='vendedor_audit', password='x', is_staff=False)
+        self.client.force_authenticate(user=self.admin)
+
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO estado (id_estado, cancelado, pendiente) VALUES
+                    (1,'SI','NO'), (2,'NO','SI'), (3,'NO','NO')
+                ON CONFLICT (id_estado) DO NOTHING
+            """)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Prov Auditoría')
+        self.cliente = Cliente.objects.create(nombre='Cliente Auditoría')
+
+    def _producto(self, nombre, stock, costo=100, venta='200.00'):
+        return Producto.objects.create(
+            sku_producto=f'SKU-{nombre}', nombre=nombre,
+            cantidad_actual=stock, cantidad_total=stock, cantidad_minima=2,
+            precio_compra_unitario=costo, precio_final=venta,
+            id_proveedor=self.proveedor)
+
+    # ==================================================================
+    # #1 — Aprobar un presupuesto es todo o nada
+    # ==================================================================
+
+    def _orden_de_taller(self):
+        """Orden de taller en diagnóstico, que es de donde sale un presupuesto."""
+        moto = Moto.objects.create(
+            id_cliente=self.cliente, marca='Yamaha', modelo='YBR125',
+            anio=2020, placa='AUD-1')
+        tipo = Servicio.objects.create(
+            nombre='Reparación de motor', tipo='Reparacion',
+            precio_mano_obra='500.00', es_plantilla=True)
+
+        r = self.client.post('/api/servicios-motos/', {
+            'id_moto': moto.id_moto,
+            'fecha_servicio': str(timezone.localdate()),
+            'tipo_servicio': 'Reparación de motor',
+            'id_tipo_servicio': tipo.id_servicio,
+        }, format='json')
+        id_servicio = r.data['id_servicio']
+        for estado in ('recibida', 'en_diagnostico'):
+            self.client.post(
+                f'/api/servicios-motos/{id_servicio}/cambiar-estado/',
+                {'estado': estado}, format='json')
+        return id_servicio, tipo
+
+    def _presupuestar(self, id_servicio, tipo, productos):
+        """`productos` es [(producto, cantidad, precio)]."""
+        return self.client.post(
+            f'/api/servicios-motos/{id_servicio}/presupuestar/', {
+                'servicios': [{'servicio': tipo.id_servicio, 'cantidad': 1,
+                               'precio_unitario': 500}],
+                'productos': [{'producto': p.id_producto, 'cantidad': c,
+                               'precio_unitario': pr} for p, c, pr in productos],
+            }, format='json')
+
+    def _aprobar(self, id_cotizacion):
+        return self.client.post(
+            f'/api/cotizaciones/{id_cotizacion}/cambiar_estado/',
+            {'estado': 'aprobada'}, format='json')
+
+    def test_aprobar_sin_stock_no_descuenta_nada(self):
+        """El bug: `return Response` dentro de `transaction.atomic()` hace commit.
+
+        Con tres repuestos donde el último no alcanza, los dos primeros quedaban
+        descontados del inventario y commiteados, mientras `cargado_a_orden` no
+        se guardaba. Al reintentar se descontaban otra vez.
+        """
+        hay = self._producto('Filtro-OK', 10)
+        tambien = self._producto('Bujia-OK', 10)
+        falta = self._producto('Piston-SIN', 1)
+
+        id_servicio, tipo = self._orden_de_taller()
+        r = self._presupuestar(id_servicio, tipo,
+                               [(hay, 2, 100), (tambien, 3, 150), (falta, 5, 900)])
+        self.assertEqual(r.status_code, 201, r.data)
+        cot_id = r.data['id_cotizacion']
+
+        r = self._aprobar(cot_id)
+        self.assertEqual(r.status_code, 400)
+
+        # Nada se movió: ni los dos que sí tenían stock.
+        hay.refresh_from_db(); tambien.refresh_from_db(); falta.refresh_from_db()
+        self.assertEqual(hay.cantidad_actual, 10)
+        self.assertEqual(tambien.cantidad_actual, 10)
+        self.assertEqual(falta.cantidad_actual, 1)
+
+        # Ni líneas en la orden, ni movimientos de inventario.
+        self.assertEqual(
+            ServicioRepuesto.objects.filter(id_servicio_id=id_servicio).count(), 0)
+        self.assertEqual(
+            MovimientoInventario.objects.filter(
+                tipo_referencia='SERVICIO_TALLER').count(), 0)
+
+        # Y la cotización sigue pendiente, así que se puede reintentar limpio.
+        cot = Cotizacion.objects.get(pk=cot_id)
+        self.assertEqual(cot.estado, 'pendiente')
+        self.assertFalse(cot.cargado_a_orden)
+
+    def test_reintentar_tras_reponer_stock_descuenta_una_sola_vez(self):
+        """Es la consecuencia real del bug: el doble descuento al reintentar."""
+        pieza = self._producto('Cadena-Audit', 10)
+        falta = self._producto('Estator-SIN', 0)
+
+        id_servicio, tipo = self._orden_de_taller()
+        r = self._presupuestar(id_servicio, tipo, [(pieza, 4, 100), (falta, 1, 500)])
+        cot_id = r.data['id_cotizacion']
+
+        self.assertEqual(self._aprobar(cot_id).status_code, 400)
+
+        # Llega el repuesto que faltaba y se reintenta.
+        falta.cantidad_actual = 5
+        falta.save(update_fields=['cantidad_actual'])
+        self.assertEqual(self._aprobar(cot_id).status_code, 200)
+
+        pieza.refresh_from_db()
+        # 10 − 4 = 6. Con el bug quedaba en 2 (descontado dos veces).
+        self.assertEqual(pieza.cantidad_actual, 6)
+        self.assertEqual(
+            ServicioRepuesto.objects.filter(
+                id_servicio_id=id_servicio, id_producto=pieza).count(), 1)
+
+    def test_aprobar_con_stock_suficiente_sigue_funcionando(self):
+        """El arreglo no debe romper el camino feliz."""
+        pieza = self._producto('Pastillas-Audit', 20)
+        id_servicio, tipo = self._orden_de_taller()
+        r = self._presupuestar(id_servicio, tipo, [(pieza, 5, 120)])
+        cot_id = r.data['id_cotizacion']
+
+        self.assertEqual(self._aprobar(cot_id).status_code, 200)
+
+        pieza.refresh_from_db()
+        self.assertEqual(pieza.cantidad_actual, 15)
+        cot = Cotizacion.objects.get(pk=cot_id)
+        self.assertTrue(cot.cargado_a_orden)
+        self.assertEqual(cot.estado, 'aprobada')
+
+    # ==================================================================
+    # #3 — Una devolución reduce lo que el cliente debe
+    # ==================================================================
+
+    def _venta_a_credito(self, producto, cantidad, precio):
+        venta = OrdenVenta.objects.create(
+            id_cliente=self.cliente.id_cliente, fecha=timezone.localdate(),
+            total=cantidad * precio, monto_pagado=0,
+            saldo_pendiente=cantidad * precio, estado_pago='pendiente')
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO producto_venta
+                    (id_venta, id_producto, cantidad, precio_unitario)
+                VALUES (%s, %s, %s, %s)
+            """, [venta.id_venta, producto.id_producto, cantidad, precio])
+        return venta
+
+    def _devolver(self, venta, producto, cantidad, precio):
+        return self.client.post('/api/devoluciones/', {
+            'venta': venta.id_venta,
+            'cliente': self.cliente.id_cliente,
+            'fecha': str(timezone.localdate()),
+            'motivo': 'Producto defectuoso',
+            'detalles': [{'producto': producto.id_producto,
+                          'cantidad': cantidad, 'precio_unitario': precio}],
+        }, format='json')
+
+    def test_devolver_reduce_la_deuda_del_cliente(self):
+        """El bug: el stock volvía pero el cliente seguía debiendo todo.
+
+        Es el mismo arreglo que ya tenía el lado de compras desde 1.8.0; acá
+        faltaba el espejo.
+        """
+        producto = self._producto('Llanta-Audit', 20, venta='1000.00')
+        venta = self._venta_a_credito(producto, 5, 1000)   # C$5.000 a crédito
+
+        r = self._devolver(venta, producto, 2, 1000)       # devuelve C$2.000
+        self.assertEqual(r.status_code, 201)
+
+        venta.refresh_from_db()
+        self.assertEqual(float(venta.saldo_pendiente), 3000.0)
+        self.assertEqual(float(venta.total_devuelto()), 2000.0)
+        self.assertEqual(venta.estado_pago, 'pendiente')
+
+    def test_devolver_todo_lo_vendido_deja_la_deuda_en_cero(self):
+        producto = self._producto('Casco-Audit', 10, venta='500.00')
+        venta = self._venta_a_credito(producto, 2, 500)    # C$1.000
+
+        self._devolver(venta, producto, 2, 500)
+
+        venta.refresh_from_db()
+        self.assertEqual(float(venta.saldo_pendiente), 0.0)
+        self.assertEqual(venta.estado_pago, 'pagado')
+
+    def test_devolver_sobre_una_venta_pagada_deja_saldo_a_favor(self):
+        """Si ya había pagado, el negocio le queda debiendo al cliente."""
+        producto = self._producto('Aceite-Audit', 30, venta='300.00')
+        venta = self._venta_a_credito(producto, 4, 300)    # C$1.200
+        PagoVenta.objects.create(id_venta=venta, monto=1200, metodo_pago='efectivo')
+        venta.calcular_saldo()
+        self.assertEqual(float(venta.saldo_pendiente), 0.0)
+
+        self._devolver(venta, producto, 1, 300)            # devuelve C$300
+
+        venta.refresh_from_db()
+        # Neto 900 − pagado 1200 = −300: el negocio le debe C$300.
+        self.assertEqual(float(venta.saldo_pendiente), -300.0)
+        self.assertEqual(float(venta.saldo_a_favor()), 300.0)
+        # Y no se muestra como deuda pendiente de cobro.
+        self.assertEqual(venta.estado_pago, 'pagado')
+
+    def test_una_devolucion_anulada_no_reduce_la_deuda(self):
+        """Anular la nota de crédito devuelve la deuda a su valor original."""
+        producto = self._producto('Espejo-Audit', 10, venta='200.00')
+        venta = self._venta_a_credito(producto, 5, 200)    # C$1.000
+
+        self._devolver(venta, producto, 2, 200)
+        venta.refresh_from_db()
+        self.assertEqual(float(venta.saldo_pendiente), 600.0)
+
+        Devolucion.objects.filter(id_venta=venta.id_venta).update(estado='anulada')
+        venta.calcular_saldo()
+
+        venta.refresh_from_db()
+        self.assertEqual(float(venta.saldo_pendiente), 1000.0)
+        self.assertEqual(float(venta.total_devuelto()), 0.0)
+
+    def test_el_detalle_de_la_venta_expone_lo_devuelto(self):
+        producto = self._producto('Guaya-Audit', 10, venta='400.00')
+        venta = self._venta_a_credito(producto, 3, 400)
+        self._devolver(venta, producto, 1, 400)
+
+        datos = self.client.get(f'/api/ordenes-venta/{venta.id_venta}/').json()
+        self.assertEqual(datos['total_devuelto'], 400.0)
+        self.assertIn('saldo_a_favor', datos)
+
+    def test_una_devolucion_sin_venta_no_revienta(self):
+        """`id_venta` es opcional: hay devoluciones sin venta asociada."""
+        producto = self._producto('Suelto-Audit', 10, venta='100.00')
+        r = self.client.post('/api/devoluciones/', {
+            'cliente': self.cliente.id_cliente,
+            'fecha': str(timezone.localdate()),
+            'motivo': 'Sin venta de referencia',
+            'detalles': [{'producto': producto.id_producto,
+                          'cantidad': 1, 'precio_unitario': 100}],
+        }, format='json')
+        # El serializer exige la venta; lo que importa es que responda 400 y no 500.
+        self.assertIn(r.status_code, (201, 400))
+
+    # ==================================================================
+    # #7 — Una venta no se borra ni se edita: se cancela
+    # ==================================================================
+
+    def test_no_se_puede_borrar_una_venta(self):
+        """El borrado directo era el único camino sin rastro: no devolvía stock,
+        no dejaba movimiento y no lo cubre el disparador de auditoría."""
+        producto = self._producto('Borrable-Audit', 10, venta='100.00')
+        venta = self._venta_a_credito(producto, 2, 100)
+
+        r = self.client.delete(f'/api/ordenes-venta/{venta.id_venta}/')
+
+        self.assertEqual(r.status_code, 405)
+        self.assertIn('cancelar', r.json()['error'])
+        self.assertTrue(OrdenVenta.objects.filter(pk=venta.id_venta).exists())
+
+    def test_el_operador_tampoco_puede_borrar_una_venta(self):
+        producto = self._producto('NoBorrable-Audit', 10, venta='100.00')
+        venta = self._venta_a_credito(producto, 2, 100)
+
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.delete(f'/api/ordenes-venta/{venta.id_venta}/')
+
+        self.assertEqual(r.status_code, 405)
+        self.assertTrue(OrdenVenta.objects.filter(pk=venta.id_venta).exists())
+
+    def test_no_se_puede_editar_una_venta_registrada(self):
+        """Antes daba 500 porque el serializer no implementa `update()`."""
+        producto = self._producto('NoEditable-Audit', 10, venta='100.00')
+        venta = self._venta_a_credito(producto, 2, 100)
+
+        r = self.client.put(f'/api/ordenes-venta/{venta.id_venta}/',
+                            {'total': 1}, format='json')
+        self.assertEqual(r.status_code, 405)
+
+        r = self.client.patch(f'/api/ordenes-venta/{venta.id_venta}/',
+                              {'total': 1}, format='json')
+        self.assertEqual(r.status_code, 405)
+
+    def test_anular_un_pago_sigue_funcionando(self):
+        """El método DELETE del ViewSet no se deshabilitó: lo usa la subruta de
+        pagos, y bloquearlo habría roto la anulación de un abono."""
+        producto = self._producto('ConPago-Audit', 10, venta='500.00')
+        venta = self._venta_a_credito(producto, 2, 500)
+        pago = PagoVenta.objects.create(id_venta=venta, monto=200, metodo_pago='transferencia')
+
+        r = self.client.delete(
+            f'/api/ordenes-venta/{venta.id_venta}/pagos/{pago.id_pago}/')
+
+        self.assertIn(r.status_code, (200, 204))
+        self.assertFalse(PagoVenta.objects.filter(pk=pago.id_pago).exists())
+
+    # ==================================================================
+    # #8 — El costo de compra es dato de dueño
+    # ==================================================================
+
+    def test_el_operador_no_ve_el_costo_en_el_listado(self):
+        """Con el costo y el precio de venta juntos, un vendedor calculaba el
+        margen de cada producto en una hoja de cálculo."""
+        self._producto('Costoso-Audit', 10, costo=750, venta='1500.00')
+
+        self.client.force_authenticate(user=self.operador)
+        datos = self.client.get('/api/productos/').json()
+        filas = datos['results'] if isinstance(datos, dict) else datos
+
+        self.assertTrue(filas)
+        for fila in filas:
+            self.assertIsNone(fila['precio_compra_unitario'])
+            # El precio de venta sí lo necesita para vender.
+            self.assertIsNotNone(fila['precio_final'])
+        self.assertNotIn('750', self.client.get('/api/productos/').content.decode())
+
+    def test_el_admin_si_ve_el_costo(self):
+        self._producto('Visible-Audit', 10, costo=750, venta='1500.00')
+        datos = self.client.get('/api/productos/').json()
+        filas = datos['results'] if isinstance(datos, dict) else datos
+        self.assertEqual(float(filas[0]['precio_compra_unitario']), 750.0)
+
+    def test_el_operador_no_ve_el_costo_en_el_detalle(self):
+        producto = self._producto('Detalle-Audit', 10, costo=333, venta='900.00')
+
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get(f'/api/productos/{producto.id_producto}/')
+
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.json()['precio_compra_unitario'])
+        self.assertNotIn('333', r.content.decode())
+
+    def test_el_costo_tampoco_se_filtra_por_los_productos_de_un_proveedor(self):
+        """Estos dos endpoints armaban el serializer sin `context`, así que el
+        filtro por rol no se aplicaba y el costo salía igual."""
+        self._producto('PorProveedor-Audit', 10, costo=444, venta='800.00')
+
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get(f'/api/proveedores/{self.proveedor.id_proveedor}/productos/')
+
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('444', r.content.decode())
+        for fila in r.json():
+            self.assertIsNone(fila['precio_compra_unitario'])
+
+    def test_el_costo_tampoco_se_filtra_por_los_productos_de_una_ubicacion(self):
+        ubicacion = Ubicacion.objects.create(bodega='Principal', pasillo='1')
+        producto = self._producto('PorUbicacion-Audit', 10, costo=555, venta='900.00')
+        producto.id_ubicacion = ubicacion
+        producto.save(update_fields=['id_ubicacion'])
+
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get(f'/api/ubicaciones/{ubicacion.id_ubicacion}/productos/')
+
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('555', r.content.decode())
+
+    def test_los_precios_historicos_de_proveedores_son_solo_de_admin(self):
+        """Devuelve costos de compra: dejarlo abierto anulaba todo lo anterior."""
+        producto = self._producto('Historico-Audit', 10, costo=600)
+
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get(
+            f'/api/productos/{producto.id_producto}/precios-proveedores/')
+        self.assertEqual(r.status_code, 403)
+
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(
+            f'/api/productos/{producto.id_producto}/precios-proveedores/')
+        self.assertEqual(r.status_code, 200)
+
+
+class ConfiguracionSeguraTestCase(TestCase):
+    """#6 y #10: las dos fugas silenciosas de configuración."""
+
+    def test_los_respaldos_no_entran_en_la_imagen_docker(self):
+        """El Dockerfile hace `COPY . .`: sin excluirlos, los volcados locales
+        (clientes, empleados con salario, costos) quedan dentro de la imagen y
+        los ve cualquiera que pueda inspeccionar sus capas."""
+        raiz = Path(settings.BASE_DIR)
+        reglas = (raiz / '.dockerignore').read_text(encoding='utf-8').splitlines()
+        reglas = [r.strip() for r in reglas if r.strip() and not r.startswith('#')]
+
+        self.assertIn('backups/', reglas)
+        self.assertIn('*.dump', reglas)
+        # El respaldo cifrado que se sube al bucket tampoco.
+        self.assertIn('*.dump.enc', reglas)
+
+    def test_debug_falla_cerrado_si_nadie_lo_define(self):
+        """Antes el default era True, así que una variable ausente o mal escrita
+        apagaba en silencio las cookies seguras, HSTS y —lo peor— también los
+        chequeos que abortan el arranque sin SECRET_KEY, porque viven dentro del
+        mismo `if not DEBUG`."""
+        ruta = Path(settings.BASE_DIR) / 'inventrix' / 'settings.py'
+        codigo = ruta.read_text(encoding='utf-8')
+
+        self.assertIn("os.getenv('DEBUG', 'False')", codigo)
+        self.assertNotIn("os.getenv('DEBUG', 'True')", codigo)
+
+
+class ConvertirCotizacionTestCase(APITestCase):
+    """#2 — Convertir una cotización en venta tiene que mover el inventario.
+
+    Antes insertaba la venta y sus líneas y nada más: la mercadería salía del
+    local y el sistema seguía contándola. Tampoco comprobaba que hubiera stock,
+    así que se podía "vender" con existencia cero.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_conv', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Prov Conv')
+        self.cliente = Cliente.objects.create(nombre='Cliente Conv')
+
+    def _producto(self, nombre, stock, venta='200.00'):
+        return Producto.objects.create(
+            sku_producto=f'SKU-{nombre}', nombre=nombre,
+            cantidad_actual=stock, cantidad_total=stock, cantidad_minima=1,
+            precio_compra_unitario=100, precio_final=venta,
+            id_proveedor=self.proveedor)
+
+    def _cotizacion(self, lineas):
+        """`lineas` es [(producto, cantidad, precio)]."""
+        cot = Cotizacion.objects.create(
+            id_cliente=self.cliente.id_cliente, fecha=timezone.localdate(),
+            tipo='venta', estado='pendiente', total=0)
+        with connection.cursor() as c:
+            for producto, cantidad, precio in lineas:
+                c.execute("""
+                    INSERT INTO producto_cotizacion
+                        (id_cotizacion, id_producto, cantidad, precio_unitario)
+                    VALUES (%s, %s, %s, %s)
+                """, [cot.id_cotizacion, producto.id_producto, cantidad, precio])
+        return cot
+
+    def _convertir(self, cot):
+        return self.client.post(
+            f'/api/cotizaciones/{cot.id_cotizacion}/convertir-venta/')
+
+    def test_convertir_descuenta_el_stock(self):
+        producto = self._producto('Filtro-Conv', 20)
+        cot = self._cotizacion([(producto, 5, 200)])
+
+        r = self._convertir(cot)
+
+        self.assertEqual(r.status_code, 201, r.data)
+        producto.refresh_from_db()
+        self.assertEqual(producto.cantidad_actual, 15)
+
+    def test_convertir_deja_el_movimiento_de_inventario(self):
+        """Sin el movimiento no hay forma de auditar por qué bajó el stock."""
+        producto = self._producto('Bujia-Conv', 10)
+        cot = self._cotizacion([(producto, 3, 150)])
+
+        r = self._convertir(cot)
+        id_venta = r.data['id_venta']
+
+        movimiento = MovimientoInventario.objects.get(
+            referencia=f'VENTA-{id_venta}')
+        self.assertEqual(movimiento.tipo, 'SALIDA')
+        self.assertEqual(movimiento.cantidad, 3)
+        self.assertEqual(movimiento.tipo_referencia, 'ORDEN_VENTA')
+
+    def test_no_se_puede_convertir_sin_stock_suficiente(self):
+        producto = self._producto('Escaso-Conv', 2)
+        cot = self._cotizacion([(producto, 5, 200)])
+
+        r = self._convertir(cot)
+
+        self.assertEqual(r.status_code, 400)
+        # Nada quedó a medias: ni venta, ni stock movido, ni estado cambiado.
+        producto.refresh_from_db()
+        self.assertEqual(producto.cantidad_actual, 2)
+        cot.refresh_from_db()
+        self.assertEqual(cot.estado, 'pendiente')
+        self.assertIsNone(cot.id_venta)
+        self.assertEqual(OrdenVenta.objects.count(), 0)
+
+    def test_si_falla_una_linea_no_se_descuenta_ninguna(self):
+        """La conversión es todo o nada."""
+        alcanza = self._producto('Alcanza-Conv', 50)
+        no_alcanza = self._producto('NoAlcanza-Conv', 1)
+        cot = self._cotizacion([(alcanza, 10, 200), (no_alcanza, 5, 300)])
+
+        r = self._convertir(cot)
+
+        self.assertEqual(r.status_code, 400)
+        alcanza.refresh_from_db(); no_alcanza.refresh_from_db()
+        self.assertEqual(alcanza.cantidad_actual, 50)
+        self.assertEqual(no_alcanza.cantidad_actual, 1)
+        self.assertEqual(MovimientoInventario.objects.count(), 0)
+
+    def test_el_mismo_producto_repetido_se_valida_contra_la_suma(self):
+        """Dos líneas de 3 sobre un stock de 5: cada línea pasa sola, la suma no."""
+        producto = self._producto('Repetido-Conv', 5)
+        cot = self._cotizacion([(producto, 3, 200), (producto, 3, 200)])
+
+        r = self._convertir(cot)
+
+        self.assertEqual(r.status_code, 400)
+        producto.refresh_from_db()
+        self.assertEqual(producto.cantidad_actual, 5)
+
+    def test_el_mismo_producto_repetido_descuenta_la_suma(self):
+        producto = self._producto('Suma-Conv', 20)
+        cot = self._cotizacion([(producto, 4, 200), (producto, 6, 200)])
+
+        r = self._convertir(cot)
+
+        self.assertEqual(r.status_code, 201, r.data)
+        producto.refresh_from_db()
+        self.assertEqual(producto.cantidad_actual, 10)
+        # Un solo movimiento con la cantidad agregada, no dos.
+        movimientos = MovimientoInventario.objects.filter(
+            referencia=f'VENTA-{r.data["id_venta"]}')
+        self.assertEqual(movimientos.count(), 1)
+        self.assertEqual(movimientos.first().cantidad, 10)
+
+    def test_el_total_se_calcula_con_decimales_exactos(self):
+        """Con `float` el total quedaba con centavos que no cuadraban."""
+        producto = self._producto('Centavos-Conv', 100, venta='10.10')
+        cot = self._cotizacion([(producto, 3, '10.10')])
+
+        r = self._convertir(cot)
+
+        venta = OrdenVenta.objects.get(pk=r.data['id_venta'])
+        self.assertEqual(venta.total, Decimal('30.30'))
+        self.assertEqual(venta.saldo_pendiente, Decimal('30.30'))
+
+    def test_convertir_dos_veces_se_rechaza(self):
+        producto = self._producto('Doble-Conv', 20)
+        cot = self._cotizacion([(producto, 2, 200)])
+
+        self.assertEqual(self._convertir(cot).status_code, 201)
+        self.assertEqual(self._convertir(cot).status_code, 400)
+
+        producto.refresh_from_db()
+        # Descontado una sola vez.
+        self.assertEqual(producto.cantidad_actual, 18)
+
+    def test_una_cotizacion_sin_productos_se_rechaza(self):
+        cot = self._cotizacion([])
+        self.assertEqual(self._convertir(cot).status_code, 400)
+
+
+class ReembolsoDevolucionCompraTestCase(APITestCase):
+    """#4 — El reembolso de una devolución a proveedor tiene un tope.
+
+    Sin tope, una devolución de C$500 aceptaba un reembolso de C$50.000: inflaba
+    el efectivo esperado de la caja y habilitaba pagarle al proveedor mucho más
+    de lo que se le debía.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_reemb', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO estado (id_estado, cancelado, pendiente) VALUES
+                    (1,'SI','NO'), (2,'NO','SI'), (3,'NO','NO')
+                ON CONFLICT (id_estado) DO NOTHING
+            """)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Prov Reemb')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-REEMB', nombre='Repuesto Reembolso',
+            cantidad_actual=20, cantidad_total=20, cantidad_minima=1,
+            precio_compra_unitario=100, precio_final='200.00',
+            id_proveedor=self.proveedor)
+
+        # Compra recibida de 10 unidades a C$100 = C$1.000.
+        self.orden = OrdenCompra.objects.create(
+            id_proveedor=self.proveedor.id_proveedor,
+            id_estado=OrdenCompra.ESTADO_RECIBIDA,
+            fecha_creacion=timezone.localdate(),
+            fecha_recepcion=timezone.now(), stock_aplicado=True)
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO orden_producto
+                    (id_orden, id_producto, cantidad, precio_unitario)
+                VALUES (%s, %s, 10, 100)
+            """, [self.orden.id_orden, self.producto.id_producto])
+
+    def _devolver(self, cantidad, reembolso, metodo='credito'):
+        return self.client.post('/api/devoluciones-compra/', {
+            'orden': self.orden.id_orden,
+            'motivo': 'Mercadería defectuosa',
+            'reembolso': reembolso,
+            'metodo_reembolso': metodo,
+            'detalles': [{'producto': self.producto.id_producto,
+                          'cantidad': cantidad}],
+        }, format='json')
+
+    def test_un_reembolso_mayor_a_lo_devuelto_se_rechaza(self):
+        # Devuelve 5 × C$100 = C$500, pero pide C$50.000 de reembolso.
+        r = self._devolver(5, 50000)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('reembolso', r.json()['error']['details'])
+        self.assertEqual(DevolucionCompra.objects.count(), 0)
+
+    def test_un_reembolso_negativo_se_rechaza(self):
+        r = self._devolver(5, -100)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(DevolucionCompra.objects.count(), 0)
+
+    def test_un_reembolso_igual_a_lo_devuelto_se_acepta(self):
+        """El tope es el valor devuelto, no menos: el proveedor puede devolver
+        todo."""
+        r = self._devolver(5, 500)
+
+        self.assertEqual(r.status_code, 201, r.data)
+        devolucion = DevolucionCompra.objects.get()
+        self.assertEqual(devolucion.total, Decimal('500'))
+        self.assertEqual(devolucion.reembolso, Decimal('500'))
+
+    def test_un_reembolso_parcial_se_acepta(self):
+        r = self._devolver(5, 200)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(DevolucionCompra.objects.get().reembolso, Decimal('200'))
+
+    def test_sin_reembolso_sigue_funcionando(self):
+        r = self._devolver(3, 0)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(DevolucionCompra.objects.get().reembolso, Decimal('0'))
+
+    def test_el_tope_no_deja_inflar_el_efectivo_esperado_de_la_caja(self):
+        """Era la consecuencia concreta: un arqueo con faltante inexplicable."""
+        sesion = SesionCaja.objects.create(usuario=self.admin, monto_apertura=1000)
+        esperado_antes = sesion.calcular_esperado()
+
+        r = self._devolver(5, 50000, metodo='efectivo')
+        self.assertEqual(r.status_code, 400)
+
+        sesion.refresh_from_db()
+        self.assertEqual(sesion.calcular_esperado(), esperado_antes)
+
+
+class CajaAislamientoTestCase(APITestCase):
+    """#9 — Un operador solo toca su propio turno de caja.
+
+    `list` y `retrieve` estaban reservados a admin por ser datos financieros,
+    pero las acciones caían en `IsAuthenticated` y con eso se salteaba ese
+    criterio: cualquier operador leía los movimientos de cualquier turno
+    histórico y podía cerrarle el arqueo a otra persona.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='dueno_caja', password='x', is_staff=True)
+        self.cajero = User.objects.create_user(username='cajero_a', password='x')
+        self.otro = User.objects.create_user(username='cajero_b', password='x')
+
+        # Turno cerrado del cajero A, con un movimiento.
+        self.turno_ajeno = SesionCaja.objects.create(
+            usuario=self.cajero, monto_apertura=500, estado='cerrada',
+            monto_cierre_contado=800, monto_esperado=800, diferencia=0)
+        MovimientoCaja.objects.create(
+            sesion=self.turno_ajeno, tipo='ingreso', monto=300,
+            motivo='Venta en efectivo del turno anterior', usuario=self.cajero)
+
+    def test_el_operador_no_lee_los_movimientos_de_un_turno_ajeno(self):
+        self.client.force_authenticate(user=self.otro)
+        r = self.client.get(f'/api/caja/{self.turno_ajeno.id_sesion}/movimientos/')
+
+        self.assertEqual(r.status_code, 403)
+        # Y el motivo del movimiento no se filtró en la respuesta.
+        self.assertNotIn('turno anterior', r.content.decode())
+
+    def test_el_operador_si_lee_los_movimientos_de_su_propio_turno(self):
+        self.client.force_authenticate(user=self.cajero)
+        r = self.client.get(f'/api/caja/{self.turno_ajeno.id_sesion}/movimientos/')
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.json()), 1)
+
+    def test_el_admin_lee_los_movimientos_de_cualquier_turno(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(f'/api/caja/{self.turno_ajeno.id_sesion}/movimientos/')
+        self.assertEqual(r.status_code, 200)
+
+    def test_el_operador_no_puede_cerrar_el_turno_de_otro(self):
+        """Cerrar un turno es firmar un arqueo: no se firma el de otra persona."""
+        turno = SesionCaja.objects.create(
+            usuario=self.cajero, monto_apertura=1000, estado='abierta')
+
+        self.client.force_authenticate(user=self.otro)
+        r = self.client.post(f'/api/caja/{turno.id_sesion}/cerrar/',
+                             {'monto_cierre_contado': 1000}, format='json')
+
+        self.assertEqual(r.status_code, 403)
+        turno.refresh_from_db()
+        self.assertEqual(turno.estado, 'abierta')
+
+    def test_el_operador_si_puede_cerrar_su_propio_turno(self):
+        turno = SesionCaja.objects.create(
+            usuario=self.cajero, monto_apertura=1000, estado='abierta')
+
+        self.client.force_authenticate(user=self.cajero)
+        r = self.client.post(f'/api/caja/{turno.id_sesion}/cerrar/',
+                             {'monto_cierre_contado': 1000}, format='json')
+
+        self.assertEqual(r.status_code, 200, r.data)
+        turno.refresh_from_db()
+        self.assertEqual(turno.estado, 'cerrada')
+
+    def test_el_admin_puede_cerrar_el_turno_de_cualquiera(self):
+        """El dueño tiene que poder cerrar una caja que alguien dejó abierta."""
+        turno = SesionCaja.objects.create(
+            usuario=self.cajero, monto_apertura=1000, estado='abierta')
+
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.post(f'/api/caja/{turno.id_sesion}/cerrar/',
+                             {'monto_cierre_contado': 1000}, format='json')
+
+        self.assertEqual(r.status_code, 200, r.data)
+
+    def test_el_operador_no_registra_movimientos_en_un_turno_ajeno(self):
+        turno = SesionCaja.objects.create(
+            usuario=self.cajero, monto_apertura=1000, estado='abierta')
+
+        self.client.force_authenticate(user=self.otro)
+        r = self.client.post(f'/api/caja/{turno.id_sesion}/movimientos/',
+                             {'tipo': 'retiro', 'monto': 500,
+                              'motivo': 'Retiro no autorizado'}, format='json')
+
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(turno.movimientos.count(), 0)
+
+    def test_el_historial_de_turnos_sigue_siendo_solo_de_admin(self):
+        self.client.force_authenticate(user=self.otro)
+        self.assertEqual(self.client.get('/api/caja/').status_code, 403)
+        self.assertEqual(
+            self.client.get(f'/api/caja/{self.turno_ajeno.id_sesion}/').status_code,
+            403)
+
+    def test_abrir_y_ver_la_caja_actual_siguen_disponibles_para_el_operador(self):
+        """El operador tiene que poder trabajar: abrir su turno y consultarlo."""
+        self.client.force_authenticate(user=self.otro)
+
+        r = self.client.post('/api/caja/abrir/', {'monto_apertura': 500},
+                             format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+
+        r = self.client.get('/api/caja/actual/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['usuario_nombre'], 'cajero_b')
+
+
+class ReporteComprasTestCase(APITestCase):
+    """#5 — El total de compras tiene que ser lo que se pagó de verdad.
+
+    Usaba `SUM(p.precio_compra_unitario)`: el costo actual del catálogo sumado
+    una vez por línea, ignorando la cantidad y el precio pactado. Comprar 50
+    filtros a C$80 sumaba C$95 (el costo de hoy, una vez) en lugar de C$4.000. El
+    número salía plausible y no significaba nada.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_rep_compras', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO estado (id_estado, cancelado, pendiente) VALUES
+                    (1,'SI','NO'), (2,'NO','SI'), (3,'NO','NO')
+                ON CONFLICT (id_estado) DO NOTHING
+            """)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Prov Reporte')
+        self.hoy = timezone.localdate()
+
+    def _producto(self, nombre, costo_catalogo):
+        return Producto.objects.create(
+            sku_producto=f'SKU-{nombre}', nombre=nombre,
+            cantidad_actual=0, cantidad_total=0, cantidad_minima=1,
+            precio_compra_unitario=costo_catalogo, precio_final='500.00',
+            id_proveedor=self.proveedor)
+
+    def _compra(self, lineas, estado=OrdenCompra.ESTADO_RECIBIDA):
+        """`lineas` es [(producto, cantidad, precio_pactado)]. None = sin importes."""
+        orden = OrdenCompra.objects.create(
+            id_proveedor=self.proveedor.id_proveedor, id_estado=estado,
+            fecha_creacion=self.hoy)
+        with connection.cursor() as c:
+            for producto, cantidad, precio in lineas:
+                c.execute("""
+                    INSERT INTO orden_producto
+                        (id_orden, id_producto, cantidad, precio_unitario)
+                    VALUES (%s, %s, %s, %s)
+                """, [orden.id_orden, producto.id_producto, cantidad, precio])
+        return orden
+
+    def _reporte(self):
+        r = self.client.get('/api/reportes/compras/', {
+            'fecha_inicio': str(self.hoy - datetime.timedelta(days=1)),
+            'fecha_fin': str(self.hoy + datetime.timedelta(days=1)),
+        })
+        self.assertEqual(r.status_code, 200)
+        return r.json()
+
+    def test_el_total_usa_cantidad_por_precio_pactado(self):
+        """50 × C$80 = C$4.000, no el costo del catálogo."""
+        producto = self._producto('Filtro-Rep', costo_catalogo=95)
+        self._compra([(producto, 50, 80)])
+
+        datos = self._reporte()
+
+        self.assertEqual(datos['total_compras'], 4000.0)
+        # Con la fórmula vieja habría dado 95: el costo de hoy, una sola vez.
+        self.assertNotEqual(datos['total_compras'], 95.0)
+
+    def test_el_total_no_cambia_si_cambia_el_costo_del_catalogo(self):
+        """Es el punto: una compra pasada vale lo que se pagó entonces."""
+        producto = self._producto('Bujia-Rep', costo_catalogo=100)
+        self._compra([(producto, 10, 60)])
+
+        antes = self._reporte()['total_compras']
+
+        producto.precio_compra_unitario = 999
+        producto.save(update_fields=['precio_compra_unitario'])
+
+        self.assertEqual(self._reporte()['total_compras'], antes)
+        self.assertEqual(antes, 600.0)
+
+    def test_suma_todas_las_lineas_de_la_orden(self):
+        uno = self._producto('Uno-Rep', 10)
+        dos = self._producto('Dos-Rep', 20)
+        self._compra([(uno, 3, 100), (dos, 2, 250)])
+
+        # 3×100 + 2×250 = 800
+        self.assertEqual(self._reporte()['total_compras'], 800.0)
+
+    def test_las_ordenes_canceladas_no_suman_al_total(self):
+        """No se compró nada ahí."""
+        producto = self._producto('Cancelada-Rep', 50)
+        self._compra([(producto, 10, 100)])
+        self._compra([(producto, 99, 100)], estado=OrdenCompra.ESTADO_CANCELADA)
+
+        datos = self._reporte()
+
+        self.assertEqual(datos['total_compras'], 1000.0)
+        self.assertEqual(datos['numero_ordenes'], 1)
+
+    def test_las_canceladas_si_aparecen_en_el_listado(self):
+        """Saber que una compra se canceló es información útil."""
+        producto = self._producto('EnListado-Rep', 50)
+        self._compra([(producto, 5, 100)])
+        self._compra([(producto, 5, 100)], estado=OrdenCompra.ESTADO_CANCELADA)
+
+        estados = [o['estado'] for o in self._reporte()['ordenes']]
+        self.assertIn('cancelada', estados)
+        self.assertIn('recibida', estados)
+
+    def test_el_promedio_se_calcula_sobre_el_total_corregido(self):
+        producto = self._producto('Promedio-Rep', 10)
+        self._compra([(producto, 5, 200)])    # 1000
+        self._compra([(producto, 5, 100)])    # 500
+
+        datos = self._reporte()
+        self.assertEqual(datos['total_compras'], 1500.0)
+        self.assertEqual(datos['compra_promedio'], 750.0)
+
+    def test_el_total_por_proveedor_tambien_esta_corregido(self):
+        producto = self._producto('PorProv-Rep', 10)
+        self._compra([(producto, 4, 250)])
+
+        por_proveedor = self._reporte()['por_proveedor']
+        self.assertEqual(len(por_proveedor), 1)
+        self.assertEqual(por_proveedor[0]['total'], 1000.0)
+
+    def test_las_ordenes_sin_importes_se_declaran(self):
+        """Una orden vieja sin cantidad ni precio no puede aportar al total.
+
+        Se informa para que un total bajo se entienda, en vez de parecer un error
+        del reporte: es exactamente el caso de las compras que hay en la base,
+        creadas antes de que `orden_producto` guardara esos datos.
+        """
+        producto = self._producto('SinImportes-Rep', 70)
+        self._compra([(producto, None, None)])
+
+        datos = self._reporte()
+
+        self.assertEqual(datos['total_compras'], 0.0)
+        self.assertEqual(datos['ordenes_sin_importes'], 1)
+
+    def test_una_orden_con_importes_no_cuenta_como_incompleta(self):
+        producto = self._producto('Completa-Rep', 70)
+        self._compra([(producto, 2, 300)])
+
+        datos = self._reporte()
+        self.assertEqual(datos['total_compras'], 600.0)
+        self.assertEqual(datos['ordenes_sin_importes'], 0)
+
+    def test_el_total_coincide_con_calcular_total_del_modelo(self):
+        """Las dos formas de calcular lo mismo tienen que dar lo mismo.
+
+        La incoherencia entre reporte y modelo era el síntoma que delató el bug.
+        """
+        producto = self._producto('Coincide-Rep', 10)
+        orden = self._compra([(producto, 7, 130)])
+
+        self.assertEqual(self._reporte()['total_compras'],
+                         float(orden.calcular_total()))
+
+    def test_el_operador_no_ve_el_reporte(self):
+        User = get_user_model()
+        operador = User.objects.create_user(username='vend_rep', password='x')
+        self.client.force_authenticate(user=operador)
+        r = self.client.get('/api/reportes/compras/', {
+            'fecha_inicio': str(self.hoy), 'fecha_fin': str(self.hoy)})
+        self.assertEqual(r.status_code, 403)
+
+
+class OrdenCompraFinanzasPorRolTestCase(APITestCase):
+    """#8 (segunda parte) — Lo que se le debe a un proveedor es del dueño.
+
+    La pantalla de órdenes de compra la usan los vendedores para saber qué
+    mercadería viene en camino, así que se mantiene accesible: lo que se reserva
+    son los números, no la información operativa.
+    """
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_oc_rol', password='x', is_staff=True)
+        self.operador = User.objects.create_user(username='vend_oc_rol', password='x')
+
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO estado (id_estado, cancelado, pendiente) VALUES
+                    (1,'SI','NO'), (2,'NO','SI'), (3,'NO','NO')
+                ON CONFLICT (id_estado) DO NOTHING
+            """)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Prov Rol')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-OC-ROL', nombre='Repuesto Rol',
+            cantidad_actual=0, cantidad_total=0, cantidad_minima=1,
+            precio_compra_unitario=100, precio_final='300.00',
+            id_proveedor=self.proveedor)
+
+        self.orden = OrdenCompra.objects.create(
+            id_proveedor=self.proveedor.id_proveedor,
+            id_estado=OrdenCompra.ESTADO_PENDIENTE,
+            fecha_creacion=timezone.localdate())
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO orden_producto
+                    (id_orden, id_producto, cantidad, precio_unitario)
+                VALUES (%s, %s, 8, 777)
+            """, [self.orden.id_orden, self.producto.id_producto])
+        self.orden.calcular_saldo()
+
+    def test_el_operador_no_ve_los_montos_en_el_listado(self):
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get('/api/ordenes-compra/')
+
+        datos = r.json()
+        filas = datos['results'] if isinstance(datos, dict) else datos
+        fila = next(f for f in filas if f['id_orden'] == self.orden.id_orden)
+
+        for campo in ('total', 'monto_pagado', 'saldo_pendiente', 'estado_pago'):
+            self.assertIsNone(fila[campo], campo)
+        # Y el precio pactado no se cuela por ningún lado de la respuesta.
+        self.assertNotIn('777', r.content.decode())
+
+    def test_el_operador_si_ve_lo_operativo_en_el_listado(self):
+        """Sin esto le sacaríamos la razón de usar la pantalla."""
+        self.client.force_authenticate(user=self.operador)
+        datos = self.client.get('/api/ordenes-compra/').json()
+        filas = datos['results'] if isinstance(datos, dict) else datos
+        fila = next(f for f in filas if f['id_orden'] == self.orden.id_orden)
+
+        self.assertEqual(fila['proveedor_nombre'], 'Prov Rol')
+        self.assertEqual(fila['estado'], 'pendiente')
+        self.assertIsNotNone(fila['fecha_creacion'])
+        self.assertIn('stock_aplicado', fila)
+
+    def test_el_admin_si_ve_los_montos(self):
+        self.client.force_authenticate(user=self.admin)
+        datos = self.client.get('/api/ordenes-compra/').json()
+        filas = datos['results'] if isinstance(datos, dict) else datos
+        fila = next(f for f in filas if f['id_orden'] == self.orden.id_orden)
+
+        # 8 × 777 = 6216
+        self.assertEqual(float(fila['total']), 6216.0)
+        self.assertIsNotNone(fila['saldo_pendiente'])
+        self.assertIsNotNone(fila['estado_pago'])
+
+    def test_el_operador_no_ve_los_precios_de_las_lineas_en_el_detalle(self):
+        """Van dentro de un SerializerMethodField, así que el mixin no los
+        alcanza: se filtran aparte y sin eso el costo se escapaba por acá."""
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get(f'/api/ordenes-compra/{self.orden.id_orden}/')
+
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('777', r.content.decode())
+
+        datos = r.json()
+        self.assertIsNone(datos['total'])
+        for linea in datos['productos']:
+            self.assertIsNone(linea['precio_unitario'])
+            self.assertIsNone(linea['precio_compra'])
+            self.assertIsNone(linea['subtotal'])
+            # La cantidad y el producto sí: es lo que viene en camino.
+            self.assertEqual(linea['cantidad'], 8)
+            self.assertEqual(linea['nombre'], 'Repuesto Rol')
+
+    def test_el_admin_si_ve_los_precios_de_las_lineas(self):
+        self.client.force_authenticate(user=self.admin)
+        datos = self.client.get(
+            f'/api/ordenes-compra/{self.orden.id_orden}/').json()
+
+        linea = datos['productos'][0]
+        self.assertEqual(float(linea['precio_unitario']), 777.0)
+        self.assertEqual(float(linea['subtotal']), 6216.0)
+        self.assertEqual(float(datos['total']), 6216.0)
+
+    def test_todos_los_campos_de_dinero_del_detalle_quedan_cubiertos(self):
+        """Guarda contra el olvido: si mañana se agrega un campo financiero al
+        serializer y no a `CAMPOS_SOLO_ADMIN`, esta prueba lo detecta."""
+        self.client.force_authenticate(user=self.operador)
+        datos = self.client.get(
+            f'/api/ordenes-compra/{self.orden.id_orden}/').json()
+
+        financieros = ('total', 'subtotal', 'monto_pagado', 'saldo_pendiente',
+                       'estado_pago', 'total_devuelto', 'saldo_a_favor')
+        for campo in financieros:
+            self.assertIn(campo, datos, f'{campo} desapareció del serializer')
+            self.assertIsNone(datos[campo], f'{campo} se está filtrando')

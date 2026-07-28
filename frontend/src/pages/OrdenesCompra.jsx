@@ -367,9 +367,16 @@ const OrdenesCompra = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm font-bold text-gray-900 dark:text-white">
-                          {formatCurrency(orden.total)}
-                        </span>
+                        {/* El backend devuelve null a quien no es administrador:
+                            cuánto se le compra a un proveedor es información de
+                            dueño. Un C$0.00 acá sería un dato falso. */}
+                        {orden.total != null ? (
+                          <span className="text-sm font-bold text-gray-900 dark:text-white">
+                            {formatCurrency(orden.total)}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         {orden.total > 0 && orden.estado !== 'cancelada' ? (

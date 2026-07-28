@@ -151,7 +151,18 @@ const ProductoDetalle = ({ producto, onEdit }) => {
             </svg>
             <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Precio Compra</p>
           </div>
-          <p className="text-xl font-bold text-blue-900 dark:text-blue-200">{formatCurrency(producto.precio_compra_unitario)}</p>
+          {/* El backend devuelve null si quien mira no es administrador: el
+              costo de compra es información de dueño. Mostrar C$0.00 sería
+              mentir, así que se marca como no disponible. */}
+          {producto.precio_compra_unitario != null ? (
+            <p className="text-xl font-bold text-blue-900 dark:text-blue-200">
+              {formatCurrency(producto.precio_compra_unitario)}
+            </p>
+          ) : (
+            <p className="text-sm text-blue-400 dark:text-blue-500 pt-1">
+              Solo administradores
+            </p>
+          )}
         </div>
 
         <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-100 dark:border-green-800">

@@ -143,11 +143,17 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
                     <td className="px-4 py-3 text-right text-sm text-gray-700 dark:text-gray-300 font-medium">
                       {producto.cantidad || 1}
                     </td>
+                    {/* Los precios llegan en null cuando quien mira no es
+                        administrador: son costos de compra. Se muestra un guion
+                        en vez de C$0.00, que sería un dato falso. */}
                     <td className="px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">
-                      {formatCurrency(producto.precio_compra)}
+                      {producto.precio_compra != null
+                        ? formatCurrency(producto.precio_compra) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-white">
-                      {formatCurrency((producto.cantidad || 1) * producto.precio_compra)}
+                      {producto.precio_compra != null
+                        ? formatCurrency((producto.cantidad || 1) * producto.precio_compra)
+                        : <span className="font-normal text-gray-400 dark:text-gray-500">—</span>}
                     </td>
                   </tr>
                 ))}
@@ -161,11 +167,16 @@ const OrdenCompraDetalle = ({ orden, onConfirmar, onRecibir, onCancelar, isLoadi
         )}
       </motion.div>
 
-      {/* Total */}
-      <motion.div variants={fadeIn} className="bg-gray-900 dark:bg-gray-700 rounded-xl px-5 py-4 flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-300">Total de la orden</span>
-        <span className="text-2xl font-bold text-white">{formatCurrency(orden.total)}</span>
-      </motion.div>
+      {/* Total. Solo si el backend lo devolvió: a quien no es administrador le
+          llega en null, porque cuánto se le compra a un proveedor es
+          información de dueño. La sección de pago de abajo ya se oculta sola,
+          porque su condición es `orden.total > 0`. */}
+      {orden.total != null && (
+        <motion.div variants={fadeIn} className="bg-gray-900 dark:bg-gray-700 rounded-xl px-5 py-4 flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-300">Total de la orden</span>
+          <span className="text-2xl font-bold text-white">{formatCurrency(orden.total)}</span>
+        </motion.div>
+      )}
 
       {/* Estado de pago al proveedor (cuentas por pagar) — no aplica si cancelada */}
       {orden.estado !== 'cancelada' && orden.total > 0 && (

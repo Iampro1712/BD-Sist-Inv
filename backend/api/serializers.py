@@ -153,8 +153,50 @@ class UbicacionSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class ProductoListSerializer(serializers.ModelSerializer):
+class CamposSoloAdminMixin:
+    """Vacía los campos financieros cuando quien consulta no es administrador.
+
+    Varios ViewSets usan `IsAdminOrReadOnly`, que permite GET a cualquier usuario
+    autenticado. Eso está bien para lo operativo —un vendedor necesita ver el
+    catálogo y qué mercadería viene en camino— pero arrastraba con ello los
+    números del negocio: costo de compra, deuda a proveedores y márgenes. Es
+    exactamente lo que los reportes protegen con `IsAdminUser`, así que esos
+    candados eran decorativos mientras la materia prima salía por los listados.
+
+    Se pone `None` en vez de quitar la clave, para no romper a los consumidores
+    que esperan la forma completa de la respuesta; el frontend trata el nulo como
+    "no mostrar".
+
+    Cada serializer declara su propio `CAMPOS_SOLO_ADMIN`. Es una lista explícita
+    a propósito: si mañana se agrega un campo de dinero hay que sumarlo acá, y
+    las pruebas están escritas para detectar el olvido.
+    """
+
+    CAMPOS_SOLO_ADMIN = ()
+
+    def _es_admin(self):
+        peticion = self.context.get('request')
+        # Sin request (uso interno, comandos, tests de serializer) no se filtra:
+        # el filtro es para respuestas de la API, donde sí hay un usuario.
+        if peticion is None:
+            return True
+        return getattr(peticion.user, 'is_staff', False)
+
+    def to_representation(self, instance):
+        datos = super().to_representation(instance)
+        if self._es_admin():
+            return datos
+        for campo in self.CAMPOS_SOLO_ADMIN:
+            if campo in datos:
+                datos[campo] = None
+        return datos
+
+
+class ProductoListSerializer(CamposSoloAdminMixin, serializers.ModelSerializer):
     """Serializer para listado de productos"""
+    # El costo + el precio de venta juntos son el margen del negocio.
+    CAMPOS_SOLO_ADMIN = ('precio_compra_unitario',)
+
     proveedor_nombre = serializers.CharField(source='id_proveedor.nombre_empresa', read_only=True)
     ubicacion_codigo = serializers.SerializerMethodField()
 
@@ -172,8 +214,10 @@ class ProductoListSerializer(serializers.ModelSerializer):
         return obj.id_ubicacion.codigo if obj.id_ubicacion else None
 
 
-class ProductoDetailSerializer(serializers.ModelSerializer):
+class ProductoDetailSerializer(CamposSoloAdminMixin, serializers.ModelSerializer):
     """Serializer detallado para producto"""
+    CAMPOS_SOLO_ADMIN = ('precio_compra_unitario',)
+
     proveedor_nombre = serializers.CharField(source='id_proveedor.nombre_empresa', read_only=True)
     # Objeto completo acá (no solo el código) para poder pre-cargar el selector
     # de ubicación al editar el producto.
@@ -242,8 +286,15 @@ ESTADO_LABEL_MAP = {
 }
 
 
-class OrdenCompraListSerializer(serializers.ModelSerializer):
-    """Serializer para listado de órdenes de compra"""
+class OrdenCompraListSerializer(CamposSoloAdminMixin, serializers.ModelSerializer):
+    """Serializer para listado de órdenes de compra.
+
+    Lo operativo queda visible para todos —qué viene, de quién, cuándo se espera
+    y si ya se recibió—, porque el vendedor necesita poder responderle a un
+    cliente cuándo llega su repuesto. Lo que se reserva al dueño son los números:
+    cuánto costó y cuánto se le debe al proveedor.
+    """
+    CAMPOS_SOLO_ADMIN = ('total', 'monto_pagado', 'saldo_pendiente', 'estado_pago')
     proveedor_nombre = serializers.SerializerMethodField()
     estado = serializers.SerializerMethodField()
     estado_display = serializers.SerializerMethodField()
@@ -304,8 +355,17 @@ def _build_orden_compra_total_map(root):
         return {row[0]: float(row[1]) if row[1] else 0.0 for row in cursor.fetchall()}
 
 
-class OrdenCompraDetailSerializer(serializers.ModelSerializer):
-    """Serializer detallado para orden de compra"""
+class OrdenCompraDetailSerializer(CamposSoloAdminMixin, serializers.ModelSerializer):
+    """Serializer detallado para orden de compra.
+
+    Mismo criterio que el listado: se ve qué se pidió y en qué estado está, no
+    cuánto costó ni cuánto se debe. `productos` se filtra aparte en
+    `get_productos`, porque el precio va dentro de cada línea.
+    """
+    CAMPOS_SOLO_ADMIN = (
+        'total', 'subtotal', 'monto_pagado', 'saldo_pendiente', 'estado_pago',
+        'total_devuelto', 'saldo_a_favor', 'devoluciones',
+    )
     proveedor_nombre = serializers.SerializerMethodField()
     proveedor_contacto = serializers.SerializerMethodField()
     estado = serializers.SerializerMethodField()
@@ -411,6 +471,11 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
                 INNER JOIN productos p ON p.id_producto = op.id_producto
                 WHERE oc.id_orden = %s
             """, [obj.id_orden])
+            # Los precios de las líneas son costos de compra: se ocultan igual
+            # que los del listado de productos. Van dentro de un
+            # SerializerMethodField, así que el mixin no los alcanza y hay que
+            # filtrarlos acá — sin esto el costo se escapaba por el detalle.
+            mostrar_precios = self._es_admin()
             productos = []
             for row in cursor.fetchall():
                 precio = float(row[3]) if row[3] else 0.0
@@ -419,10 +484,10 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
                     'id_producto': row[0],
                     'nombre': row[1],
                     'sku': row[2],
-                    'precio_unitario': precio,
-                    'precio_compra': precio,  # compat con el front actual
+                    'precio_unitario': precio if mostrar_precios else None,
+                    'precio_compra': precio if mostrar_precios else None,  # compat con el front actual
                     'cantidad': cantidad,
-                    'subtotal': round(precio * cantidad, 2),
+                    'subtotal': round(precio * cantidad, 2) if mostrar_precios else None,
                 })
             return productos
 
@@ -598,6 +663,8 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
     total = serializers.SerializerMethodField()
     pagos = serializers.SerializerMethodField()
     estado_pago_display = serializers.CharField(source='get_estado_pago_display', read_only=True)
+    total_devuelto = serializers.SerializerMethodField()
+    saldo_a_favor = serializers.SerializerMethodField()
 
     class Meta:
         model = OrdenVenta
@@ -605,12 +672,19 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
             'id_venta', 'id_cliente', 'cliente_nombre',
             'fecha', 'estado_display', 'total', 'productos',
             'monto_pagado', 'saldo_pendiente', 'estado_pago', 'estado_pago_display',
-            'pagos'
+            'total_devuelto', 'saldo_a_favor', 'pagos'
         ]
 
     def get_pagos(self, obj):
         pagos = obj.pagos.all()
         return PagoVentaSerializer(pagos, many=True).data
+
+    def get_total_devuelto(self, obj):
+        return float(obj.total_devuelto())
+
+    def get_saldo_a_favor(self, obj):
+        """Lo que el negocio le debe al cliente por mercadería devuelta."""
+        return float(obj.saldo_a_favor())
     
     def get_cliente_nombre(self, obj):
         try:
@@ -1657,6 +1731,16 @@ class DevolucionCreateSerializer(serializers.Serializer):
                         d['producto'], d['cantidad'], f'DEV-{id_devolucion}',
                         validated_data.get('motivo') or 'Devolución',
                     ])
+
+            # Recalcular la deuda de la venta: sin esto la devolución reingresaba
+            # el stock pero el cliente seguía debiendo la mercadería que devolvió,
+            # y cuentas por cobrar lo mostraba como deuda vigente.
+            id_venta = validated_data.get('id_venta')
+            if id_venta:
+                venta = OrdenVenta.objects.filter(id_venta=id_venta).first()
+                if venta:
+                    venta.calcular_saldo()
+
         return Devolucion.objects.get(id_devolucion=id_devolucion)
 
     def to_representation(self, instance):
@@ -2053,6 +2137,27 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
                     f'No hay stock suficiente de "{producto.nombre}" para devolver '
                     f'{cant}: quedan {producto.cantidad_actual} en inventario.'
                 )})
+
+        # El reembolso no puede exceder lo devuelto. Sin este tope, una
+        # devolución de C$500 aceptaba un reembolso de C$50.000: inflaba el
+        # efectivo esperado de la caja (arqueo con un faltante imposible de
+        # explicar) y subía el saldo de la orden, habilitando pagarle al
+        # proveedor mucho más de lo que se le debía. Un reembolso negativo era
+        # el mismo problema al revés.
+        reembolso = data.get('reembolso') or Decimal('0')
+        if reembolso < 0:
+            raise serializers.ValidationError(
+                {'reembolso': 'El reembolso no puede ser negativo.'})
+
+        # Se calcula con el precio congelado de la compra, igual que `create`,
+        # para que el tope sea exactamente el total que va a quedar registrado.
+        total = sum(Decimal(str(recibido[pid][1] or 0)) * cant
+                    for pid, cant in pedido.items())
+        if reembolso > total:
+            raise serializers.ValidationError({'reembolso': (
+                f'El reembolso (C${reembolso}) no puede superar el valor de lo '
+                f'devuelto (C${total}).'
+            )})
 
         data['_orden'] = orden
         data['_recibido'] = recibido

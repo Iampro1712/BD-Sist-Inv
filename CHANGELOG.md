@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.11.0-4F46E5?style=flat-square)](#1110---2026-07-28)
+[![Version](https://img.shields.io/badge/version-1.11.3-4F46E5?style=flat-square)](#1113---2026-07-28)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,65 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.11.3] - 2026-07-28
+
+Última tanda de la auditoría: con esto quedan cerrados los 10 hallazgos.
+
+### Fixed
+
+- **El reporte de compras calculaba mal el total.** Sumaba el costo *actual del catálogo* una vez por línea, ignorando cuántas unidades se compraron y a qué precio se pactaron. Comprar 50 filtros a C$80 sumaba C$95 en lugar de C$4.000; y si el costo del producto cambiaba después, el total de una compra vieja cambiaba con él. Ahora suma lo que de verdad se pagó, igual que el detalle de la orden y que los demás reportes.
+- **Las órdenes canceladas ya no suman al total de compras**, porque ahí no se compró nada. Siguen apareciendo en el listado con su estado, que sí es información útil.
+- **El reporte avisa cuántas órdenes no tienen importes registrados.** Las compras cargadas en una etapa anterior del sistema no guardaron cantidad ni precio, así que no pueden aportar al total. Antes la fórmula equivocada las "rellenaba" con un número inventado; ahora el total baja a lo que realmente se puede calcular y el reporte declara cuántas órdenes quedaron fuera, en vez de dejar la impresión de que el reporte está roto.
+
+### Security
+
+- **Lo que se le debe a un proveedor ya no se le muestra a los vendedores.** La pantalla de órdenes de compra sigue disponible para todos —el vendedor necesita saber qué mercadería viene en camino, de qué proveedor y cuándo, para poder responderle a un cliente—, pero los montos quedaron reservados al dueño: el total de la compra, lo pagado, el saldo, el estado de pago y el precio de cada línea. Un empleado con el precio de compra y el de venta a la vista puede calcular el margen del negocio entero.
+- Donde el dato ya no está disponible, la interfaz muestra un guion en vez de C$0.00, para no presentar un número falso.
+
+---
+
+## [1.11.2] - 2026-07-28
+
+Segunda tanda de correcciones de la auditoría.
+
+### Fixed
+
+- **Convertir una proforma en venta no descontaba el inventario.** Se registraba la venta y sus productos, pero el stock quedaba intacto: la mercadería salía del local y el sistema seguía contándola. Tampoco verificaba que hubiera existencias, así que se podía "vender" un producto con cero en inventario. Ahora descuenta el stock, deja el movimiento correspondiente para poder auditarlo, y si falta stock de cualquier producto la conversión se rechaza completa sin dejar nada a medias.
+- **Convertir una proforma con el mismo producto repetido en dos líneas daba un error de servidor.** Salió a la luz al probar el arreglo anterior. Ahora las líneas repetidas se suman en una sola, y el stock se valida contra el total: dos líneas de 3 unidades sobre una existencia de 5 se rechazan, como corresponde.
+- **El total de la venta convertida se calculaba con decimales imprecisos**, dejando centavos que no cuadraban contra la suma de sus líneas.
+- **El reembolso de una devolución a proveedor no tenía tope.** Una devolución de C$500 aceptaba registrar un reembolso de C$50.000: eso inflaba el efectivo esperado del turno de caja —dejando un arqueo con un faltante imposible de explicar— y habilitaba pagarle al proveedor mucho más de lo que se le debía. Ahora el reembolso no puede superar el valor de lo devuelto ni ser negativo.
+
+### Security
+
+- **Un operador ya no puede ver ni tocar el turno de caja de otra persona.** El historial de turnos estaba reservado al dueño por ser información financiera, pero por otra vía cualquier empleado podía leer los movimientos de efectivo de cualquier turno pasado —montos, motivos y quién los registró— y podía cerrarle el arqueo a un compañero, firmando un conteo que no hizo. Ahora cada uno opera solo sobre su propio turno; el dueño sigue viendo y cerrando cualquiera.
+- Abrir un turno y consultar la caja del momento siguen disponibles para todos, que es lo que el operador necesita para trabajar.
+
+---
+
+## [1.11.1] - 2026-07-28
+
+Correcciones salidas de una auditoría de seguridad y corrección del sistema completo.
+
+### Fixed
+
+- **Aprobar un presupuesto podía descontar el mismo repuesto dos veces.** Si el último repuesto del presupuesto no tenía stock, los anteriores ya habían salido del inventario y quedaban registrados, pero el presupuesto seguía marcado como no aprobado. Al reintentar, esos repuestos se descontaban otra vez y quedaban duplicados en la orden de trabajo, para después facturarse doble. La causa: el error se devolvía en vez de lanzarse, y eso confirmaba los cambios en lugar de deshacerlos. Ahora la aprobación es de verdad todo o nada.
+- **Una devolución no reducía lo que el cliente debía.** El stock volvía al inventario, pero en cuentas por cobrar el cliente seguía debiendo la mercadería que había devuelto, y el sistema le exigía pagarla completa. Es el mismo arreglo que el lado de compras ya tenía desde 1.8.0: faltaba el espejo del lado de ventas. Si la venta ya estaba pagada, ahora queda registrado como **saldo a favor del cliente** en vez de desaparecer.
+- **Una venta se podía borrar sin dejar rastro, y cualquier usuario podía hacerlo.** El borrado directo no devolvía el stock, no registraba movimiento y no quedaba en el historial de auditoría — o sea que el camino correcto (cancelar) era rastreable y el otro no. Ahora una venta solo se cancela, que sí devuelve el stock y queda registrado. Editar una venta ya registrada también quedó bloqueado: antes daba un error de servidor.
+
+### Security
+
+- **El precio de compra ya no se le muestra a los vendedores.** Con el costo y el precio de venta juntos en el listado de productos, cualquier empleado podía calcular el margen de cada producto. Era el mismo dato que el reporte de rentabilidad protege, así que ese candado no servía de nada. Ahora el costo solo lo ve el dueño, en el listado, en la ficha del producto, en los productos de un proveedor, en los de una ubicación y en el historial de precios por proveedor.
+- **Los respaldos ya no se copian dentro de la imagen del sistema.** Los volcados guardados en el servidor —con nombres de clientes, datos de empleados incluido su salario y todos los precios de compra— quedaban dentro de la imagen que se despliega, visibles para cualquiera que pudiera inspeccionarla. Verificado sobre la imagen real: ya no viajan. El archivo de credenciales de recuperación tampoco.
+- **El modo de depuración ahora falla cerrado.** Si la variable que lo controla faltaba o llegaba mal escrita en el despliegue, se apagaban en silencio las cookies seguras, la política de conexión cifrada y —lo más grave— también las comprobaciones que impiden arrancar sin las claves de cifrado, porque dependían de esa misma variable. Además los errores mostraban detalles internos de la base al usuario. Todos los entornos de desarrollo la definen explícitamente, así que el cambio solo protege el caso en que nadie la configuró.
+
+### Notas de la auditoría
+
+- **No se encontró inyección SQL** en ninguna de las consultas directas a la base (unas 257 revisadas): todo valor que viene del usuario viaja parametrizado.
+- **No se encontró ninguna credencial filtrada en el historial del repositorio**: nunca se versionó un archivo de entorno, de credenciales ni un respaldo. Las claves de IA no llegan al navegador.
+- Quedan documentados otros hallazgos menores que no se tocaron en esta versión, entre ellos: el reporte de compras calcula el total con una fórmula equivocada, el reembolso de una devolución a proveedor no tiene tope, cancelar una venta de taller falla, y el ajuste manual de inventario puede dejar stock negativo si dos personas lo hacen a la vez.
 
 ---
 

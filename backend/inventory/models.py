@@ -611,26 +611,64 @@ class OrdenVenta(models.Model):
             return calculado
         return Decimal(str(self.total or 0))
 
+    def total_devuelto(self):
+        """Valor de la mercadería que el cliente devolvió de esta venta.
+
+        Se filtra por estado: una devolución anulada no reduce nada. Y se
+        consulta por `id_venta` en vez de una relación inversa porque
+        `Devolucion.id_venta` es un entero suelto, sin llave foránea real.
+        """
+        from django.apps import apps
+        Devolucion = apps.get_model('inventory', 'Devolucion')
+        return Devolucion.objects.filter(
+            id_venta=self.id_venta, estado='procesada'
+        ).aggregate(t=models.Sum('total'))['t'] or Decimal('0')
+
     def calcular_saldo(self):
-        """Recalcula monto pagado, saldo pendiente y estado a partir de los pagos.
+        """Recalcula monto pagado, saldo pendiente y estado.
+
+        saldo = vendido − devuelto − pagado
 
         Se reconstruye desde el agregado de ``pagos`` (no de forma incremental)
         para que registrar o eliminar un abono nunca deje descuadres.
+
+        Las devoluciones se restan porque no se le puede seguir cobrando al
+        cliente mercadería que devolvió. Sin este término, una venta a crédito de
+        C$5.000 con C$2.000 devueltos seguía apareciendo como C$5.000 de deuda en
+        cuentas por cobrar, y el sistema le exigía pagar todo. Es el mismo
+        arreglo que ya tenía `OrdenCompra.calcular_saldo` del lado de compras:
+        acá faltaba el espejo.
+
+        Un saldo negativo es saldo a favor del cliente: le pagó al negocio más de
+        lo que se quedó. Ver `saldo_a_favor`.
         """
         pagado = self.pagos.aggregate(total=models.Sum('monto'))['total'] or Decimal('0')
         total = self.calcular_total()
+        devuelto = self.total_devuelto()
 
+        neto = total - devuelto          # lo que el cliente efectivamente se quedó
         self.monto_pagado = pagado
-        self.saldo_pendiente = total - pagado
+        self.saldo_pendiente = neto - pagado
 
-        if pagado <= 0:
-            self.estado_pago = 'pendiente'
-        elif pagado >= total:
+        if self.saldo_pendiente <= 0:
+            # Incluye el saldo a favor: no hay nada pendiente de cobrar.
             self.estado_pago = 'pagado'
+        elif pagado <= 0:
+            self.estado_pago = 'pendiente'
         else:
             self.estado_pago = 'parcial'
 
         self.save(update_fields=['monto_pagado', 'saldo_pendiente', 'estado_pago'])
+
+    def saldo_a_favor(self):
+        """Cuánto le debe el negocio al cliente por mercadería devuelta.
+
+        Aparece cuando la venta estaba pagada y después hubo una devolución. El
+        sistema no descuenta ese crédito automáticamente en una venta futura,
+        pero al menos deja de fingir que el cliente sigue debiendo.
+        """
+        saldo = self.saldo_pendiente or Decimal('0')
+        return -saldo if saldo < 0 else Decimal('0')
 
     def __str__(self):
         return f"Venta #{self.id_venta}"

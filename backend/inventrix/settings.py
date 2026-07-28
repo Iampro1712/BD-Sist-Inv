@@ -29,7 +29,18 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = os.getenv('SECRET_KEY', 'change-this-in-production-use-env-file')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+#
+# El default es 'False' (falla cerrado) a propósito. Antes era 'True', y eso
+# hacía que una variable ausente o mal escrita en el despliegue apagara EN
+# SILENCIO todo el bloque `if not DEBUG` de más abajo: cookies sin Secure, sin
+# HSTS, y —lo peor— también se saltaban las comprobaciones que abortan el
+# arranque si falta SECRET_KEY o FIELD_ENCRYPTION_KEY, porque están dentro de
+# ese mismo bloque. Encima los tracebacks con nombres de tabla salían al cliente.
+#
+# Todos los entornos de desarrollo fijan DEBUG explícitamente (`.env.example`,
+# `docker-compose.yml` con `${DEBUG:-True}` y el CI), así que invertirlo no
+# cambia nada local: solo protege el caso en que nadie la definió.
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 # Los JWT se firman con SECRET_KEY: en producción no se permite el valor de ejemplo
 # (de lo contrario un atacante podría forjar tokens válidos).

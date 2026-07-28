@@ -10,7 +10,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
-from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.exceptions import (
+    PermissionDenied, ValidationError as DRFValidationError,
+)
 from .permissions import IsAdminOrReadOnly
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
@@ -94,7 +96,10 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     def productos(self, request, pk=None):
         proveedor = self.get_object()
         productos = proveedor.productos.all().order_by('nombre')
-        serializer = ProductoListSerializer(productos, many=True)
+        # El context es obligatorio: `CostoSoloAdminMixin` lo usa para decidir si
+        # oculta el precio de compra. Sin él, el costo se filtraría por acá.
+        serializer = ProductoListSerializer(
+            productos, many=True, context=self.get_serializer_context())
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
@@ -160,7 +165,9 @@ class UbicacionViewSet(viewsets.ModelViewSet):
         """Qué hay guardado en este lugar."""
         ubicacion = self.get_object()
         productos = ubicacion.productos.select_related('id_proveedor').order_by('nombre')
-        return Response(ProductoListSerializer(productos, many=True).data)
+        # Con context: `CostoSoloAdminMixin` lo necesita para ocultar el costo.
+        return Response(ProductoListSerializer(
+            productos, many=True, context=self.get_serializer_context()).data)
 
     @action(detail=False, methods=['get'])
     def bodegas(self, request):
@@ -217,14 +224,20 @@ class ProductoViewSet(viewsets.ModelViewSet):
 
         return queryset
 
-    @action(detail=True, methods=['get'], url_path='precios-proveedores')
+    @action(detail=True, methods=['get'], url_path='precios-proveedores',
+            permission_classes=[IsAdminUser])
     def precios_proveedores(self, request, pk=None):
-        """A qué precio le vendió cada proveedor este producto.
+        """A qué precio le vendió cada proveedor este producto. Solo admin.
 
         Alimenta el aviso del formulario de compra: es el único punto donde ver
         que otro proveedor lo daba más barato sirve para cambiar la decisión.
-        Lectura para cualquier usuario autenticado (el permiso del ViewSet ya
-        permite GET), a diferencia de los reportes que son admin-only.
+
+        Antes era legible por cualquier autenticado, con el argumento de que el
+        permiso del ViewSet ya permitía GET. Pero devuelve costos históricos de
+        compra, o sea el mismo dato que los reportes protegen con `IsAdminUser` y
+        que ahora se oculta del listado de productos: dejarlo abierto hacía que
+        todo ese trabajo no sirviera. El único que lo consume es el formulario de
+        órdenes de compra, que ya es admin-only, así que no cambia nada de uso.
         """
         producto = self.get_object()
         with connection.cursor() as cursor:
@@ -639,12 +652,46 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
 
 
 class OrdenVentaViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de órdenes de venta"""
+    """ViewSet para gestión de órdenes de venta.
+
+    Una venta **no se borra ni se edita**: se cancela con la acción `cancelar`,
+    que restituye el stock, registra los movimientos de inventario y deja la
+    venta con estado cancelado.
+
+    El borrado directo estaba habilitado para cualquier usuario autenticado y
+    era el único camino que no dejaba rastro: `DELETE /api/ordenes-venta/{id}/`
+    borraba la fila sin devolver stock, sin movimiento y sin auditoría (el
+    disparador de auditoría cubre `productos`, no `ventas`). O sea que el camino
+    correcto era auditable y el desprotegido no — justo lo que se necesita para
+    tapar un faltante de caja.
+
+    Nota: el método DELETE sigue habilitado en el ViewSet porque lo usa la
+    subruta `pagos/<id>` para anular un abono; lo que se bloquea es el borrado de
+    la venta en sí.
+    """
     queryset = OrdenVenta.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['id_venta']
     ordering_fields = ['fecha', 'total']
     ordering = ['-fecha']
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'error': 'Una venta no se borra. Usá "cancelar" para anularla: '
+                      'devuelve el stock y queda registrado.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def update(self, request, *args, **kwargs):
+        # `OrdenVentaCreateSerializer` no implementa `update()`, así que esto
+        # daba un 500. Modificar los productos de una venta ya registrada
+        # descuadraría el stock: se cancela y se hace de nuevo.
+        return Response(
+            {'error': 'Una venta registrada no se edita. Cancelala y volvé a '
+                      'registrarla.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def partial_update(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -1803,27 +1850,76 @@ class CotizacionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='convertir-venta')
     def convertir_venta(self, request, pk=None):
-        """Convierte la cotización en una orden de venta real."""
+        """Convierte la cotización en una orden de venta real.
+
+        Descuenta el stock y deja el movimiento de inventario, igual que el POS.
+        Antes no lo hacía: insertaba la venta y sus líneas y nada más, así que la
+        mercadería salía del local y el sistema seguía contándola en inventario.
+        Tampoco comprobaba que hubiera stock, con lo cual se podía "vender" algo
+        con existencia cero.
+
+        Los importes se calculan con `Decimal`, no con `float`: sumar precios en
+        coma flotante deja el total de la venta con centavos que no cuadran
+        contra la suma de sus líneas.
+        """
         from django.db import transaction
         with transaction.atomic():
             cot = Cotizacion.objects.select_for_update().get(pk=pk)
             if cot.estado == 'convertida' or cot.id_venta:
-                return Response(
-                    {'error': 'Esta cotización ya fue convertida en venta'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                raise DRFValidationError(
+                    {'error': 'Esta cotización ya fue convertida en venta'})
+
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT id_producto, cantidad, precio_unitario
                     FROM producto_cotizacion WHERE id_cotizacion = %s
                 """, [cot.id_cotizacion])
                 items = cursor.fetchall()
-                if not items:
-                    return Response(
-                        {'error': 'La cotización no tiene productos'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                total = sum(float(i[2]) * int(i[1]) for i in items)
+
+            if not items:
+                raise DRFValidationError(
+                    {'error': 'La cotización no tiene productos'})
+
+            # Se agrupan las líneas repetidas antes de validar por dos motivos.
+            #
+            # Uno: una cotización puede traer el mismo producto dos veces y el
+            # stock hay que comprobarlo contra la suma, no contra cada línea por
+            # separado (dos líneas de 3 sobre un stock de 5 pasan sueltas y no
+            # deberían).
+            #
+            # Dos: `producto_venta` tiene la clave primaria en
+            # (id_venta, id_producto), así que insertar una fila por línea
+            # reventaba con violación de clave duplicada — un 500 en la cara del
+            # usuario. Va una fila por producto con la cantidad total.
+            requerido = {}
+            subtotales = {}
+            for id_producto, cantidad, precio in items:
+                cantidad = int(cantidad)
+                requerido[id_producto] = requerido.get(id_producto, 0) + cantidad
+                subtotales[id_producto] = (
+                    subtotales.get(id_producto, Decimal('0'))
+                    + Decimal(str(precio)) * cantidad)
+
+            bloqueados = {}
+            for id_producto in sorted(requerido):
+                try:
+                    bloqueados[id_producto] = (
+                        Producto.objects.select_for_update().get(pk=id_producto))
+                except Producto.DoesNotExist:
+                    raise DRFValidationError(
+                        {'error': f'El producto {id_producto} ya no existe.'})
+
+            for id_producto, cantidad in requerido.items():
+                producto = bloqueados[id_producto]
+                if producto.cantidad_actual < cantidad:
+                    raise DRFValidationError({'error': (
+                        f'Stock insuficiente de "{producto.nombre}": hay '
+                        f'{producto.cantidad_actual} y la cotización pide {cantidad}.'
+                    )})
+
+            total = sum(subtotales.values())
+
+            with connection.cursor() as cursor:
                 # `saldo_pendiente` se setea explícitamente: es nullable y sin
                 # él la venta queda invisible en el reporte de cuentas por
                 # cobrar, que filtra por COALESCE(saldo_pendiente,0) > 0.
@@ -1834,15 +1930,34 @@ class CotizacionViewSet(viewsets.ModelViewSet):
                     RETURNING id_venta
                 """, [cot.id_cliente, total, total])
                 id_venta = cursor.fetchone()[0]
-                for id_producto, cantidad, precio in items:
+
+                for id_producto, cantidad in requerido.items():
+                    # El precio unitario se deriva del subtotal para que
+                    # cantidad × precio siga cuadrando con el total de la venta
+                    # cuando la cotización trae el mismo producto a precios
+                    # distintos (un promedio ponderado, no el primero que salga).
+                    precio = subtotales[id_producto] / cantidad
                     cursor.execute("""
                         INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
                         VALUES (%s, %s, %s, %s)
                     """, [id_venta, id_producto, cantidad, precio])
+
+                for id_producto, cantidad in requerido.items():
+                    cursor.execute(
+                        "UPDATE productos SET cantidad_actual = cantidad_actual - %s "
+                        "WHERE id_producto = %s", [cantidad, id_producto])
+                    cursor.execute("""
+                        INSERT INTO movimientos_inventario
+                            (producto_id, tipo, cantidad, fecha, referencia, tipo_referencia, notas)
+                        VALUES (%s, 'SALIDA', %s, NOW(), %s, 'ORDEN_VENTA', %s)
+                    """, [id_producto, cantidad, f'VENTA-{id_venta}',
+                          f'Venta desde cotización #{cot.id_cotizacion}'])
+
                 cursor.execute(
                     "UPDATE cotizaciones SET estado = 'convertida', id_venta = %s WHERE id_cotizacion = %s",
                     [id_venta, cot.id_cotizacion],
                 )
+
         cot.refresh_from_db()
         return Response(
             {'id_venta': id_venta, 'cotizacion': CotizacionDetailSerializer(cot).data},
@@ -1888,9 +2003,8 @@ class CotizacionViewSet(viewsets.ModelViewSet):
                 campos += ['fecha_aprobacion', 'aprobado_por']
 
             if aprobando_reparacion:
-                error = self._cargar_presupuesto_en_orden(cot)
-                if error is not None:
-                    return error
+                # Si falla lanza ValidationError, que sí revierte la transacción.
+                self._cargar_presupuesto_en_orden(cot)
                 cot.cargado_a_orden = True
                 campos.append('cargado_a_orden')
 
@@ -1900,13 +2014,22 @@ class CotizacionViewSet(viewsets.ModelViewSet):
         return Response(CotizacionDetailSerializer(cot).data)
 
     def _cargar_presupuesto_en_orden(self, cot):
-        """Pasa lo presupuestado a la orden de trabajo. Devuelve una Response de
-        error si algo falla, o None si salió bien."""
+        """Pasa lo presupuestado a la orden de trabajo.
+
+        **Lanza `ValidationError`** en vez de devolver una Response de error, y
+        eso es lo que hace que funcione: esta función corre dentro del
+        `transaction.atomic()` de `cambiar_estado`, y un `return` desde adentro
+        de un bloque atómico **hace commit**, no rollback. Con la versión
+        anterior, un presupuesto de tres repuestos donde el tercero no tenía
+        stock dejaba los dos primeros ya descontados del inventario y
+        commiteados, mientras que `cargado_a_orden` no se guardaba (se asigna
+        después). Al reintentar la aprobación se descontaban de nuevo: stock
+        perdido y líneas duplicadas que después se facturaban dos veces.
+        """
         orden = ServicioMoto.objects.select_for_update().get(pk=cot.id_servicio_id)
         if orden.estado in ('entregada', 'cancelada'):
-            return Response(
-                {'error': f'La orden de trabajo ya está {orden.estado}.'},
-                status=status.HTTP_400_BAD_REQUEST)
+            raise DRFValidationError(
+                {'error': f'La orden de trabajo ya está {orden.estado}.'})
 
         # Mano de obra: la suma de las líneas presupuestadas.
         orden.precio_mano_obra = cot.total_mano_obra()
@@ -1923,10 +2046,9 @@ class CotizacionViewSet(viewsets.ModelViewSet):
             for id_producto, cantidad, precio in lineas:
                 producto = Producto.objects.select_for_update().get(pk=id_producto)
                 if producto.cantidad_actual < cantidad:
-                    return Response(
+                    raise DRFValidationError(
                         {'error': f'Stock insuficiente de "{producto.nombre}" para aprobar: '
-                                  f'hay {producto.cantidad_actual}, el presupuesto pide {cantidad}.'},
-                        status=status.HTTP_400_BAD_REQUEST)
+                                  f'hay {producto.cantidad_actual}, el presupuesto pide {cantidad}.'})
 
                 ServicioRepuesto.objects.create(
                     id_servicio=orden, id_producto=producto,
@@ -2149,8 +2271,13 @@ class SesionCajaViewSet(viewsets.ReadOnlyModelViewSet):
     """Turnos de caja: abrir, cerrar, registrar movimientos y consultar arqueo.
 
     - Listar/ver historial: solo admin (datos financieros, como los reportes).
-    - abrir / cerrar / movimientos / actual: cualquier usuario autenticado (el
-      operador maneja su propio turno).
+    - abrir / actual: cualquier usuario autenticado (el operador abre su turno).
+    - cerrar / movimientos: **solo sobre el propio turno**, o cualquiera si es
+      admin. Ver `_verificar_propietario`.
+
+    Solo puede haber una sesión abierta a la vez en todo el sistema (lo impone
+    `abrir` y un constraint en la base), así que "el turno propio" es el que esa
+    persona abrió.
     """
     queryset = SesionCaja.objects.select_related('usuario').all()
     serializer_class = SesionCajaSerializer
@@ -2159,6 +2286,24 @@ class SesionCajaViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action in ('list', 'retrieve'):
             return [IsAdminUser()]
         return [IsAuthenticated()]
+
+    def _verificar_propietario(self, sesion):
+        """Un operador solo toca el turno que abrió él; el admin, cualquiera.
+
+        `get_permissions` reserva `list`/`retrieve` a admin porque son datos
+        financieros, pero las acciones caían en `IsAuthenticated` y con eso se
+        salteaba ese criterio: un operador podía pedir los movimientos de
+        cualquier turno histórico —montos, motivos y quién los registró— y podía
+        cerrarle el arqueo a otra persona, firmando un conteo que no hizo.
+
+        `get_object()` no alcanza para esto: solo evalúa permisos de objeto, y
+        `IsAuthenticated` los concede a todo el mundo.
+        """
+        if self.request.user.is_staff:
+            return
+        if sesion.usuario_id != self.request.user.id:
+            raise PermissionDenied(
+                'Solo podés operar sobre tu propio turno de caja.')
 
     @action(detail=False, methods=['get'])
     def actual(self, request):
@@ -2203,6 +2348,7 @@ class SesionCajaViewSet(viewsets.ReadOnlyModelViewSet):
 
         with transaction.atomic():
             sesion = SesionCaja.objects.select_for_update().get(pk=pk)
+            self._verificar_propietario(sesion)
             if sesion.estado != 'abierta':
                 return Response(
                     {'error': 'Esta caja ya está cerrada'},
@@ -2223,8 +2369,13 @@ class SesionCajaViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['get', 'post'])
     def movimientos(self, request, pk=None):
-        """GET: lista los movimientos de la sesión. POST: registra uno nuevo."""
+        """GET: lista los movimientos de la sesión. POST: registra uno nuevo.
+
+        Solo sobre el propio turno (o cualquiera, si es admin): son montos,
+        motivos y responsables de movimientos de efectivo.
+        """
         sesion = self.get_object()
+        self._verificar_propietario(sesion)
         if request.method == 'GET':
             return Response(
                 MovimientoCajaSerializer(sesion.movimientos.all(), many=True).data
