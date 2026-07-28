@@ -12,8 +12,20 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Instalar dependencias del sistema necesarias para PostgreSQL y Pillow
+#
+# postgresql-client trae pg_dump y pg_restore, que son lo que hace que el
+# respaldo sea restaurable: sin ellos el sistema solo puede volcar los datos a
+# JSON, sin esquema ni secuencias ni disparadores, y eso no vuelve a levantar la
+# base por sí solo (ver api/backup_pg.py).
+#
+# Se usa el paquete de la distribución en vez de fijar la versión del servidor:
+# pg_dump puede volcar de servidores más viejos que él, así que un cliente nuevo
+# sirve para el Postgres actual y para futuras actualizaciones. Al revés no: un
+# cliente más viejo que el servidor se niega a volcar, y el comando de respaldo
+# comprueba eso y avisa qué hacer.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    postgresql-client \
     libjpeg62-turbo \
     libpng16-16 \
     && rm -rf /var/lib/apt/lists/*

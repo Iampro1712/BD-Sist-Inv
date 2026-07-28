@@ -6,14 +6,29 @@ para cómo se bootstrapea en CI).
 """
 import datetime
 import json
+import os
+import shutil
+import tempfile
 import urllib.error
+from datetime import datetime as _datetime
+from io import StringIO
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.db import connection
+from django.test import TestCase
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
+
+from .backup_pg import (
+    TABLAS_EFIMERAS, comprobar_disponible, generar_dump, nombre_dump,
+    verificar_dump,
+)
 
 from inventory.models import (
     Proveedor, Producto, Cliente, MovimientoInventario, OrdenVenta, SesionCaja,
@@ -3344,3 +3359,235 @@ class AnalisisIAPronosticoTestCase(APITestCase):
         self.client.force_authenticate(user=self.operador)
         r = self._analizar()
         self.assertEqual(r.status_code, 403)
+
+
+class RespaldoRestaurableTestCase(TestCase):
+    """El respaldo tiene que poder volver a levantar la base.
+
+    El volcado JSON anterior era solo datos: sin esquema, sin secuencias y sin
+    los disparadores. Restaurar desde él obligaba a reconstruir el esquema a
+    mano y reajustar cada contador — algo que nadie quiere descubrir con el
+    negocio parado. Estas pruebas cubren que el camino restaurable exista, que
+    se verifique, y sobre todo que **cuando no se puede, se diga**.
+
+    El ciclo completo de restauración (volcar, borrar la base, restaurar y
+    comprobar datos, disparadores y secuencias) se validó a mano contra un
+    Postgres 15 igual al de producción; acá no se repite porque haría falta
+    `pg_dump` instalado y una base desechable por prueba.
+    """
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+
+    def _correr(self, **extra):
+        """Corre el comando escribiendo en un directorio temporal."""
+        salida, errores = StringIO(), StringIO()
+        with patch.dict(os.environ, {'BACKUP_DIR': str(self.dir)}):
+            call_command('backup_db', '--sin-subir', stdout=salida,
+                         stderr=errores, **extra)
+        return salida.getvalue(), errores.getvalue()
+
+    # -- Disponibilidad: decir la verdad sobre qué respaldo se pudo hacer ------
+
+    def test_sin_pg_dump_avisa_como_instalarlo(self):
+        with patch('api.backup_pg.version_pg_dump', return_value=None):
+            ok, detalle = comprobar_disponible()
+        self.assertFalse(ok)
+        self.assertIn('postgresql-client', detalle)
+
+    def test_un_cliente_mas_viejo_que_el_servidor_se_rechaza(self):
+        """pg_dump se niega a volcar de un servidor más nuevo que él.
+
+        Es un error duro, no una advertencia: si el servidor se actualiza y el
+        contenedor queda con el cliente viejo, los respaldos dejan de salir. Vale
+        detectarlo con un mensaje que diga qué hacer.
+        """
+        with patch('api.backup_pg.version_pg_dump', return_value=15), \
+             patch('api.backup_pg.version_servidor', return_value=17):
+            ok, detalle = comprobar_disponible()
+
+        self.assertFalse(ok)
+        self.assertIn('Dockerfile', detalle)
+        self.assertIn('17', detalle)
+
+    def test_un_cliente_mas_nuevo_que_el_servidor_sirve(self):
+        """Al revés sí funciona, y es lo que hay en producción (cliente 17,
+        servidor 15): así el respaldo sobrevive a una actualización del servidor."""
+        with patch('api.backup_pg.version_pg_dump', return_value=17), \
+             patch('api.backup_pg.version_servidor', return_value=15):
+            ok, _ = comprobar_disponible()
+        self.assertTrue(ok)
+
+    # -- Verificación: un respaldo sin comprobar es una esperanza --------------
+
+    def test_un_archivo_corrupto_no_pasa_la_verificacion(self):
+        malo = self.dir / 'truncado.dump'
+        malo.write_bytes(b'PGDMP' + b'\x00' * 50)   # encabezado y nada más
+
+        ok, detalle = verificar_dump(malo)
+        self.assertFalse(ok)
+        self.assertTrue(detalle)
+
+    def test_un_archivo_que_no_existe_no_pasa_la_verificacion(self):
+        ok, _ = verificar_dump(self.dir / 'no-existe.dump')
+        self.assertFalse(ok)
+
+    def test_un_dump_que_falla_la_verificacion_se_descarta(self):
+        """No se guarda ni se sube un archivo que no se pudo leer: dejarlo daría
+        la impresión de que hay respaldo del día."""
+        def fingir_dump(destino):
+            Path(destino).write_bytes(b'basura')
+            return True, '1 KB'
+
+        with patch('api.backup_pg.comprobar_disponible', return_value=(True, 'ok')), \
+             patch('api.management.commands.backup_db.generar_dump',
+                   side_effect=fingir_dump), \
+             patch('api.management.commands.backup_db.verificar_dump',
+                   return_value=(False, 'archivo ilegible')):
+            salida, errores = self._correr()
+
+        self.assertIn('no pasó la verificación', errores)
+        self.assertEqual(list(self.dir.glob('*.dump')), [])
+        # Y como no hubo respaldo restaurable, cayó al JSON y lo dijo.
+        self.assertIn('NO restaura', errores)
+
+    # -- Qué queda fuera del respaldo -----------------------------------------
+
+    def test_los_tokens_de_sesion_quedan_fuera(self):
+        """Son credenciales de un momento que ya pasó: no sirven al restaurar y
+        su filtración permite entrar al sistema. Se encontraron tokens vigentes
+        en un respaldo público."""
+        self.assertIn('token_blacklist_outstandingtoken', TABLAS_EFIMERAS)
+        self.assertIn('token_blacklist_blacklistedtoken', TABLAS_EFIMERAS)
+        self.assertIn('django_session', TABLAS_EFIMERAS)
+
+    def test_los_usuarios_si_van_al_respaldo(self):
+        """Un respaldo donde nadie puede iniciar sesión no restaura el sistema.
+
+        A diferencia del volcado JSON, que los excluye porque de todos modos no
+        sirve para restaurar, acá el objetivo es volver a operar.
+        """
+        self.assertNotIn('auth_user', TABLAS_EFIMERAS)
+
+    def test_las_tablas_excluidas_se_le_pasan_a_pg_dump(self):
+        with patch('api.backup_pg.comprobar_disponible', return_value=(True, 'ok')), \
+             patch('api.backup_pg.subprocess.run') as correr:
+            correr.return_value = SimpleNamespace(returncode=0, stdout='', stderr='')
+            destino = self.dir / 'x.dump'
+            destino.write_bytes(b'contenido')
+            generar_dump(destino)
+
+        cmd = correr.call_args[0][0]
+        self.assertIn('-Fc', cmd)
+        for tabla in TABLAS_EFIMERAS:
+            self.assertIn(tabla, cmd)
+
+    # -- Seguridad de la ejecución --------------------------------------------
+
+    def test_la_contrasena_no_va_en_los_argumentos(self):
+        """Lo que se pasa por línea de comandos lo ve cualquier proceso con `ps`.
+
+        Se usa una contraseña inventada bien distinta: la de la base de tests es
+        "test", que aparece dentro del nombre de la base y de las rutas
+        temporales, así que buscarla daría un falso positivo.
+        """
+        secreta = 'clave-inventada-para-la-prueba-9z7x'
+        bases = {'default': {**settings.DATABASES['default'], 'PASSWORD': secreta}}
+
+        with patch('api.backup_pg.comprobar_disponible', return_value=(True, 'ok')), \
+             patch.dict('api.backup_pg.settings.DATABASES', bases), \
+             patch('api.backup_pg.subprocess.run') as correr:
+            correr.return_value = SimpleNamespace(returncode=0, stdout='', stderr='')
+            destino = self.dir / 'x.dump'
+            destino.write_bytes(b'contenido')
+            generar_dump(destino)
+
+        cmd = [str(a) for a in correr.call_args[0][0]]
+        entorno = correr.call_args[1]['env']
+
+        self.assertNotIn(secreta, ' '.join(cmd))
+        self.assertEqual(entorno.get('PGPASSWORD'), secreta)
+        # Y se le prohíbe pedirla por consola: en un cron nadie la va a escribir.
+        self.assertIn('--no-password', cmd)
+
+    def test_un_dump_vacio_se_reporta_como_falla(self):
+        """pg_dump puede terminar con código 0 y dejar un archivo de 0 bytes."""
+        with patch('api.backup_pg.comprobar_disponible', return_value=(True, 'ok')), \
+             patch('api.backup_pg.subprocess.run') as correr:
+            correr.return_value = SimpleNamespace(returncode=0, stdout='', stderr='')
+            destino = self.dir / 'vacio.dump'
+            destino.touch()
+            ok, detalle = generar_dump(destino)
+
+        self.assertFalse(ok)
+        self.assertIn('vacío', detalle)
+
+    # -- El camino de emergencia ----------------------------------------------
+
+    def test_sin_pg_dump_deja_el_json_pero_avisa_que_no_restaura(self):
+        """Mejor tener los datos que nada, pero no se puede dejar creer que hay
+        un respaldo completo: eso fue el problema original."""
+        with patch('api.backup_pg.version_pg_dump', return_value=None):
+            salida, errores = self._correr()
+
+        self.assertEqual(len(list(self.dir.glob('inventrix-backup-*.json'))), 1)
+        self.assertEqual(list(self.dir.glob('*.dump')), [])
+        self.assertIn('solo datos', salida)
+        self.assertIn('esquema', salida)
+        self.assertIn('NO restaura', errores)
+
+    def test_con_pg_dump_no_se_genera_el_json(self):
+        """Habiendo respaldo restaurable, el JSON solo ocuparía lugar."""
+        def fingir_dump(destino):
+            Path(destino).write_bytes(b'x' * 2048)
+            return True, '2 KB'
+
+        with patch('api.backup_pg.comprobar_disponible', return_value=(True, 'ok')), \
+             patch('api.management.commands.backup_db.generar_dump',
+                   side_effect=fingir_dump), \
+             patch('api.management.commands.backup_db.verificar_dump',
+                   return_value=(True, '200 objetos')):
+            salida, errores = self._correr()
+
+        self.assertEqual(len(list(self.dir.glob('*.dump'))), 1)
+        self.assertEqual(list(self.dir.glob('inventrix-backup-*.json')), [])
+        self.assertIn('Respaldo restaurable', salida)
+        self.assertNotIn('NO restaura', errores)
+
+    # -- Retención ------------------------------------------------------------
+
+    def test_la_retencion_cuenta_cada_formato_por_separado(self):
+        """Si se contaran juntos, una racha de respaldos JSON de emergencia
+        podría borrar el último `.dump` restaurable, que es el que hay que
+        conservar."""
+        for i in range(5):
+            (self.dir / f'inventrix-2026010{i}-000000.dump').write_bytes(b'x')
+            (self.dir / f'inventrix-backup-2026010{i}-000000.json').write_text('{}')
+
+        with patch('api.backup_pg.version_pg_dump', return_value=None):
+            self._correr(retener=3)
+
+        # El comando agrega un JSON más, así que quedan 3 de cada uno.
+        self.assertEqual(len(list(self.dir.glob('*.dump'))), 3)
+        self.assertEqual(len(list(self.dir.glob('inventrix-backup-*.json'))), 3)
+
+    def test_se_conservan_los_dumps_mas_recientes(self):
+        for dia in ('01', '02', '03'):
+            (self.dir / f'inventrix-202601{dia}-000000.dump').write_bytes(b'x')
+
+        with patch('api.backup_pg.version_pg_dump', return_value=None):
+            self._correr(retener=1)
+
+        quedan = [p.name for p in self.dir.glob('*.dump')]
+        self.assertEqual(quedan, ['inventrix-20260103-000000.dump'])
+
+    def test_el_nombre_del_dump_ordena_cronologicamente(self):
+        """La retención ordena por nombre, así que el nombre tiene que ordenar
+        igual que la fecha."""
+        temprano = nombre_dump(_datetime(2026, 1, 5, 9, 0, 0))
+        tarde = nombre_dump(_datetime(2026, 11, 5, 9, 0, 0))
+        self.assertLess(temprano, tarde)
+        self.assertTrue(tarde.endswith('.dump'))
+
+

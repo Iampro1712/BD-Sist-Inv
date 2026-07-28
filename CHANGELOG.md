@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.10.0-4F46E5?style=flat-square)](#1100---2026-07-27)
+[![Version](https://img.shields.io/badge/version-1.11.0-4F46E5?style=flat-square)](#1110---2026-07-28)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,24 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.11.0] - 2026-07-28
+
+### Fixed
+
+- **El respaldo automático no podía restaurar la base.** Era un volcado de solo datos: sin el esquema, sin las secuencias de los contadores y sin las funciones ni disparadores. Medido sobre esta base quedaban afuera **4 disparadores, 9 funciones y 30 secuencias**, entre ellos el de auditoría de productos. Restaurar obligaba a reconstruir el esquema a mano desde el repositorio y reajustar cada contador — el tipo de sorpresa que aparece justo cuando el negocio está parado. Ahora usa `pg_dump` en formato comprimido y **un solo comando devuelve la base completa**.
+- **Cada respaldo se verifica al crearse.** El sistema lee el índice del archivo recién generado; si no pasa la comprobación lo descarta y avisa, en vez de dejar guardado un archivo ilegible que aparente ser el respaldo del día. Un respaldo que nunca se probó es una esperanza, no un respaldo.
+- **Si no se puede hacer un respaldo restaurable, se dice.** Cuando falta `pg_dump` el sistema cae al volcado de solo datos, pero lo declara con todas las letras en la salida —incluso repitiéndolo al final— en vez de dejar creer que hay copia completa. También detecta el caso en que el servidor de base de datos se actualizó y quedó más nuevo que la herramienta de respaldo, e indica qué hay que corregir.
+- **La retención cuenta cada formato por separado**, para que una racha de respaldos de emergencia no pueda desplazar al último respaldo restaurable, que es justo el que conviene conservar.
+- **La contraseña de la base ya no viaja en la línea de comandos** al respaldar: se pasa por variable de entorno, porque los argumentos de un proceso son visibles para cualquier otro proceso de la máquina.
+- **`RESPALDOS.md` documenta el procedimiento de restauración completo**: cómo descifrar el archivo, restaurarlo, y qué consultar para confirmar que salió bien. Incluye un aviso sobre un mensaje de error inofensivo que aparece al restaurar, para que nadie lo confunda con una falla.
+
+### Changed
+
+- Los respaldos ahora incluyen los usuarios del sistema: sin ellos la base restaurada no dejaría iniciar sesión a nadie, o sea que no restauraría el sistema. Siguen quedando fuera las tablas de tokens de sesión, que no sirven para restaurar y cuya filtración fue el origen del incidente de 1.9.0.
+- La imagen del backend incluye `postgresql-client`, que es lo que provee las herramientas de respaldo y restauración.
 
 ---
 
