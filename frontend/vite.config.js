@@ -1,9 +1,19 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+// La versión sale de package.json y se inyecta en el bundle. Una sola fuente de
+// verdad: al subir la versión para un release no hay que acordarse de tocar
+// además un archivo del frontend, que es como se termina mostrando un número
+// viejo en pantalla.
+const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'))
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   plugins: [
     react(),
     tailwindcss(),

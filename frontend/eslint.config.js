@@ -17,7 +17,12 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        // Lo inyecta Vite en tiempo de build desde package.json
+        // (ver `define` en vite.config.js).
+        __APP_VERSION__: 'readonly',
+      },
     },
   },
 ])

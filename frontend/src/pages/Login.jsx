@@ -168,8 +168,11 @@ const Login = () => {
           </form>
         </Card>
 
+        {/* La versión también acá: es la pantalla donde alguien se queda si no
+            puede entrar, y saber qué build está viendo es lo primero que hace
+            falta para diagnosticarlo. */}
         <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-4">
-          Inventrix · Hecho con ❤
+          Inventrix <span className="font-mono">v{__APP_VERSION__}</span> · Hecho con ❤
         </p>
       </motion.div>
     </div>

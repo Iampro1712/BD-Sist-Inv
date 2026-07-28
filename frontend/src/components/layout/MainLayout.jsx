@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import Navbar from './Navbar'
 import BottomNav from './BottomNav'
+import VersionFooter from './VersionFooter'
 import { ToastContainer } from '../ui/Toast'
 import useToastStore from '../../hooks/useToast'
 import ScrollToTop from '../ScrollToTop'
@@ -18,8 +19,14 @@ const MainLayout = () => {
       <Navbar />
 
       {/* Main Content - Add bottom padding for mobile nav */}
-      <div className="container mx-auto px-4 py-8 pb-20 lg:pb-8">
+      <div className="container mx-auto px-4 py-8 pb-4 lg:pb-8">
         <Outlet />
+      </div>
+
+      {/* Versión del sistema. El margen inferior en móvil deja espacio para la
+          barra de navegación fija, que si no lo taparía. */}
+      <div className="pb-20 lg:pb-0">
+        <VersionFooter />
       </div>
 
       {/* Bottom Navigation for Mobile */}
