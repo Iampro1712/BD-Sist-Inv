@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.11.3-4F46E5?style=flat-square)](#1113---2026-07-28)
+[![Version](https://img.shields.io/badge/version-1.11.4-4F46E5?style=flat-square)](#1114---2026-08-02)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,19 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.11.4] - 2026-08-02
+
+Tres fallos del registro de ventas, encontrados al portar la lógica de la venta a la nueva aplicación de escritorio.
+
+### Fixed
+
+- **No se podían vender productos con centavos en el precio.** La columna donde se guarda el precio de cada línea vendida sólo admite números enteros, y el punto de venta enviaba el precio con decimales tal como está en el catálogo. La venta se cortaba con un error de servidor y no quedaba registrada. Afectaba a cualquier producto cuyo precio no fuera redondo: en el catálogo actual, el aceite Castrol 20W50 a C$402.50 no se podía vender. Ahora el precio se redondea al córdoba más cercano al guardar la línea y la venta se completa.
+- **Vender el mismo producto en dos líneas del carrito daba un error de servidor.** Sólo puede existir una línea por producto en cada venta, así que al intentar grabar la segunda la venta fallaba entera. Ocurría al escanear dos veces el mismo artículo en lugar de subir la cantidad. Ahora las líneas repetidas se suman en una sola, con la cantidad total.
+- **Una venta podía quedar registrada y cobrada pero sin garantía.** Las garantías se generaban después de confirmar la venta, fuera de la operación protegida: si algo fallaba en ese último paso, la venta y el descuento de inventario ya estaban guardados y no había vuelta atrás. El cliente se llevaba el producto sin cobertura y el sistema no dejaba ninguna señal de que faltaba. Ahora la garantía se crea junto con la venta: o se guarda todo, o no se guarda nada.
+- **La garantía de un producto repetido en el carrito se emitía por la cantidad equivocada.** Se creaba una garantía por cada línea en vez de una sola por el total, dejando registros duplicados y con cantidades parciales para una misma compra.
 
 ---
 

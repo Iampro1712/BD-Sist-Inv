@@ -283,6 +283,36 @@ Inventrix nació observando las dificultades que enfrentan los negocios locales 
 </tr>
 </table>
 
+### 🖥️ Aplicación de Escritorio ![alpha](https://img.shields.io/badge/estado-alpha-red?style=flat-square)
+
+> **⚠️ En alpha.** Funciona y está probada, pero todavía no tiene rodaje en uso real.
+> Como escribe sobre la misma base de datos que la web, conviene probarla contra una
+> copia y mantener la web como sistema principal por ahora.
+
+Además de la aplicación web, existe **Inventrix Desktop**: un cliente nativo de escritorio
+para Windows, escrito en Java, pensado para el mostrador del taller.
+
+```
+☕ Java 21 (Temurin)
+🖼️ JavaFX 21 + AtlantaFX
+🔌 JDBC directo a PostgreSQL (sin API intermedia)
+🏊 HikariCP (pool de conexiones)
+📦 jpackage (ejecutable con runtime embebida)
+```
+
+Se conecta **a la misma base de datos** que la web, así que los datos son los mismos y en
+tiempo real: una venta hecha en el mostrador aparece de inmediato en la web, y al revés.
+Reimplementa la verificación de contraseñas de Django y el cifrado de datos de contacto
+para ser compatible bit a bit con lo que guarda el backend.
+
+Cubre el núcleo operativo: inventario, punto de venta, clientes, proveedores y órdenes de
+compra. No requiere navegador, ni que el backend esté levantado, ni tener Java instalado en
+la máquina (la runtime va dentro del ejecutable). Taller, cotizaciones, devoluciones, caja,
+gastos y reportes siguen siendo exclusivos de la web.
+
+Vive en su propio repositorio y lleva su **changelog independiente**, porque su ciclo de
+versiones no va atado al de la web.
+
 ### 🏛️ Arquitectura del Sistema
 
 ```

@@ -2,7 +2,7 @@
 Serializers para la API de Inventrix
 """
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from rest_framework import serializers
 from django.db import connection, models
@@ -804,8 +804,15 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         {'detalles': 'El precio unitario no puede ser negativo'}
                     )
+                # `producto_venta` tiene PK (id_venta, id_producto): sólo cabe una
+                # fila por producto. Las líneas repetidas se acumulan aquí, y el
+                # subtotal se arrastra para poder repartir el precio después.
+                precio_unitario = Decimal(str(detalle.get('precio_unitario', 0)))
+                subtotal = precio_unitario * cantidad
+
                 if producto_id in productos_bloqueados:
                     productos_bloqueados[producto_id]['cantidad'] += cantidad
+                    productos_bloqueados[producto_id]['subtotal'] += subtotal
                     continue
                 try:
                     producto = Producto.objects.select_for_update().get(pk=producto_id)
@@ -813,7 +820,11 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         {'detalles': f'El producto {producto_id} no existe'}
                     )
-                productos_bloqueados[producto_id] = {'producto': producto, 'cantidad': cantidad}
+                productos_bloqueados[producto_id] = {
+                    'producto': producto,
+                    'cantidad': cantidad,
+                    'subtotal': subtotal,
+                }
 
             for info in productos_bloqueados.values():
                 if info['producto'].cantidad_actual < info['cantidad']:
@@ -837,9 +848,17 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                 ])
                 id_venta = cursor.fetchone()[0]
 
-                for detalle in detalles_data:
-                    producto_id = detalle['producto']
-                    cantidad = int(detalle['cantidad'])
+                # Se recorre lo ya agregado, no `detalles_data`: si el mismo
+                # producto venía en dos líneas, aquí es una sola con la cantidad
+                # sumada. Insertarlo dos veces violaría la PK de producto_venta.
+                for producto_id, info in productos_bloqueados.items():
+                    cantidad = info['cantidad']
+                    # `producto_venta.precio_unitario` es una columna entera, así
+                    # que un precio con centavos hay que redondearlo: mandarlo tal
+                    # cual aborta la venta con un error de tipo de PostgreSQL.
+                    precio_unitario = int(
+                        (info['subtotal'] / cantidad).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+                    )
                     cursor.execute("""
                         INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
                         VALUES (%s, %s, %s, %s)
@@ -847,7 +866,7 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                         id_venta,
                         producto_id,
                         cantidad,
-                        detalle['precio_unitario']
+                        precio_unitario
                     ])
                     # Descontar stock y dejar rastro en movimientos_inventario
                     cursor.execute(
@@ -860,24 +879,24 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                         VALUES (%s, 'SALIDA', %s, NOW(), %s, 'ORDEN_VENTA', %s)
                     """, [producto_id, cantidad, f'VENTA-{id_venta}', f'Venta #{id_venta}'])
 
-        # Auto-crear garantías para productos que las tengan
-        fecha_venta = validated_data['fecha']
-        id_cliente = validated_data['id_cliente']
-        for detalle in detalles_data:
-            try:
-                producto = Producto.objects.get(pk=detalle['producto'])
+            # Las garantías van DENTRO de la transacción. Si se crean después del
+            # commit y algo falla, la venta queda cobrada y el stock descontado
+            # pero sin garantía, y el cliente se queda sin cobertura sin que nadie
+            # se entere.
+            fecha_venta = validated_data['fecha']
+            id_cliente = validated_data['id_cliente']
+            for producto_id, info in productos_bloqueados.items():
+                producto = info['producto']
                 if producto.meses_garantia and producto.meses_garantia > 0:
                     Garantia.objects.create(
                         id_producto=producto,
                         id_venta=id_venta,
                         id_cliente=id_cliente,
-                        cantidad=detalle.get('cantidad', 1),
+                        cantidad=info['cantidad'],
                         fecha_inicio=fecha_venta,
                         fecha_fin=sumar_meses(fecha_venta, producto.meses_garantia),
                         estado='activa',
                     )
-            except Producto.DoesNotExist:
-                pass
 
         orden = OrdenVenta.objects.get(id_venta=id_venta)
         # `saldo_pendiente` es nullable y el INSERT crudo de arriba no lo setea.
