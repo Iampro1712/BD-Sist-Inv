@@ -16,6 +16,7 @@ from .views import (
     ConfiguracionIAViewSet,
 )
 from .auth_views import LoginView, logout_view, me_view
+from .actualizaciones_views import version_escritorio, descargar_escritorio
 from rest_framework_simplejwt.views import TokenRefreshView
 from .reportes_views import (
     reporte_inventario,
@@ -104,4 +105,10 @@ urlpatterns = [
     path('reportes/mantenimiento-preventivo/', reporte_mantenimiento_preventivo,
          name='reporte-mantenimiento-preventivo'),
     path('backup/', exportar_backup, name='backup'),
+
+    # Actualizaciones de la app de escritorio. Son los únicos endpoints públicos
+    # del API: la app necesita poder actualizarse antes de que nadie inicie
+    # sesión. Ver la justificación completa en api/actualizaciones_views.py.
+    path('desktop/version/', version_escritorio, name='desktop-version'),
+    path('desktop/descargar/', descargar_escritorio, name='desktop-descargar'),
 ]

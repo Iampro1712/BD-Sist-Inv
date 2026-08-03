@@ -169,6 +169,20 @@ else:
     }
 
 
+# Actualizaciones de la app de escritorio (Inventrix Desktop)
+#
+# El repositorio del escritorio es privado, así que la app no puede consultar
+# GitHub directamente (tendría que llevar el token dentro del ejecutable). El
+# backend hace de intermediario: el token se queda aquí y la app sólo habla con
+# este servidor. Ver api/actualizaciones_views.py.
+#
+# Token recomendado: fine-grained, permiso Contents de sólo lectura, limitado a
+# ese único repositorio. Si falta, los endpoints responden 503 con un mensaje
+# claro en vez de fallar de forma opaca.
+GITHUB_DESKTOP_REPO = os.getenv('GITHUB_DESKTOP_REPO', '')
+GITHUB_DESKTOP_TOKEN = os.getenv('GITHUB_DESKTOP_TOKEN', '')
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -251,6 +265,10 @@ REST_FRAMEWORK = {
         # del dashboard (varias insights en paralelo) pero acota abuso.
         'user': '500/min',
         'login': '5/min',
+        # Actualizaciones de la app de escritorio: scope propio para que los
+        # equipos del taller comprobando versión no consuman la cuota anónima
+        # (ni al revés). La respuesta va cacheada 15 min, así que sobra.
+        'desktop_version': '20/min',
     },
 }
 

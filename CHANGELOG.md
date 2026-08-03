@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.11.4-4F46E5?style=flat-square)](#1114---2026-08-02)
+[![Version](https://img.shields.io/badge/version-1.12.0-4F46E5?style=flat-square)](#1120---2026-08-03)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,38 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.12.0] - 2026-08-03
+
+### Added
+
+- **El servidor ahora distribuye las actualizaciones de la aplicación de
+  escritorio.** Dos endpoints nuevos, `/api/desktop/version/` y
+  `/api/desktop/descargar/`, le dicen a la app de escritorio si hay una versión
+  más nueva y de dónde bajarla. Antes había que copiar el programa a mano en cada
+  equipo del taller; ahora los equipos se actualizan solos.
+
+  El repositorio de la aplicación de escritorio es privado, así que el servidor
+  hace de intermediario: guarda la credencial de acceso y la app no necesita
+  llevar ninguna dentro. Eso evita que alguien que examine el ejecutable pueda
+  acceder al código fuente.
+
+  Estos son los **primeros endpoints públicos** del sistema (el resto exige
+  iniciar sesión). Es deliberado: la app tiene que poder actualizarse aunque el
+  fallo a corregir esté en el propio inicio de sesión. No reciben datos, no tocan
+  la base de datos, y sólo informan de que existe una versión X del programa.
+  Tienen su propio límite de peticiones y la respuesta se guarda en caché 15
+  minutos.
+
+### Notas de configuración
+
+- Requiere dos variables nuevas en el `.env` del servidor:
+  `GITHUB_DESKTOP_REPO` y `GITHUB_DESKTOP_TOKEN` (documentadas en
+  `.env.example`). Sin ellas los endpoints responden que no hay versiones
+  publicadas y la app simplemente no busca actualizaciones: nada más se ve
+  afectado.
 
 ---
 
