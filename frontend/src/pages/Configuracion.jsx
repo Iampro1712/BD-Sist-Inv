@@ -9,21 +9,10 @@ import {
   useGuardarIA, useActivarIA, useProbarIA, useEliminarIA,
 } from '../hooks/useConfiguracionIA'
 import ProveedorIAForm from '../components/forms/ProveedorIAForm'
+import { extraerMensajeError } from '../utils/errores'
 
 const lista = (data) => (Array.isArray(data) ? data : data?.results || [])
 
-const extraerMensajeError = (err, fallback) => {
-  const data = err.response?.data
-  const details = data?.error?.details
-  if (details && typeof details === 'object') {
-    const primero = Object.values(details)[0]
-    if (primero) return Array.isArray(primero) ? primero[0] : primero
-  }
-  const message = data?.error?.message
-  if (typeof message === 'string') return message
-  if (typeof data?.error === 'string') return data.error
-  return fallback
-}
 
 const formatFecha = (iso) =>
   iso ? new Date(iso).toLocaleString('es-NI', { dateStyle: 'medium', timeStyle: 'short' }) : '—'

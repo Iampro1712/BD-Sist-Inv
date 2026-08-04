@@ -3,6 +3,7 @@ import { Button } from '../ui'
 import { useImportarProductos } from '../../hooks/useProductos'
 import { useToast } from '../../hooks/useToast'
 import { parseProductosFile, descargarPlantillaProductos } from '../../utils/importProductos'
+import { extraerMensajeError } from '../../utils/errores'
 
 const ImportarProductosModal = ({ onClose }) => {
   const [filas, setFilas] = useState([])
@@ -38,7 +39,7 @@ const ImportarProductosModal = ({ onClose }) => {
       setResultado(res.data)
       toast.success(`Importación: ${res.data.creados} creados, ${res.data.actualizados} actualizados`)
     } catch (err) {
-      toast.error(err.response?.data?.error || err.message || 'Error al importar')
+      toast.error(extraerMensajeError(err, 'Error al importar'))
     }
   }
 

@@ -8,20 +8,11 @@ import { useToast } from '../../hooks/useToast'
 import { Button, Modal, ConfirmDialog } from '../ui'
 import PagoForm from '../forms/PagoForm'
 import { generarReciboVentaPDF, generarReciboPagoPDF } from '../../utils/exportReportes'
+import { extraerMensajeError } from '../../utils/errores'
 
 // Extrae el primer mensaje de error legible de la respuesta del backend
 // (custom_exception_handler anida los detalles en error.details.<campo>,
 // como string o como array según el validador que lo haya lanzado).
-const extraerMensajeError = (err, fallback) => {
-  const details = err.response?.data?.error?.details
-  if (details && typeof details === 'object') {
-    const primero = Object.values(details)[0]
-    if (primero) return Array.isArray(primero) ? primero[0] : primero
-  }
-  const message = err.response?.data?.error?.message
-  if (typeof message === 'string') return message
-  return fallback
-}
 
 const OrdenVentaDetalle = ({ orden }) => {
   const [isPagoModalOpen, setIsPagoModalOpen] = useState(false)

@@ -4,6 +4,7 @@ import { fadeIn, staggerContainer } from '../utils/animations'
 import { Button, Card, Loader, Combobox } from '../components/ui'
 import { useToast } from '../hooks/useToast'
 import { usePronosticoDemanda, useAnalisisIAPronostico } from '../hooks/useReportes'
+import { extraerMensajeError } from '../utils/errores'
 
 const formatCurrency = (v) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
@@ -61,7 +62,7 @@ const PronosticoDemanda = () => {
       {
         onSuccess: (res) => toast.success(`Análisis de ${res.proveedor} listo`),
         onError: (err) => toast.error(
-          err.response?.data?.error || 'No se pudo obtener el análisis'),
+          extraerMensajeError(err, 'No se pudo obtener el análisis')),
       })
   }
 
@@ -206,7 +207,7 @@ const PronosticoDemanda = () => {
 
         {analisis.isError && (
           <p className="mt-3 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
-            {analisis.error?.response?.data?.error || 'No se pudo obtener el análisis.'}
+            {extraerMensajeError(analisis.error, 'No se pudo obtener el análisis.')}
             {' '}El pronóstico de arriba no se ve afectado.
           </p>
         )}

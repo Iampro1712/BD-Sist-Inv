@@ -24,6 +24,7 @@ proyecto: el resto del API exige JWT. Se justifica porque:
 import json
 import logging
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from django.conf import settings
@@ -43,7 +44,116 @@ logger = logging.getLogger(__name__)
 CACHE_TTL_SEGUNDOS = 15 * 60
 CACHE_CLAVE = 'desktop:ultima_version'
 
+# El release crudo de GitHub, compartido por las dos vistas. Sin esto,
+# /descargar/ pedía a GitHub en **cada** petición: como es un endpoint público,
+# bastaba con llamarlo en bucle para agotar la cuota del token (y dejar sin
+# actualizaciones a todo el taller) y, peor, para ocupar un worker de Gunicorn
+# durante hasta 20 s por petición, tumbando la API entera —caja y POS incluidos—
+# sin necesidad de credenciales.
+CACHE_CLAVE_RELEASE = 'desktop:release_crudo'
+
+# La URL firmada que devuelve GitHub es temporal. Se cachea poco: lo justo para
+# que una ráfaga de descargas no se traduzca en una ráfaga de llamadas salientes,
+# pero no tanto como para entregar un enlace ya vencido.
+CACHE_TTL_DESCARGA = 5 * 60
+CACHE_CLAVE_DESCARGA = 'desktop:url_descarga'
+
 TIMEOUT_GITHUB = 10
+
+# Sólo se redirige a GitHub y por HTTPS. El `Location` viene de una respuesta
+# ajena, y es lo único que separa a los equipos del taller de descargar un
+# ejecutable de donde sea; se valida antes de reenviarlo.
+HOSTS_DESCARGA_PERMITIDOS = (
+    'github.com',
+    'objects.githubusercontent.com',
+    'release-assets.githubusercontent.com',
+)
+
+
+def _destino_confiable(url):
+    """¿Es `url` una descarga de GitHub por HTTPS?"""
+    try:
+        partes = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
+    if partes.scheme != 'https':
+        return False
+    host = (partes.hostname or '').lower()
+    return host in HOSTS_DESCARGA_PERMITIDOS or host.endswith('.githubusercontent.com')
+
+
+# Las notas de cada release en este proyecto se redactan a partir del propio
+# CHANGELOG (ver ejemplos en CHANGELOG.md: "auditoría de seguridad", "el
+# reporte de compras calculaba mal el total", "lo que se le debe a un
+# proveedor ya no se le muestra a los vendedores"...). Ese nivel de detalle es
+# justo lo que un atacante necesita para apuntar contra los equipos que
+# todavía no se actualizaron: el endpoint es público y el repo del que salen
+# es privado a propósito.
+#
+# No se puede distinguir automáticamente "arreglé un bug" de "arreglé una
+# vulnerabilidad" con certeza, así que se filtra con un criterio amplio y
+# deliberadamente conservador: cualquier sección o línea que toque seguridad,
+# permisos o datos sensibles se cae entera antes de salir del servidor. Mejor
+# perder una nota inofensiva que dejar pasar una que no lo era.
+_PALABRAS_SENSIBLES = (
+    'seguridad', 'vulnerab', 'cve', 'exploit', 'hallazgo', 'auditor',
+    'credencial', 'contraseñ', 'contrasen', 'secreto', 'fuga', 'ataque',
+    'backdoor', 'inyecci', 'csrf', 'xss', 'token', 'brecha', 'permiso',
+    'autenticaci', 'autorizaci', 'privileg', 'expone', 'exponía', 'filtra',
+)
+
+_ENCABEZADOS_SENSIBLES = ('security', 'seguridad')
+
+# Mensaje único para todo fallo al resolver la última versión.
+#
+# Estos endpoints son públicos, así que el texto de error es información que se
+# regala. Distinguir "el token no sirve" de "GitHub no responde" de "falta
+# configurar" le dibuja a cualquiera dónde vive el binario y en qué estado está
+# la credencial del servidor — y el estado de la credencial es justamente lo que
+# tantea quien busca una ventana. El detalle real va al log, que es donde le
+# sirve a quien opera el sistema.
+ERROR_GENERICO = 'No se pudo comprobar si hay actualizaciones en este momento.'
+
+
+def _sanear_notas(texto):
+    """Filtra de las notas de release cualquier cosa con sabor a seguridad.
+
+    Trabaja por bloques (separados por encabezados markdown "### ..."): un
+    bloque cuyo encabezado sea de seguridad se descarta entero. Dentro de los
+    bloques que quedan, se descarta línea por línea cualquiera que toque una
+    palabra sensible, aunque no esté bajo ese encabezado (el CHANGELOG de este
+    proyecto mezcla texto introductorio con detalle de la corrección, sin
+    encabezado propio, en varias versiones).
+    """
+    if not texto:
+        return ''
+
+    bloques = []
+    actual = []
+    for linea in texto.splitlines():
+        if linea.strip().startswith('#'):
+            if actual:
+                bloques.append(actual)
+            actual = [linea]
+        else:
+            actual.append(linea)
+    if actual:
+        bloques.append(actual)
+
+    salida = []
+    for bloque in bloques:
+        encabezado = bloque[0].strip().lstrip('#').strip().lower()
+        if any(p in encabezado for p in _ENCABEZADOS_SENSIBLES):
+            continue
+        for linea in bloque:
+            if any(p in linea.lower() for p in _PALABRAS_SENSIBLES):
+                continue
+            salida.append(linea)
+
+    resultado = '\n'.join(salida).strip()
+    if not resultado:
+        return 'Mejoras y correcciones.'
+    return resultado
 
 
 class ActualizacionThrottle(ScopedRateThrottle):
@@ -60,10 +170,11 @@ def _pedir_a_github(ruta):
     repo = getattr(settings, 'GITHUB_DESKTOP_REPO', '')
 
     if not token or not repo:
-        return None, (
-            'El servidor no tiene configurada la publicación de actualizaciones '
-            '(faltan GITHUB_DESKTOP_TOKEN o GITHUB_DESKTOP_REPO).'
+        logger.error(
+            'Actualizaciones sin configurar: faltan GITHUB_DESKTOP_TOKEN o '
+            'GITHUB_DESKTOP_REPO.'
         )
+        return None, ERROR_GENERICO
 
     url = f'https://api.github.com/repos/{repo}{ruta}'
     peticion = urllib.request.Request(url, headers={
@@ -78,19 +189,42 @@ def _pedir_a_github(ruta):
             return json.loads(resp.read().decode('utf-8')), None
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            # Repo sin releases todavía, o el token no alcanza a verlo.
-            return None, 'Todavía no hay ninguna versión publicada.'
+            # Repo sin releases todavía, o el token no alcanza a verlo. Son dos
+            # causas distintas para el operador (y por eso van al log separadas)
+            # pero para quien llama significan lo mismo: no hay nada que bajar.
+            logger.info('GitHub devolvió 404 al pedir %s (¿sin releases?)', ruta)
+            return None, 'No hay versiones publicadas todavía.'
         if e.code in (401, 403):
             logger.error('GitHub rechazó el token de actualizaciones (HTTP %s)', e.code)
-            return None, 'El servidor no pudo autenticarse contra GitHub.'
+            return None, ERROR_GENERICO
         logger.error('GitHub respondió HTTP %s al pedir %s', e.code, ruta)
-        return None, 'GitHub devolvió un error al consultar la última versión.'
+        return None, ERROR_GENERICO
     except (urllib.error.URLError, TimeoutError) as e:
         logger.warning('No se pudo contactar con GitHub: %s', e)
-        return None, 'No se pudo contactar con GitHub.'
+        return None, ERROR_GENERICO
     except json.JSONDecodeError:
         logger.error('GitHub devolvió una respuesta no JSON al pedir %s', ruta)
-        return None, 'GitHub devolvió una respuesta inesperada.'
+        return None, ERROR_GENERICO
+
+
+def _release_mas_reciente():
+    """El último release, cacheado, para no llamar a GitHub en cada petición.
+
+    Lo usan las dos vistas: una release cambia una vez cada varios días, así que
+    servir la copia cacheada es tan correcto como preguntar, y deja de convertir
+    un endpoint público en un amplificador contra la cuota de GitHub y contra los
+    workers del propio servidor.
+    """
+    cacheado = cache.get(CACHE_CLAVE_RELEASE)
+    if cacheado is not None:
+        return cacheado, None
+
+    datos, error = _pedir_a_github('/releases/latest')
+    if error:
+        return None, error
+
+    cache.set(CACHE_CLAVE_RELEASE, datos, CACHE_TTL_SEGUNDOS)
+    return datos, None
 
 
 def _elegir_instalador(assets):
@@ -156,15 +290,16 @@ def version_escritorio(request):
     if cacheado is not None:
         return Response(cacheado)
 
-    datos, error = _pedir_a_github('/releases/latest')
+    datos, error = _release_mas_reciente()
     if error:
         return Response({'detail': error}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     assets = datos.get('assets') or []
     instalador = _elegir_instalador(assets)
     if not instalador:
+        logger.error('El release publicado no trae ningún .exe/.msi adjunto.')
         return Response(
-            {'detail': 'La última versión publicada no incluye un instalador para Windows.'},
+            {'detail': ERROR_GENERICO},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
@@ -173,7 +308,7 @@ def version_escritorio(request):
 
     respuesta = {
         'version': etiqueta,
-        'notas': datos.get('body') or '',
+        'notas': _sanear_notas(datos.get('body') or ''),
         'url_descarga': request.build_absolute_uri('/api/desktop/descargar/'),
         'nombre_archivo': instalador.get('name'),
         'tamano': instalador.get('size'),
@@ -198,14 +333,23 @@ def descargar_escritorio(request):
     proxy del contenido: el instalador pesa ~160 MB y transmitirlo por Django
     ocuparía un worker de Gunicorn durante toda la descarga.
     """
-    datos, error = _pedir_a_github('/releases/latest')
+    # Si ya se resolvió hace poco, se reenvía el mismo enlace firmado sin volver
+    # a molestar a GitHub. Se revalida igual que un destino recién obtenido: es
+    # el mismo dato cruzando la misma frontera de confianza, sólo que llegó por
+    # caché en vez de por la respuesta de GitHub.
+    url_cacheada = cache.get(CACHE_CLAVE_DESCARGA)
+    if url_cacheada and _destino_confiable(url_cacheada):
+        return redirect(url_cacheada)
+
+    datos, error = _release_mas_reciente()
     if error:
         return Response({'detail': error}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     instalador = _elegir_instalador(datos.get('assets') or [])
     if not instalador:
+        logger.error('El release publicado no trae ningún .exe/.msi adjunto.')
         return Response(
-            {'detail': 'La última versión publicada no incluye un instalador para Windows.'},
+            {'detail': ERROR_GENERICO},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
@@ -214,8 +358,9 @@ def descargar_escritorio(request):
     # firmada y temporal; esa es la que se le pasa a la app.
     url_asset = instalador.get('url')
     if not url_asset:
+        logger.error('El asset del release no expone una URL utilizable.')
         return Response(
-            {'detail': 'El release no expone una URL de descarga utilizable.'},
+            {'detail': ERROR_GENERICO},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
@@ -236,21 +381,30 @@ def descargar_escritorio(request):
             # reenviar sin hacer de proxy, así que se avisa en vez de colgarse.
             logger.warning('GitHub sirvió el asset sin redirección (HTTP %s)', resp.status)
             return Response(
-                {'detail': 'GitHub no devolvió una URL de descarga redirigible.'},
+                {'detail': ERROR_GENERICO},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
     except urllib.error.HTTPError as e:
         destino = e.headers.get('Location') if e.code in (301, 302, 303, 307, 308) else None
         if destino:
+            if not _destino_confiable(destino):
+                logger.error(
+                    'GitHub redirigió a un destino no permitido; no se reenvía.'
+                )
+                return Response(
+                    {'detail': ERROR_GENERICO},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            cache.set(CACHE_CLAVE_DESCARGA, destino, CACHE_TTL_DESCARGA)
             return redirect(destino)
         logger.error('GitHub respondió HTTP %s al pedir el instalador', e.code)
         return Response(
-            {'detail': 'No se pudo obtener el enlace de descarga desde GitHub.'},
+            {'detail': ERROR_GENERICO},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
     except (urllib.error.URLError, TimeoutError) as e:
         logger.warning('No se pudo contactar con GitHub para descargar: %s', e)
         return Response(
-            {'detail': 'No se pudo contactar con GitHub.'},
+            {'detail': ERROR_GENERICO},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )

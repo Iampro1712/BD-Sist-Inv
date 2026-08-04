@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from rest_framework.exceptions import APIException
 from rest_framework import status
+from rest_framework.settings import api_settings
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,17 @@ class AuditoriaUsuarioMiddleware:
     def _resolver_ip(self, request):
         adelantada = request.META.get('HTTP_X_FORWARDED_FOR')
         if adelantada:
-            # El primero de la cadena es el cliente real (Traefik agrega los suyos).
-            return adelantada.split(',')[0].strip()
+            # Se toma la **última** entrada, no la primera: la cadena la manda el
+            # cliente y el proxy sólo le añade lo que él mismo observó. Leyendo
+            # la primera, cualquiera podía escribir la IP que quisiera y el log
+            # de auditoría atribuía el cambio a una dirección inventada.
+            #
+            # Cuántas entrantes descartar depende de cuántos proxies haya
+            # delante; se usa el mismo valor que DRF para el throttling.
+            partes = [p.strip() for p in adelantada.split(',') if p.strip()]
+            if partes:
+                proxies = api_settings.NUM_PROXIES or 1
+                return partes[-min(proxies, len(partes))]
         return request.META.get('REMOTE_ADDR')
 
 

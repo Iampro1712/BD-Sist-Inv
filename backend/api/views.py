@@ -105,8 +105,18 @@ class ProveedorViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def ordenes(self, request, pk=None):
         proveedor = self.get_object()
-        ordenes = OrdenCompra.objects.filter(id_proveedor=proveedor).order_by('-fecha')
-        serializer = OrdenCompraListSerializer(ordenes, many=True)
+        # Dos fallos encadenados hacían que esto respondiera 500 siempre:
+        #
+        # 1. `OrdenCompra.id_proveedor` es un IntegerField pelado, no una clave
+        #    foránea, así que hay que filtrar por el id y no por la instancia.
+        # 2. `fecha` no existe en el modelo; la columna es `fecha_creacion`.
+        ordenes = OrdenCompra.objects.filter(
+            id_proveedor=proveedor.id_proveedor).order_by('-fecha_creacion')
+        # El context es obligatorio: `CamposSoloAdminMixin` lo usa para decidir
+        # si oculta los montos, y sin él da por hecho que quien pregunta es
+        # admin. El 500 venía tapando esta fuga.
+        serializer = OrdenCompraListSerializer(
+            ordenes, many=True, context=self.get_serializer_context())
         return Response(serializer.data)
 
 
@@ -1868,6 +1878,21 @@ class CotizacionViewSet(viewsets.ModelViewSet):
             if cot.estado == 'convertida' or cot.id_venta:
                 raise DRFValidationError(
                     {'error': 'Esta cotización ya fue convertida en venta'})
+
+            # Un presupuesto de reparación aprobado YA sacó sus repuestos del
+            # inventario: lo hizo `_cargar_presupuesto_en_orden` al aprobarlo, y
+            # por eso quedó marcado `cargado_a_orden`. Convertirlo además en
+            # venta por acá descontaba el stock una segunda vez y facturaba dos
+            # veces los mismos repuestos.
+            #
+            # Ese presupuesto se cobra al entregar la orden de trabajo, que es
+            # la que genera la venta con la mano de obra incluida.
+            if cot.cargado_a_orden:
+                raise DRFValidationError({'error': (
+                    'Este presupuesto ya se cargó a una orden de trabajo y sus '
+                    'repuestos ya salieron del inventario. Se cobra al entregar '
+                    'la orden, no convirtiéndolo en venta.'
+                )})
 
             with connection.cursor() as cursor:
                 cursor.execute("""

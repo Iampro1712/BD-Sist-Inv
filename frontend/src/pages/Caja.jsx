@@ -8,6 +8,7 @@ import {
 import AbrirCajaForm from '../components/forms/AbrirCajaForm'
 import CerrarCajaForm from '../components/forms/CerrarCajaForm'
 import MovimientoCajaForm from '../components/forms/MovimientoCajaForm'
+import { extraerMensajeError } from '../utils/errores'
 
 const formatCurrency = (v) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
@@ -26,11 +27,7 @@ const Caja = () => {
 
   const [modal, setModal] = useState(null) // 'abrir' | 'cerrar' | 'movimiento' | null
 
-  const errMsg = (e, fallback) =>
-    e?.response?.data?.error?.message ||
-    e?.response?.data?.error ||
-    e?.response?.data?.caja ||
-    fallback
+  const errMsg = (e, fallback) => extraerMensajeError(e, fallback)
 
   const handleAbrir = async (data) => {
     try {

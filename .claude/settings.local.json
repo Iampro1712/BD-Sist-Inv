@@ -4,7 +4,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\ProyectosKIRO\\\\inventrix-db\" -Force)",
       "Bash(Select-Object Name, PSIsContainer)",
       "Bash(Format-Table -AutoSize)",
-      "PowerShell"
+      "PowerShell",
+      "Workflow(deep-research)"
     ],
     "defaultMode": "auto"
   }

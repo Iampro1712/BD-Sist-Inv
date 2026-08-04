@@ -8,17 +8,9 @@ import { fadeIn } from '../../utils/animations'
 import { useRegistrarPagoCompra } from '../../hooks/useOrdenesCompra'
 import { useCajaActual } from '../../hooks/useCaja'
 import { useToast } from '../../hooks/useToast'
+import { extraerMensajeError } from '../../utils/errores'
 
 // Extrae el primer mensaje legible del formato de error del backend.
-const extraerMensajeError = (err, fallback) => {
-  const details = err.response?.data?.error?.details
-  if (details && typeof details === 'object') {
-    const primero = Object.values(details)[0]
-    if (primero) return Array.isArray(primero) ? primero[0] : primero
-  }
-  const message = err.response?.data?.error?.message
-  return typeof message === 'string' ? message : fallback
-}
 
 const pagoBadge = {
   pagado: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', label: '✓ Pagado completo' },

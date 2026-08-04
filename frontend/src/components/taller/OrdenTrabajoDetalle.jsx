@@ -10,6 +10,7 @@ import {
 import PresupuestoForm from '../forms/PresupuestoForm'
 import { generarCotizacionPDF } from '../../utils/exportReportes'
 import api from '../../services/api'
+import { extraerMensajeError } from '../../utils/errores'
 
 const formatCurrency = (v) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
@@ -18,17 +19,6 @@ const formatDate = (d) =>
   d ? new Date(d).toLocaleDateString('es-NI', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 
 /** El backend anida los errores de validación en error.details. */
-const extraerMensajeError = (err, fallback) => {
-  const details = err.response?.data?.error?.details
-  if (details && typeof details === 'object') {
-    const primero = Object.values(details)[0]
-    if (primero) return Array.isArray(primero) ? primero[0] : primero
-  }
-  const message = err.response?.data?.error?.message
-  if (typeof message === 'string') return message
-  const directo = err.response?.data?.error
-  return typeof directo === 'string' ? directo : fallback
-}
 
 export const ESTADO_LABEL = {
   agendada: 'Agendada',

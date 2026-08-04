@@ -230,7 +230,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework Configuration
 REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'api.pagination.PaginacionConfigurable',
     'PAGE_SIZE': 20,
     'DEFAULT_FILTER_BACKENDS': [
         'rest_framework.filters.SearchFilter',
@@ -253,6 +253,19 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    # Cuántos proxies de confianza hay delante (Traefik de Dokploy = 1).
+    #
+    # Sin esto DRF deja `NUM_PROXIES` en None y entonces identifica al cliente
+    # con la cadena **completa** de X-Forwarded-For, que la manda el cliente y
+    # el proxy sólo *añade* al final. Bastaba con variar ese header en cada
+    # petición para estrenar un balde de throttle nuevo, es decir, para saltarse
+    # los 5/min del login y los 20/min de las actualizaciones.
+    #
+    # Con un valor definido, DRF toma la entrada que **agregó el proxy**, que es
+    # la única que el cliente no controla. Si algún día se pone otro proxy
+    # delante (Cloudflare, por ejemplo), hay que subir este número: quedarse
+    # corto vuelve a leer una entrada que el cliente puede escribir.
+    'NUM_PROXIES': int(os.getenv('NUM_PROXIES', '1')),
     # Rate limiting (anti fuerza bruta en login + límite general)
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',

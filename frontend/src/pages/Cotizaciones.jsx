@@ -9,6 +9,7 @@ import { useToast } from '../hooks/useToast'
 import { Button, Card, Modal, ConfirmDialog } from '../components/ui'
 import CotizacionForm from '../components/forms/CotizacionForm'
 import { generarCotizacionPDF } from '../utils/exportReportes'
+import { extraerMensajeError } from '../utils/errores'
 
 const formatCurrency = (v) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
@@ -75,7 +76,7 @@ const Cotizaciones = () => {
       setConvertId(null)
       setIsDetalleOpen(false)
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error al convertir')
+      toast.error(extraerMensajeError(err, 'Error al convertir'))
       setConvertId(null)
     }
   }
@@ -85,7 +86,7 @@ const Cotizaciones = () => {
       await cambiarEstadoMutation.mutateAsync({ id: selectedId, estado })
       toast.success('Estado actualizado')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error al cambiar estado')
+      toast.error(extraerMensajeError(err, 'Error al cambiar estado'))
     }
   }
 

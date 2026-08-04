@@ -9,6 +9,7 @@ import {
 import { useMarcas, useCreateMarca, useUpdateMarca, useDeleteMarca } from '../hooks/useMarcas'
 import { Button, Card, Loader, Badge } from '../components/ui'
 import { fadeIn, staggerContainer } from '../utils/animations'
+import { extraerMensajeError } from '../utils/errores'
 
 const Categorias = () => {
   const [activeTab, setActiveTab] = useState('categorias')
@@ -47,7 +48,7 @@ const Categorias = () => {
       setNewCategoria({ nombre: '', descripcion: '' })
       setShowNewCategoriaForm(false)
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al crear categoría')
+      alert(extraerMensajeError(error, 'Error al crear categoría'))
     }
   }
 
@@ -61,7 +62,7 @@ const Categorias = () => {
       await updateCategoriaMutation.mutateAsync({ id, data: editingCategoria })
       setEditingCategoria(null)
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al actualizar categoría')
+      alert(extraerMensajeError(error, 'Error al actualizar categoría'))
     }
   }
 
@@ -77,7 +78,7 @@ const Categorias = () => {
       try {
         await deleteCategoriaMutation.mutateAsync(id)
       } catch (error) {
-        alert(error.response?.data?.error || 'Error al eliminar categoría')
+        alert(extraerMensajeError(error, 'Error al eliminar categoría'))
       }
     }
   }
@@ -95,7 +96,7 @@ const Categorias = () => {
       setNewMarca({ nombre: '', descripcion: '' })
       setShowNewMarcaForm(false)
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al crear marca')
+      alert(extraerMensajeError(error, 'Error al crear marca'))
     }
   }
 
@@ -109,7 +110,7 @@ const Categorias = () => {
       await updateMarcaMutation.mutateAsync({ id, data: editingMarca })
       setEditingMarca(null)
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al actualizar marca')
+      alert(extraerMensajeError(error, 'Error al actualizar marca'))
     }
   }
 
@@ -125,7 +126,7 @@ const Categorias = () => {
       try {
         await deleteMarcaMutation.mutateAsync(id)
       } catch (error) {
-        alert(error.response?.data?.error || 'Error al eliminar marca')
+        alert(extraerMensajeError(error, 'Error al eliminar marca'))
       }
     }
   }

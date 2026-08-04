@@ -26,6 +26,9 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from django.core.cache import cache
+
+from .actualizaciones_views import CACHE_CLAVE_DESCARGA, _destino_confiable, _sanear_notas
 from .backup_pg import (
     TABLAS_EFIMERAS, comprobar_disponible, generar_dump, nombre_dump,
     verificar_dump,
@@ -4680,3 +4683,424 @@ class OrdenCompraFinanzasPorRolTestCase(APITestCase):
         for campo in financieros:
             self.assertIn(campo, datos, f'{campo} desapareció del serializer')
             self.assertIsNone(datos[campo], f'{campo} se está filtrando')
+
+
+class ActualizacionesPublicasTestCase(APITestCase):
+    """Los dos endpoints de la 1.12.0 son la única superficie sin autenticación
+    del sistema, y se habían enviado sin ninguna prueba."""
+
+    def setUp(self):
+        cache.clear()
+        self.release = {
+            'tag_name': 'v1.2.3',
+            'body': 'notas',
+            'published_at': '2026-01-01T00:00:00Z',
+            'assets': [{'name': 'Inventrix.exe', 'size': 10,
+                        'url': 'https://api.github.com/x/assets/1'}],
+        }
+
+    def tearDown(self):
+        cache.clear()
+
+    def _con_github(self, respuesta):
+        return patch('api.actualizaciones_views._pedir_a_github',
+                     return_value=(respuesta, None))
+
+    def test_sin_configurar_no_dice_que_variables_faltan(self):
+        """El detalle va al log: nombrar las variables de entorno le confirma a
+        cualquiera cómo se configura el servidor."""
+        with self.settings(GITHUB_DESKTOP_TOKEN='', GITHUB_DESKTOP_REPO=''):
+            r = self.client.get('/api/desktop/version/')
+
+        self.assertEqual(r.status_code, 503)
+        cuerpo = r.content.decode()
+        self.assertNotIn('GITHUB_DESKTOP_TOKEN', cuerpo)
+        self.assertNotIn('GITHUB_DESKTOP_REPO', cuerpo)
+
+    def test_la_version_se_cachea_y_no_vuelve_a_pegarle_a_github(self):
+        with self._con_github(self.release) as espia:
+            self.client.get('/api/desktop/version/')
+            self.client.get('/api/desktop/version/')
+            self.client.get('/api/desktop/version/')
+
+        # Una sola llamada saliente pese a las tres peticiones entrantes.
+        self.assertEqual(espia.call_count, 1)
+
+    def test_la_descarga_no_le_pega_a_github_en_cada_peticion(self):
+        """Era el agujero: sin caché, cualquiera podía agotar la cuota del token
+        y ocupar un worker de Gunicorn por petición, sin credenciales."""
+        cache.set(CACHE_CLAVE_DESCARGA,
+                  'https://objects.githubusercontent.com/x', 300)
+
+        with self._con_github(self.release) as espia:
+            r = self.client.get('/api/desktop/descargar/')
+
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(espia.call_count, 0)
+
+    def test_solo_se_redirige_a_github_por_https(self):
+        for malo in ('http://objects.githubusercontent.com/x',
+                     'https://evil.example.com/payload.exe',
+                     'https://github.com.evil.example/x',
+                     'javascript:alert(1)', ''):
+            self.assertFalse(_destino_confiable(malo), malo)
+
+        for bueno in ('https://objects.githubusercontent.com/x',
+                      'https://github.com/org/repo/releases/download/v1/a.exe',
+                      'https://release-assets.githubusercontent.com/x'):
+            self.assertTrue(_destino_confiable(bueno), bueno)
+
+
+class IdentidadDetrasDelProxyTestCase(TestCase):
+    """X-Forwarded-For lo manda el cliente y el proxy sólo le añade al final.
+    Leer la primera entrada dejaba falsear la IP: con eso se estrenaba un balde
+    de throttle nuevo en cada petición (saltándose los 5/min del login) y se
+    escribían IPs inventadas en la auditoría."""
+
+    def test_drf_identifica_al_cliente_con_lo_que_agrego_el_proxy(self):
+        from rest_framework.throttling import BaseThrottle
+        from django.test import RequestFactory
+
+        pedido = RequestFactory().get('/', HTTP_X_FORWARDED_FOR='1.2.3.4, 9.9.9.9')
+        self.assertEqual(BaseThrottle().get_ident(pedido), '9.9.9.9')
+
+    def test_dos_valores_falseados_caen_en_el_mismo_balde(self):
+        from rest_framework.throttling import BaseThrottle
+        from django.test import RequestFactory
+
+        fabrica = RequestFactory()
+        uno = fabrica.get('/', HTTP_X_FORWARDED_FOR='1.1.1.1, 9.9.9.9')
+        otro = fabrica.get('/', HTTP_X_FORWARDED_FOR='2.2.2.2, 9.9.9.9')
+
+        self.assertEqual(BaseThrottle().get_ident(uno),
+                         BaseThrottle().get_ident(otro))
+
+    def test_la_auditoria_registra_la_ip_que_vio_el_proxy(self):
+        from django.test import RequestFactory
+        from .middleware import AuditoriaUsuarioMiddleware
+
+        medio = AuditoriaUsuarioMiddleware(lambda r: None)
+        pedido = RequestFactory().get('/', HTTP_X_FORWARDED_FOR='1.2.3.4, 9.9.9.9')
+
+        self.assertEqual(medio._resolver_ip(pedido), '9.9.9.9')
+
+
+class SaneamientoNotasReleaseTestCase(TestCase):
+    """El body del release sale de un CHANGELOG que narra en detalle qué
+    vulnerabilidad se arregló y cómo — justo lo que necesita alguien que
+    quiera atacar instalaciones que no se hayan actualizado todavía."""
+
+    def test_descarta_la_seccion_de_seguridad_entera(self):
+        cuerpo = (
+            "### Fixed\n"
+            "- Se corrigio un calculo del reporte de compras.\n\n"
+            "### Security\n"
+            "- Lo que se le debe a un proveedor ya no se le muestra a los "
+            "vendedores.\n"
+        )
+        resultado = _sanear_notas(cuerpo)
+
+        self.assertIn('Fixed', resultado)
+        self.assertIn('reporte de compras', resultado)
+        self.assertNotIn('Security', resultado)
+        self.assertNotIn('proveedor', resultado)
+
+    def test_descarta_lineas_sensibles_sin_encabezado_propio(self):
+        """El 1.11.3 real no metió el resumen de la auditoría bajo un
+        encabezado "Security": iba como texto introductorio suelto."""
+        cuerpo = "Ultima tanda de la auditoria: con esto quedan cerrados los 10 hallazgos.\n"
+        self.assertEqual(_sanear_notas(cuerpo), 'Mejoras y correcciones.')
+
+    def test_notas_inofensivas_pasan_intactas(self):
+        cuerpo = "### Added\n- Se agrego un reporte de pronostico de demanda.\n"
+        self.assertIn('pronostico de demanda', _sanear_notas(cuerpo))
+
+    def test_vacio_devuelve_vacio(self):
+        self.assertEqual(_sanear_notas(''), '')
+
+    def test_todo_filtrado_devuelve_mensaje_generico(self):
+        cuerpo = "### Security\n- credenciales expuestas por un token filtrado.\n"
+        self.assertEqual(_sanear_notas(cuerpo), 'Mejoras y correcciones.')
+
+
+class ContratoActualizacionesTestCase(APITestCase):
+    """Cubre lo que la tanda anterior de tests dejó fuera: que los endpoints
+    sigan siendo públicos, el contrato que consume la app de escritorio, y que
+    ningún mensaje de error vuelva a delatar la infraestructura."""
+
+    def setUp(self):
+        cache.clear()
+        self.release = {
+            'tag_name': 'v1.2.3',
+            'body': "### Added\n- Reporte nuevo.\n\n### Security\n- Se cerro una fuga.\n",
+            'published_at': '2026-01-01T00:00:00Z',
+            'assets': [{'name': 'Inventrix.exe', 'size': 12345,
+                        'url': 'https://api.github.com/x/assets/1'}],
+        }
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_los_endpoints_no_exigen_iniciar_sesion(self):
+        """Es su razón de ser: la app tiene que poder actualizarse aunque el
+        fallo a corregir esté en el propio login."""
+        with patch('api.actualizaciones_views._pedir_a_github',
+                   return_value=(self.release, None)):
+            for ruta in ('/api/desktop/version/', '/api/desktop/descargar/'):
+                r = self.client.get(ruta)
+                self.assertNotIn(r.status_code, (401, 403), ruta)
+
+    def test_el_contrato_que_consume_la_app_de_escritorio(self):
+        with patch('api.actualizaciones_views._pedir_a_github',
+                   return_value=(self.release, None)):
+            datos = self.client.get('/api/desktop/version/').json()
+
+        for campo in ('version', 'notas', 'url_descarga', 'nombre_archivo',
+                      'tamano', 'sha256', 'publicado_en', 'version_minima'):
+            self.assertIn(campo, datos, f'{campo} desaparecio del contrato')
+
+        # La app compara versiones sin la "v" del tag.
+        self.assertEqual(datos['version'], '1.2.3')
+        self.assertEqual(datos['nombre_archivo'], 'Inventrix.exe')
+        # Sin adjunto .sha256 el checksum va nulo, y el cliente falla cerrado.
+        self.assertIsNone(datos['sha256'])
+
+    def test_las_notas_salen_saneadas_por_el_endpoint(self):
+        """El saneo tiene su prueba unitaria; esta comprueba que además esta
+        efectivamente enchufado en la respuesta."""
+        with patch('api.actualizaciones_views._pedir_a_github',
+                   return_value=(self.release, None)):
+            datos = self.client.get('/api/desktop/version/').json()
+
+        self.assertIn('Reporte nuevo', datos['notas'])
+        self.assertNotIn('fuga', datos['notas'])
+        self.assertNotIn('Security', datos['notas'])
+
+    def test_una_url_cacheada_no_confiable_no_se_reenvia(self):
+        """Defensa en profundidad: aunque entre basura en la cache, no se
+        redirige a los equipos del taller fuera de GitHub."""
+        cache.set(CACHE_CLAVE_DESCARGA, 'https://evil.example.com/payload.exe', 300)
+
+        with patch('api.actualizaciones_views._pedir_a_github',
+                   return_value=(None, 'nada')):
+            r = self.client.get('/api/desktop/descargar/')
+
+        self.assertNotEqual(r.status_code, 302)
+        self.assertNotIn('evil.example.com', r.content.decode())
+
+    def test_ningun_mensaje_de_error_nombra_la_infraestructura(self):
+        """Guarda de regresion: el texto de error de un endpoint publico es
+        informacion regalada. No debe delatar donde vive el binario ni en que
+        estado esta la credencial del servidor."""
+        fallos = [
+            urllib.error.HTTPError('u', 401, 'no', {}, None),
+            urllib.error.HTTPError('u', 500, 'no', {}, None),
+            urllib.error.URLError('sin red'),
+        ]
+        prohibidas = ('github', 'token', 'credencial', 'autentic')
+
+        for fallo in fallos:
+            cache.clear()
+            with self.settings(GITHUB_DESKTOP_TOKEN='x', GITHUB_DESKTOP_REPO='o/r'):
+                with patch('api.actualizaciones_views.urllib.request.urlopen',
+                           side_effect=fallo):
+                    cuerpo = self.client.get('/api/desktop/version/').content.decode().lower()
+
+            for palabra in prohibidas:
+                self.assertNotIn(palabra, cuerpo, f'{fallo} filtro "{palabra}"')
+
+    def test_los_endpoints_tienen_su_propio_limite_de_peticiones(self):
+        """Sin esto quedarian sin tope: `throttle_classes` reemplaza la lista
+        por defecto, asi que aca no aplica el limite anonimo general."""
+        from .actualizaciones_views import (
+            ActualizacionThrottle, descargar_escritorio, version_escritorio,
+        )
+
+        for vista in (version_escritorio, descargar_escritorio):
+            self.assertIn(ActualizacionThrottle, vista.cls.throttle_classes)
+        self.assertIn('desktop_version', settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'])
+
+
+class OrdenesDeProveedorTestCase(APITestCase):
+    """`/proveedores/{id}/ordenes/` respondía 500 siempre: ordenaba por un campo
+    (`fecha`) que no existe en el modelo. El 500 además venía tapando una fuga:
+    el serializer se construía sin `context`, y sin él el mixin de roles da por
+    hecho que quien pregunta es el dueño."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_prov_ord', password='x', is_staff=True)
+        self.operador = User.objects.create_user(
+            username='vend_prov_ord', password='x')
+
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO estado (id_estado, cancelado, pendiente) VALUES
+                    (1,'SI','NO'), (2,'NO','SI'), (3,'NO','NO')
+                ON CONFLICT (id_estado) DO NOTHING
+            """)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Prov Ordenes')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-PROV-ORD', nombre='Repuesto Prov',
+            cantidad_actual=0, cantidad_total=0, cantidad_minima=1,
+            precio_compra_unitario=100, precio_final='300.00',
+            id_proveedor=self.proveedor)
+        self.orden = OrdenCompra.objects.create(
+            id_proveedor=self.proveedor.id_proveedor,
+            id_estado=OrdenCompra.ESTADO_PENDIENTE,
+            fecha_creacion=timezone.localdate())
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO orden_producto
+                    (id_orden, id_producto, cantidad, precio_unitario)
+                VALUES (%s, %s, 4, 555)
+            """, [self.orden.id_orden, self.producto.id_producto])
+        self.orden.calcular_saldo()
+
+    def _url(self):
+        return f'/api/proveedores/{self.proveedor.id_proveedor}/ordenes/'
+
+    def test_el_endpoint_responde_en_vez_de_reventar(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(self._url())
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.json()), 1)
+
+    def test_el_dueno_ve_los_montos(self):
+        self.client.force_authenticate(user=self.admin)
+        fila = self.client.get(self._url()).json()[0]
+        self.assertEqual(float(fila['total']), 2220.0)
+
+    def test_el_operador_no_ve_los_montos_por_esta_via(self):
+        """La fuga que el 500 escondía: sin `context` el mixin no oculta nada."""
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get(self._url())
+
+        self.assertEqual(r.status_code, 200)
+        fila = r.json()[0]
+        for campo in ('total', 'monto_pagado', 'saldo_pendiente', 'estado_pago'):
+            self.assertIsNone(fila[campo], campo)
+        self.assertNotIn('555', r.content.decode())
+        self.assertNotIn('2220', r.content.decode())
+
+
+class PaginacionConfigurableTestCase(APITestCase):
+    """`PageNumberPagination` a secas ignora `page_size` en silencio. El frontend
+    lo manda en 15 sitios y recibía 20 filas: el selector de clientes de
+    "Agendar servicio" no dejaba elegir del cliente 21 en adelante."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = get_user_model().objects.create_user(
+            username='admin_pag', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+        for i in range(25):
+            Cliente.objects.create(nombre=f'Cliente Pag {i:02d}')
+
+    def test_sin_parametro_manda_el_valor_por_defecto(self):
+        datos = self.client.get('/api/clientes/').json()
+        self.assertEqual(len(datos['results']), 20)
+
+    def test_el_cliente_puede_pedir_mas_por_pagina(self):
+        datos = self.client.get('/api/clientes/?page_size=25').json()
+        self.assertEqual(len(datos['results']), 25)
+
+    def test_el_tope_evita_que_pidan_la_tabla_entera(self):
+        """Sin `max_page_size`, un ?page_size=100000 obliga al servidor a
+        serializarlo todo."""
+        from .pagination import PaginacionConfigurable
+
+        datos = self.client.get('/api/clientes/?page_size=100000').json()
+        self.assertLessEqual(len(datos['results']), PaginacionConfigurable.max_page_size)
+
+
+class PresupuestoAprobadoNoSeConvierteEnVentaTestCase(APITestCase):
+    """Un presupuesto de reparación aprobado ya sacó sus repuestos del
+    inventario. Convertirlo *además* en venta los descontaba una segunda vez y
+    los facturaba dos veces."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin-dobledesc', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+        self.proveedor = Proveedor.objects.create(nombre_empresa='Prov Doble')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-DOBLE-1', nombre='Kit doble',
+            cantidad_actual=10, cantidad_total=10, cantidad_minima=1,
+            precio_compra_unitario=100, precio_final='200.00',
+            id_proveedor=self.proveedor)
+        self.cliente = Cliente.objects.create(nombre='Dueno Doble')
+        self.moto = Moto.objects.create(
+            id_cliente=self.cliente, marca='Honda', modelo='CG125',
+            anio=2020, placa='DOBLE-1')
+        self.tipo = Servicio.objects.create(
+            nombre='Reparacion doble', tipo='Reparacion',
+            precio_mano_obra='300.00', es_plantilla=True)
+
+        r = self.client.post('/api/servicios-motos/', {
+            'id_moto': self.moto.id_moto,
+            'fecha_servicio': str(datetime.date.today()),
+            'tipo_servicio': 'Reparacion doble',
+            'id_tipo_servicio': self.tipo.id_servicio,
+        }, format='json')
+        self.id_servicio = r.data['id_servicio']
+        for estado in ('recibida', 'en_diagnostico'):
+            self.client.post(
+                f'/api/servicios-motos/{self.id_servicio}/cambiar-estado/',
+                {'estado': estado}, format='json')
+
+        r = self.client.post(
+            f'/api/servicios-motos/{self.id_servicio}/presupuestar/', {
+                'servicios': [{'servicio': self.tipo.id_servicio,
+                               'cantidad': 1, 'precio_unitario': 300}],
+                'productos': [{'producto': self.producto.id_producto,
+                               'cantidad': 3, 'precio_unitario': 200}],
+            }, format='json')
+        self.id_cotizacion = r.data['id_cotizacion']
+
+        # Aprobar: acá es donde los repuestos salen del inventario.
+        # Ojo con la ruta: en cotizaciones la acción es `cambiar_estado` con
+        # guion bajo (en servicios-motos sí lleva guion). Con la otra el POST
+        # se va a un 404 y el test pasa sin haber aprobado nada.
+        r = self.client.post(
+            f'/api/cotizaciones/{self.id_cotizacion}/cambiar_estado/',
+            {'estado': 'aprobada'}, format='json')
+        assert r.status_code == 200, r.data
+
+    def test_aprobar_descuenta_el_stock_una_sola_vez(self):
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 7)
+
+        cot = Cotizacion.objects.get(pk=self.id_cotizacion)
+        self.assertTrue(cot.cargado_a_orden)
+
+    def test_convertir_en_venta_un_presupuesto_ya_cargado_se_rechaza(self):
+        r = self.client.post(
+            f'/api/cotizaciones/{self.id_cotizacion}/convertir-venta/', {},
+            format='json')
+
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, r.data)
+
+        # Y sobre todo: el stock quedó como estaba, no bajó a 4.
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 7)
+
+    def test_no_queda_una_venta_fantasma_ni_movimientos_de_mas(self):
+        antes = MovimientoInventario.objects.filter(
+            producto=self.producto).count()
+
+        self.client.post(
+            f'/api/cotizaciones/{self.id_cotizacion}/convertir-venta/', {},
+            format='json')
+
+        cot = Cotizacion.objects.get(pk=self.id_cotizacion)
+        self.assertIsNone(cot.id_venta)
+        self.assertNotEqual(cot.estado, 'convertida')
+        self.assertEqual(
+            MovimientoInventario.objects.filter(producto=self.producto).count(),
+            antes)

@@ -7,6 +7,7 @@ import SearchBar from '../components/forms/SearchBar'
 import Modal from '../components/ui/Modal'
 import { Button, Badge, Loader, Card } from '../components/ui'
 import { fadeIn, staggerContainer } from '../utils/animations'
+import { extraerMensajeError } from '../utils/errores'
 
 const Movimientos = () => {
   const [search, setSearch] = useState('')
@@ -82,7 +83,7 @@ const Movimientos = () => {
         handleCloseAjusteModal()
       } catch (error) {
         console.error('Error al crear ajuste:', error)
-        alert(error.response?.data?.error || 'Error al crear el ajuste de inventario')
+        alert(extraerMensajeError(error, 'Error al crear el ajuste de inventario'))
       }
     }
   }

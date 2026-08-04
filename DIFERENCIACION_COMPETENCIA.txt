@@ -1,0 +1,197 @@
+DIFERENCIACIÓN COMPETITIVA DE INVENTRIX
+Basado en búsqueda web real realizada el 2026-08-03. Cada afirmación cita su fuente.
+Este archivo es TEMPORAL y NO está en .gitignore — bórralo cuando ya no lo necesites.
+
+============================================================
+1) ¿ES OBLIGATORIA LA FACTURACIÓN ELECTRÓNICA EN NICARAGUA?
+============================================================
+
+Hallazgo central: NO hay evidencia de que Nicaragua haya vuelto obligatoria la
+facturación electrónica para el pequeño comercio en 2024-2026. Lo que sí existe,
+desde 2007, es un régimen de AUTORIZACIÓN de sistemas de facturación computarizada
+(no un mandato universal de "factura electrónica" al estilo de otros países de la
+región).
+
+- La base legal viene de la Disposición Técnica No. 09-2007 de la DGI, que regula
+  los requisitos para que un contribuyente solicite autorización de un sistema de
+  facturación computarizado. Es obligatorio TRAMITAR esa autorización solo si el
+  contribuyente decide usar un sistema computarizado para respaldar fiscalmente
+  sus ventas — no es un mandato de "todos deben facturar electrónicamente".
+  Fuente: Ozkarin Consultor, resumen de requisitos DGI —
+  https://ozkarinconsultor.wordpress.com/2019/01/05/requisitos-para-uso-de-sistemas-de-facturacion-ante-la-dgi-en-nicaragua/
+
+- Un taller pequeño en Nicaragua normalmente califica para el RÉGIMEN ESPECIAL
+  SIMPLIFICADO DE CUOTA FIJA (Ley de Concertación Tributaria / Ley 822), pensado
+  para contribuyentes con ingresos mensuales de hasta C$100,000 o inventario de
+  hasta C$500,000. Bajo este régimen:
+    * La factura simplificada (sin desglose de IVA) se emite SOLO A SOLICITUD
+      DEL CLIENTE, no en cada venta.
+    * El IVA ya está conglobado en la cuota mensual; no hay que trasladarlo ni
+      declararlo por separado.
+    * Las obligaciones son de registro simplificado de ingresos/gastos, no de
+      un sistema de facturación electrónica homologado.
+  Fuentes:
+  https://consortiumlegal.com/2023/10/04/regimen-especial-simplificado-de-cuota-fija-en-nicaragua/
+  https://confidencial.digital/revista-niu/blogs/inscribirte-como-cuota-fija-todo-lo-que-debes-saber/
+  https://www.serviciocontablenicaragua.com/que-es-el-regimen-de-cuota-fija-en-nicaragua/
+
+CONCLUSIÓN VERIFICABLE: para un taller de motos del tamaño típico (cuota fija),
+NO tener facturación fiscal electrónica NO es un bloqueante legal hoy. Sería
+relevante recién si el negocio crece y pasa al régimen general (donde si se
+usa un sistema computarizado, ese sistema sí necesita autorización DGI bajo la
+Disposición 09-2007). No encontré ninguna reforma 2024-2026 que cambie esto para
+Nicaragua específicamente (los resultados más recientes sobre "facturador
+gratuito 2026" corresponden a Panamá, no a Nicaragua — confirmado y descartado
+explícitamente durante la búsqueda).
+
+============================================================
+2) COMPETIDORES DIRECTOS (software para talleres de motos/mecánicos)
+============================================================
+
+No encontré ningún competidor con sede u operación confirmada específicamente
+en Nicaragua. Los jugadores identificados son de otros países de la región:
+
+- POSMOVI — orientado a talleres de motos. Multi-sucursal, multi-caja,
+  multi-mecánico. Su diferencial marcado es que el punto de venta funciona
+  100% SIN CONEXIÓN a internet (factura repuestos y servicios offline).
+  Maneja inventario de aceites, llantas, filtros con alertas de stock bajo.
+  Fuente: https://www.posmovi.com/software-taller-motos/
+
+- TALLERALPHA — software para talleres de motos con control de inventario de
+  refacciones, reposición automática, facturación multi-moneda, pagos con
+  tarjeta/Sinpe Móvil, tiquetes y facturas de exportación (rasgos que sugieren
+  mercado costarricense). Fuente:
+  https://www.talleralpha.com/sistema-para-talleres-de-motos/
+
+- TALLERPOS — gestión en la nube para talleres de motos y venta de repuestos,
+  con facturación electrónica (FEL) y una PWA instalable en segundos para
+  celular/tablet. Todo apunta a mercado guatemalteco/centroamericano.
+  Fuente: https://www.tallerpos.com/
+
+- MANAGERP.APP — ERP/SaaS para talleres de motocicletas en Latinoamérica y
+  España, con inventario, facturación y órdenes de servicio, más un directorio
+  de talleres con búsqueda por GPS. Alcance regional amplio, no específico de
+  Nicaragua. Fuente: https://managerp.app/
+
+- PARA TALLERES MECÁNICOS — dirigido a Costa Rica/Centroamérica en general
+  (autos, no específicamente motos), con recordatorios de RTV por WhatsApp,
+  cobros y reportes. Fuente: https://paratalleresmecanicos.com/
+
+Ninguna de las fuentes encontradas menciona: análisis de desempeño de
+proveedores, devoluciones a proveedores con ajuste de saldo, pronóstico de
+demanda, o arqueo de caja por turnos — los cuatro módulos que sí tiene
+Inventrix. Esto no prueba que no existan en esos productos (no pude revisar
+el software por dentro, solo su marketing público), pero ninguno los publicita
+como diferenciador, mientras que para Inventrix sí son módulos centrales.
+
+============================================================
+3) POS / ERP GENÉRICOS QUE SE USAN EN NICARAGUA
+============================================================
+
+Esta fue la pregunta con menos evidencia directa. No encontré páginas de
+precios ni casos de uso específicos para Nicaragua de Loyverse, Alegra, Bind
+ERP u Odoo:
+
+- ALEGRA publica precios específicos para Costa Rica y República Dominicana,
+  pero no encontré una página de precios para Nicaragua. Es un sistema
+  contable/facturación en la nube (no un ERP de taller), con IA (GPT-5)
+  integrada a más de 30 capacidades contables.
+  Fuentes: https://www.alegra.com/costarica/precios/ ,
+  https://www.alegra.com/rdominicana/precios/
+
+- BIND ERP gestiona ventas, compras, inventario y finanzas en un solo lugar,
+  con facturación simple. No se encontró presencia confirmada en Nicaragua.
+  Fuente: https://programascontabilidad.com/comparativas-de-software/bind-erp-alegra/
+
+- LOYVERSE POS tiene funciones básicas gratuitas y complementos pagos; es un
+  POS genérico (no de taller), usado globalmente. Fuente:
+  https://loyverse.com/en-us/pricing
+
+- ODOO es un ERP open-source, adaptable desde negocios muy pequeños hasta
+  corporaciones grandes, pero requiere configuración/implementación — no es
+  un producto vertical para talleres de motos. Fuente:
+  https://www.softwareadvice.com/retail/loyverse-profile/vs/odoo/
+
+CONCLUSIÓN HONESTA: no pude verificar con fuentes reales cuál de estos usan
+realmente los pequeños comercios en Nicaragua, ni su nivel de adopción local.
+Esto sigue siendo una laguna de esta investigación — no lo estoy inventando.
+
+============================================================
+4) TAMAÑO Y CRECIMIENTO DEL PARQUE DE MOTOCICLETAS EN NICARAGUA
+============================================================
+
+- 2005 → 2016: el parque vehicular total pasó de 300,000 a 750,000 unidades,
+  creciendo ~11% anual (el más bajo de Centroamérica en esa época, comparado
+  con Guatemala ~3M, Costa Rica ~2M, Honduras 1.4M, El Salvador 925,000).
+  Fuente: https://www.revistaeyn.com/centroamericaymundo/parque-vehicular-nica-crece-al-11-anual-HLEN993141
+
+- 2017 (MTI): parque vehicular de 876,727 vehículos totales (motos incluidas
+  dentro del 88.55% de "vehículos livianos").
+
+- Cierre de 2022 (declaración pública de la Jefa Nacional de Tránsito, Vilma
+  Reyes): el parque vehicular llegó a 1.15 millones de vehículos, de los
+  cuales 600,000 eran MOTOCICLETAS — es decir, las motos ya representaban
+  cerca de la mitad de todo el parque vehicular del país.
+  Fuente: https://www.tortillaconsal.com/bitacora/node/1081
+
+- Importaciones (BCN): en 2023 se importaron US$85.71 millones en
+  motocicletas, la cifra más alta en 7 años y 64% superior a los US$52.25
+  millones de 2017. En el primer bimestre de 2026 ya se habían pagado
+  US$30.87 millones en importación de motos, por encima de los US$27.41
+  millones del mismo período de 2025.
+  Fuente: https://www.laprensani.com/2026/05/13/economia/3695485-aumentan-las-importaciones-de-vehiculos-motos-y-respuestos-para-automoviles
+
+No encontré cifras específicas y actualizadas directamente publicadas por
+INIDE en los resultados de esta búsqueda (solo referencia a su Anuario 2019,
+sin cifras visibles en el resultado). Los datos más confiables y recientes
+que sí verifiqué vienen del MTI, del BCN y de declaraciones oficiales de
+Tránsito Nacional citadas por prensa.
+
+CONCLUSIÓN VERIFICABLE: el parque de motos en Nicaragua viene creciendo de
+forma sostenida (más de 600,000 unidades a 2022, con importaciones en máximos
+históricos en 2023 y subiendo de nuevo en 2026) — el mercado de talleres y
+repuestos de motos es un nicho que crece, no uno estancado.
+
+============================================================
+SÍNTESIS: EN QUÉ SE DIFERENCIA INVENTRIX, SEGÚN LO ENCONTRADO
+============================================================
+
+1. Nicaragua no exige hoy facturación fiscal electrónica para un taller típico
+   bajo cuota fija — no tenerla no es una debilidad legal urgente de Inventrix
+   en este momento, aunque sería un desarrollo necesario si el negocio migra
+   al régimen general más adelante.
+
+2. No se encontró ningún competidor de gestión de talleres de motos operando
+   específicamente en Nicaragua — los que existen (Posmovi, TallerAlpha,
+   TallerPos, Managerp.app, Para Talleres Mecánicos) están orientados a
+   Guatemala, Costa Rica o LatAm en general. Esto sugiere un espacio de
+   mercado local desatendido, aunque no puedo confirmar con esta búsqueda si
+   alguno de ellos ya vende activamente a talleres nicaragüenses.
+
+3. Ningún competidor encontrado publicita módulos de análisis de desempeño de
+   proveedores, devoluciones a proveedor con ajuste de saldo/caja, ni
+   pronóstico de demanda — Inventrix sí los tiene. Dicho con la salvedad de
+   que esto es marketing público, no una auditoría del software interno de
+   esos competidores.
+
+4. Posmovi sí ofrece algo que Inventrix hoy NO tiene: punto de venta 100%
+   funcional sin conexión a internet, y soporte multi-sucursal. Si la
+   comparación se hace contra Posmovi puntualmente, esas dos son debilidades
+   reales de Inventrix, no fortalezas.
+
+5. El mercado de motos en Nicaragua crece de forma sostenida (parque de
+   600,000+ motos a 2022, importaciones en máximos históricos), lo que
+   respalda que construir para este nicho tiene una base de demanda que se
+   expande, no que se contrae.
+
+LIMITACIONES DE ESTA INVESTIGACIÓN (dicho con honestidad):
+- No se obtuvieron precios ni cuota de mercado verificable de ningún
+  competidor en Nicaragua específicamente.
+- No se confirmó adopción real de Loyverse/Alegra/Bind ERP/Odoo entre
+  comercios nicaragüenses (solo se confirmó que existen como productos
+  regionales).
+- No se accedió a cifras oficiales de INIDE con detalle department por
+  departamento; los datos usados vienen de MTI, BCN y declaraciones de
+  Tránsito Nacional citadas por prensa nicaragüense.
+- No se evaluó el software interno de ningún competidor — todo lo dicho
+  sobre sus funciones viene de sus propias páginas de marketing.

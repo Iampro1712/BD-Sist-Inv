@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Button, Combobox, Input } from '../ui'
 import { useModelosIA } from '../../hooks/useConfiguracionIA'
+import { extraerMensajeError } from '../../utils/errores'
 
 /**
  * Alta o edición de un proveedor de IA.
@@ -39,8 +40,9 @@ const ProveedorIAForm = ({
   const modelos = listado?.modelos || []
   // El backend responde 400 cuando no pudo traer la lista (clave rechazada,
   // proveedor caído, formato cambiado). Ahí se ofrece escribir el nombre.
-  const detalleFallo = errorModelos?.response?.data?.detalle
-    || errorModelos?.response?.data?.error
+  const detalleFallo = errorModelos
+    && (errorModelos.response?.data?.detalle
+      || extraerMensajeError(errorModelos, 'Error desconocido.'))
 
   // Si la cuenta no tiene el modelo que estaba guardado (lo retiraron, o cambió
   // el plan), no se deja seleccionado algo que ya no existe.

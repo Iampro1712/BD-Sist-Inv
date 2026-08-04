@@ -14,6 +14,7 @@ import { Button, Badge, Loader, Card, ConfirmDialog } from '../components/ui'
 import { fadeIn, staggerContainer } from '../utils/animations'
 import { useUbicaciones, useAsignarUbicacion } from '../hooks/useUbicaciones'
 import useAuthStore from '../hooks/useAuthStore'
+import { extraerMensajeError } from '../utils/errores'
 
 const Productos = () => {
   const [search, setSearch] = useState('')
@@ -88,7 +89,7 @@ const Productos = () => {
         setUbicacionLote('')
       },
       onError: (err) => toast.error(
-        err.response?.data?.error || 'No se pudo asignar la ubicación'),
+        extraerMensajeError(err, 'No se pudo asignar la ubicación')),
     })
   }
 

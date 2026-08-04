@@ -10,24 +10,13 @@ import {
   useEliminarUbicacion, useProductosDeUbicacion,
 } from '../hooks/useUbicaciones'
 import UbicacionForm from '../components/forms/UbicacionForm'
+import { extraerMensajeError } from '../utils/errores'
 
 const formatCurrency = (v) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
 
 const lista = (data) => (Array.isArray(data) ? data : data?.results || [])
 
-const extraerMensajeError = (err, fallback) => {
-  const data = err.response?.data
-  const details = data?.error?.details
-  if (details && typeof details === 'object') {
-    const primero = Object.values(details)[0]
-    if (primero) return Array.isArray(primero) ? primero[0] : primero
-  }
-  const message = data?.error?.message
-  if (typeof message === 'string') return message
-  if (typeof data?.error === 'string') return data.error
-  return fallback
-}
 
 const Ubicaciones = () => {
   const [modal, setModal] = useState(null)          // 'nueva' | 'editar'

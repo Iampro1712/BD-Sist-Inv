@@ -9,6 +9,7 @@ import {
 } from '../hooks/useTaller'
 import AgendarServicioForm from '../components/forms/AgendarServicioForm'
 import OrdenTrabajoDetalle, { ESTADO_LABEL } from '../components/taller/OrdenTrabajoDetalle'
+import { extraerMensajeError } from '../utils/errores'
 
 const formatCurrency = (v) =>
   new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(v || 0)
@@ -25,17 +26,6 @@ const COLUMNAS = [
 
 const lista = (data) => (Array.isArray(data) ? data : data?.results || [])
 
-const extraerMensajeError = (err, fallback) => {
-  const details = err.response?.data?.error?.details
-  if (details && typeof details === 'object') {
-    const primero = Object.values(details)[0]
-    if (primero) return Array.isArray(primero) ? primero[0] : primero
-  }
-  const message = err.response?.data?.error?.message
-  if (typeof message === 'string') return message
-  const directo = err.response?.data?.error
-  return typeof directo === 'string' ? directo : fallback
-}
 
 const Taller = () => {
   const [modalAgendar, setModalAgendar] = useState(false)

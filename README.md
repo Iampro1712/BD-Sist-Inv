@@ -1,1259 +1,412 @@
-# 📦 Inventrix - Sistema de Gestión de Inventario
-
 <div align="center">
 
-![Inventrix Banner](https://img.shields.io/badge/Inventrix-Sistema%20de%20Inventario%20Profesional-4F46E5?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMjAgN0g0QzIuODk1NDMgNyAyIDcuODk1NDMgMiA5VjE5QzIgMjAuMTA0NiAyLjg5NTQzIDIxIDQgMjFIMjBDMjEuMTA0NiAyMSAyMiAyMC4xMDQ2IDIyIDE5VjlDMjIgNy44OTU0MyAyMS4xMDQ2IDcgMjAgN1oiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE2IDIxVjVDMTYgNC40Njk1NyAxNS43ODkzIDMuOTYwODYgMTUuNDE0MiAzLjU4NTc5QzE1LjAzOTEgMy4yMTA3MSAxNC41MzA0IDMgMTQgM0gxMEM5LjQ2OTU3IDMgOC45NjA4NiAzLjIxMDcxIDguNTg1NzkgMy41ODU3OUM4LjIxMDcxIDMuOTYwODYgOCA0LjQ2OTU3IDggNVYyMSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=)
+<img src="https://img.shields.io/badge/INVENTRIX-4F46E5?style=for-the-badge&logoColor=white" alt="Inventrix" height="42"/>
 
-**Sistema profesional de gestión de inventario, ventas y servicios**  
-*Diseñado para pequeñas y medianas empresas en Latinoamérica*
+### Sistema de gestión para talleres y tiendas de repuestos
 
-[![Django](https://img.shields.io/badge/Django-5.2+-092E20?style=flat-square&logo=django&logoColor=white)](https://www.djangoproject.com/)
-[![React](https://img.shields.io/badge/React-19.2.4-61DAFB?style=flat-square&logo=react&logoColor=cyan)](https://reactjs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind-4.1.17-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Cloudflare R2](https://img.shields.io/badge/Cloudflare_R2-Storage-F38020?style=flat-square&logo=cloudflare&logoColor=white)](https://www.cloudflare.com/products/r2/)
+Inventario, punto de venta, taller y caja en un solo lugar.<br/>
+Construido para un taller de motos real en Managua, Nicaragua.
 
-[✨ Características](#-características-principales) • [🚀 Instalación](#-instalación-rápida) • [📚 Documentación](#-documentación) • [🤝 Contribuir](#-contribuir) • [📸 Capturas](#-capturas-de-pantalla)
+<br/>
+
+[![Versión](https://img.shields.io/badge/versión-1.12.1-4F46E5?style=flat-square)](./CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-316_passing-22C55E?style=flat-square&logo=pytest&logoColor=white)](#calidad)
+[![Changelog](https://img.shields.io/badge/changelog-Keep_a_Changelog-F59E0B?style=flat-square)](./CHANGELOG.md)
+[![SemVer](https://img.shields.io/badge/semver-2.0.0-3B82F6?style=flat-square&logo=semver&logoColor=white)](https://semver.org/lang/es/)
+
+<br/>
+
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![DRF](https://img.shields.io/badge/DRF-REST_API-A30000?style=for-the-badge&logo=django&logoColor=white)](https://www.django-rest-framework.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
+[![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Redis](https://img.shields.io/badge/Redis-cache-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+
+<br/>
+
+**[Módulos](#módulos)** · **[Arquitectura](#arquitectura)** · **[Instalación](#instalación)** · **[Seguridad](#seguridad)** · **[Changelog](./CHANGELOG.md)**
 
 </div>
 
 ---
 
-## 🎯 ¿Por qué Inventrix?
+## Qué es
+
+Inventrix es el sistema que corre el día a día de un taller de motos: lo que entra,
+lo que sale, lo que se debe y lo que se cobra.
+
+No es un ERP genérico adaptado a la fuerza. Cada módulo salió de un problema
+concreto del mostrador — el presupuesto que el cliente aprueba antes de que el
+mecánico toque la moto, el repuesto que se descontó del inventario pero nunca se
+facturó, la caja que al cierre no cuadra y nadie sabe por qué.
 
 <table>
 <tr>
-<td width="50%">
+<td width="33%" valign="top">
 
-### 💼 Para tu Negocio
-
-- ✅ **Control Total**: Gestiona inventario, ventas y compras en un solo lugar
-- ✅ **Ahorra Tiempo**: Automatiza procesos repetitivos y reduce errores
-- ✅ **Toma Decisiones**: Reportes detallados y análisis en tiempo real
-- ✅ **Crece Seguro**: Arquitectura escalable que crece con tu negocio
-- ✅ **Fácil de Usar**: Interfaz intuitiva, sin curva de aprendizaje
+### Vender
+Punto de venta con lector de código de barras, arqueo de caja por turno y
+control de quién cobró qué.
 
 </td>
-<td width="50%">
+<td width="33%" valign="top">
 
-### 🚀 Tecnología Moderna
+### Reparar
+Órdenes de trabajo en tablero Kanban, presupuestos que el cliente aprueba y
+repuestos que salen del inventario solo cuando hay autorización.
 
-- ⚡ **Rápido**: Interfaz reactiva con carga instantánea
-- 🎨 **Hermoso**: Diseño moderno con modo oscuro
-- 📱 **Responsive**: Funciona en móvil, tablet y desktop
-- 🔒 **Seguro**: Validación robusta y protección de datos
-- ☁️ **Cloud Ready**: Almacenamiento en la nube con Cloudflare R2
+</td>
+<td width="33%" valign="top">
+
+### Controlar
+Cuentas por cobrar y por pagar, rentabilidad por producto, desempeño de
+proveedores y pronóstico de demanda.
 
 </td>
 </tr>
 </table>
 
-### 💡 La Historia Detrás del Proyecto
+---
 
-Inventrix nació observando las dificultades que enfrentan los negocios locales en Nicaragua y Latinoamérica para gestionar su inventario. Muchas empresas aún dependen de hojas de cálculo, cuadernos o sistemas obsoletos que no se adaptan a sus necesidades reales.
+## Módulos
 
-**Nuestra misión**: Democratizar el acceso a herramientas de gestión empresarial de calidad, proporcionando una solución profesional, accesible y diseñada específicamente para las necesidades de negocios latinoamericanos.
+### Operación diaria
+
+| | Módulo | Qué resuelve |
+|:--:|---|---|
+| <img src="https://img.shields.io/badge/-POS-F59E0B?style=flat-square" height="20"/> | **Punto de venta** | Venta rápida con lector de código de barras, múltiples métodos de pago y bloqueo si no hay caja abierta |
+| <img src="https://img.shields.io/badge/-Caja-22C55E?style=flat-square" height="20"/> | **Sesiones de caja** | Apertura y cierre por turno con arqueo. El efectivo esperado se calcula desde ventas, gastos, pagos y reembolsos |
+| <img src="https://img.shields.io/badge/-Taller-8B5CF6?style=flat-square" height="20"/> | **Órdenes de trabajo** | Tablero Kanban por estado: recibida → diagnóstico → presupuesto → reparación → entrega |
+| <img src="https://img.shields.io/badge/-Bitácora-A855F7?style=flat-square" height="20"/> | **Bitácora de servicio** | Registro fotográfico en los 4 módulos del servicio, con las imágenes en almacenamiento externo |
+| <img src="https://img.shields.io/badge/-Ventas-EAB308?style=flat-square" height="20"/> | **Órdenes de venta** | Ventas a crédito con abonos parciales, saldo pendiente y devoluciones |
+| <img src="https://img.shields.io/badge/-Compras-EC4899?style=flat-square" height="20"/> | **Órdenes de compra** | Compra, recepción que suma stock de forma idempotente, y devoluciones al proveedor |
+
+### Inventario
+
+| | Módulo | Qué resuelve |
+|:--:|---|---|
+| <img src="https://img.shields.io/badge/-Productos-10B981?style=flat-square" height="20"/> | **Catálogo** | SKU, código de barras, stock mínimo, precios por proveedor e importación masiva desde Excel/CSV |
+| <img src="https://img.shields.io/badge/-Ubicaciones-14B8A6?style=flat-square" height="20"/> | **Ubicaciones físicas** | Dónde está cada repuesto en la bodega: pasillo, estante, nivel |
+| <img src="https://img.shields.io/badge/-Conteo-0EA5E9?style=flat-square" height="20"/> | **Conteo físico** | Hoja de conteo por ubicación y aplicación de ajustes en lote, con su rastro de movimientos |
+| <img src="https://img.shields.io/badge/-Movimientos-06B6D4?style=flat-square" height="20"/> | **Trazabilidad** | Todo movimiento de stock queda registrado con su origen: venta, compra, taller o ajuste |
+| <img src="https://img.shields.io/badge/-Etiquetas-6366F1?style=flat-square" height="20"/> | **Etiquetas** | Generación de etiquetas con código de barras para imprimir |
+
+### Dinero
+
+| | Módulo | Qué resuelve |
+|:--:|---|---|
+| <img src="https://img.shields.io/badge/-CxC-F59E0B?style=flat-square" height="20"/> | **Cuentas por cobrar** | Saldos de clientes con antigüedad (0-30, 31-60, 61-90, +90 días) |
+| <img src="https://img.shields.io/badge/-CxP-EF4444?style=flat-square" height="20"/> | **Cuentas por pagar** | Lo que se le debe a cada proveedor, con saldo a favor si se devolvió mercadería ya pagada |
+| <img src="https://img.shields.io/badge/-Gastos-DC2626?style=flat-square" height="20"/> | **Gastos** | Libro de gastos por categoría que alimenta el estado de resultados y el arqueo de caja |
+| <img src="https://img.shields.io/badge/-Cotizaciones-6366F1?style=flat-square" height="20"/> | **Cotizaciones** | Proformas con PDF, y presupuestos de reparación que al aprobarse cargan los repuestos a la orden |
+| <img src="https://img.shields.io/badge/-Garantías-84CC16?style=flat-square" height="20"/> | **Garantías** | Cobertura por producto vendido y gestión de reclamaciones |
+
+### Análisis
+
+| | Módulo | Qué resuelve |
+|:--:|---|---|
+| <img src="https://img.shields.io/badge/-Rentabilidad-22C55E?style=flat-square" height="20"/> | **Rentabilidad** | Margen real por producto y por servicio, no solo volumen de venta |
+| <img src="https://img.shields.io/badge/-Pronóstico-4F46E5?style=flat-square" height="20"/> | **Pronóstico de demanda** | Punto de reorden calculado con la velocidad de venta real y el plazo de entrega de cada proveedor |
+| <img src="https://img.shields.io/badge/-Proveedores-8B5CF6?style=flat-square" height="20"/> | **Desempeño de proveedores** | Quién entrega a tiempo, quién manda mercadería mala y quién tiene mejor precio |
+| <img src="https://img.shields.io/badge/-Preventivo-0EA5E9?style=flat-square" height="20"/> | **Mantenimiento preventivo** | Qué motos tocan servicio, por kilometraje o por fecha |
+| <img src="https://img.shields.io/badge/-Reportes-06B6D4?style=flat-square" height="20"/> | **Reportes** | 16 reportes con exportación a PDF y Excel |
+
+### Administración
+
+| | Módulo | Qué resuelve |
+|:--:|---|---|
+| <img src="https://img.shields.io/badge/-Usuarios-64748B?style=flat-square" height="20"/> | **Usuarios y roles** | Dueño y operador. Los costos, márgenes y reportes financieros son solo del dueño |
+| <img src="https://img.shields.io/badge/-Auditoría-475569?style=flat-square" height="20"/> | **Logs de auditoría** | Todo cambio de producto queda registrado por un trigger de base de datos, con usuario e IP |
+| <img src="https://img.shields.io/badge/-Respaldos-0EA5E9?style=flat-square" height="20"/> | **Respaldos** | Respaldo restaurable con `pg_dump`, verificado antes de darse por bueno |
+| <img src="https://img.shields.io/badge/-IA-A855F7?style=flat-square" height="20"/> | **Proveedores de IA** | Configuración de OpenAI, Anthropic, Gemini o DeepSeek con la clave cifrada en reposo |
+
+> [!NOTE]
+> La IA **interpreta, nunca calcula dinero**. El pronóstico de demanda se computa
+> de forma determinista; la IA solo agrega contexto de estacionalidad y sugerencias
+> de agrupación. Si el proveedor de IA falla, los números siguen saliendo.
 
 ---
 
-## ✨ Características Principales
+## Arquitectura
 
-### 🎯 Dashboard Inteligente
+```mermaid
+graph TB
+    subgraph Clientes
+        WEB["Web · React 19 + Vite"]
+        DESK["Escritorio · JavaFX"]
+    end
 
-<img src="https://img.shields.io/badge/Vista-Dashboard-4F46E5?style=flat-square" alt="Dashboard"/>
+    subgraph Servidor
+        API["Django 5.2 + DRF<br/>JWT · Throttling · Auditoría"]
+    end
 
-- **Resumen ejecutivo** con métricas clave en tiempo real
-- **Gráficos interactivos** de ventas, compras y tendencias
-- **Alertas automáticas** de stock bajo y productos agotados
-- **Acciones rápidas** para operaciones frecuentes
-- **Bienvenida personalizada** con fecha y hora actual
+    subgraph Datos
+        PG[("PostgreSQL 16<br/>Triggers · JSONB")]
+        REDIS[("Redis<br/>Caché")]
+        R2[("Object Storage<br/>Imágenes")]
+    end
 
-### 📦 Gestión Completa de Productos
-
-<img src="https://img.shields.io/badge/Módulo-Productos-10B981?style=flat-square" alt="Productos"/>
-
-- ✅ Registro completo con SKU, códigos de barras y descripciones detalladas
-- ✅ Control de stock actual, mínimo y máximo con alertas automáticas
-- ✅ Gestión de precios de compra y venta con cálculo de márgenes
-- ✅ Categorización flexible y búsqueda avanzada
-- ✅ Imágenes de productos y documentación adjunta
-- ✅ Historial completo de movimientos y transacciones
-- ✅ Exportación a PDF y Excel
-
-### 👥 Gestión de Clientes con Bitácora de Servicios
-
-<img src="https://img.shields.io/badge/Módulo-Clientes-3B82F6?style=flat-square" alt="Clientes"/> <img src="https://img.shields.io/badge/NUEVO-Bitácora-F59E0B?style=flat-square" alt="Nuevo"/>
-
-- 📋 **Base de datos completa** de clientes con información de contacto
-- 📋 **Historial de compras** y análisis de comportamiento
-- 🏍️ **Registro de motos** asociadas a cada cliente
-- 📝 **Sistema de bitácora de servicios** con 4 módulos:
-  - **Recepción**: Registro inicial del servicio con fotos del estado
-  - **Diagnóstico**: Evaluación técnica con imágenes de problemas detectados
-  - **Reparación**: Seguimiento del proceso con evidencia fotográfica
-  - **Entrega**: Cierre del servicio con fotos del trabajo terminado
-- 📸 **Almacenamiento en la nube** (Cloudflare R2) para imágenes
-- 🔍 **Visualizador de bitácora** con galería de imágenes por módulo
-- 📊 **Historial completo** de servicios por moto
-
-### 🏢 Gestión de Proveedores
-
-<img src="https://img.shields.io/badge/Módulo-Proveedores-8B5CF6?style=flat-square" alt="Proveedores"/>
-
-- 📇 Base de datos completa con información de contacto
-- 📊 Historial de transacciones y órdenes de compra
-- 💰 Análisis de costos y términos comerciales
-- ⭐ Evaluación de desempeño y confiabilidad
-- 📈 Reportes de compras por proveedor
-
-### 🛒 Órdenes de Compra
-
-<img src="https://img.shields.io/badge/Módulo-Compras-EC4899?style=flat-square" alt="Compras"/>
-
-- 📝 Creación rápida de órdenes con múltiples productos
-- 🔄 Estados: Pendiente, Recibida, Cancelada
-- 💵 Cálculo automático de subtotales, impuestos y totales
-- 📦 Actualización automática de inventario al recibir
-- 📊 Historial completo y trazabilidad
-- 📄 Exportación a PDF y Excel
-
-### 💰 Órdenes de Venta
-
-<img src="https://img.shields.io/badge/Módulo-Ventas-F59E0B?style=flat-square" alt="Ventas"/>
-
-- 🛍️ Proceso de venta rápido e intuitivo
-- 📦 Múltiples productos por orden con cantidades variables
-- 💳 Cálculo automático de totales y descuentos
-- 📉 Actualización automática de inventario
-- 👤 Asociación con clientes para historial
-- 📊 Análisis de ventas y tendencias
-
-### 💵 Pago por Adelantado (Abonos)
-
-<img src="https://img.shields.io/badge/Módulo-Pagos-22C55E?style=flat-square" alt="Pagos"/> <img src="https://img.shields.io/badge/NUEVO-Abonos-F59E0B?style=flat-square" alt="Nuevo"/>
-
-- 💰 **Pagos parciales (abonos)** sobre una orden de venta antes de la entrega final
-- 🔁 **Múltiples abonos** hasta cubrir el total de la venta
-- 📊 **Estado de pago** automático por venta: `Pendiente`, `Parcial` o `Pagado`
-- 🧮 **Saldo pendiente** calculado desde el total real de la venta (productos o servicio)
-- 🧾 **Historial de pagos** por orden con monto, fecha, método y referencia
-- 💳 **Métodos de pago**: efectivo, tarjeta, transferencia, depósito o cheque
-- 🔒 **Validaciones de negocio**: el abono no puede exceder el saldo y solo se elimina el último pago registrado
-- ⚙️ **Concurrencia segura**: registro de pagos con transacción atómica y bloqueo de fila
-- 🔍 **Filtro y badges** de estado de pago en el listado de ventas
-- 📖 [Ver documento de implementación](./PAGO_ADELANTADO_IMPLEMENTACION.md)
-
-### 💸 Cuentas por Cobrar
-
-<img src="https://img.shields.io/badge/Módulo-Cobranza-F59E0B?style=flat-square" alt="Cobranza"/> <img src="https://img.shields.io/badge/NUEVO-CxC-22C55E?style=flat-square" alt="Nuevo"/>
-
-- 📋 **Listado de ventas con saldo pendiente** ordenadas por antigüedad de la deuda
-- ⏳ **Antigüedad de saldo (aging)**: tramos 0-30, 31-60, 61-90 y más de 90 días
-- 💰 **Resumen**: total por cobrar, número de ventas con saldo y clientes deudores
-- 💬 **Recordatorio por WhatsApp** con un clic (mensaje pre-armado con el saldo)
-
-### 🧾 Cotizaciones / Proformas
-
-<img src="https://img.shields.io/badge/Módulo-Cotizaciones-6366F1?style=flat-square" alt="Cotizaciones"/> <img src="https://img.shields.io/badge/NUEVO-Proformas-22C55E?style=flat-square" alt="Nuevo"/>
-
-- 📝 Crea **proformas** para tus clientes con varios productos y validez configurable
-- 🔄 **Convierte una cotización en venta** con un clic (genera la orden automáticamente)
-- ✅ Estados: `Pendiente`, `Aprobada`, `Rechazada`, `Convertida`
-- 📄 **Descarga la cotización en PDF** para enviarla al cliente
-
-### ↩️ Devoluciones / Notas de Crédito
-
-<img src="https://img.shields.io/badge/Módulo-Devoluciones-EF4444?style=flat-square" alt="Devoluciones"/> <img src="https://img.shields.io/badge/NUEVO-Notas_de_crédito-22C55E?style=flat-square" alt="Nuevo"/>
-
-- 📦 Registra la **devolución de productos** a partir de una venta existente
-- 🔁 **Reingreso automático de stock** y registro del movimiento de inventario
-- 🧮 Calcula el total de la **nota de crédito** según los productos devueltos
-
-### 📄 Recibos y Comprobantes en PDF
-
-<img src="https://img.shields.io/badge/Feature-Recibos_PDF-3B82F6?style=flat-square" alt="Recibos"/>
-
-- 🧾 **Recibo de venta** en PDF con el detalle de productos y estado de pago
-- 💵 **Comprobante por cada abono** (pago) para entregar al cliente
-
-### 💾 Respaldos (Backup con un clic)
-
-<img src="https://img.shields.io/badge/Módulo-Respaldos-0EA5E9?style=flat-square" alt="Respaldos"/> <img src="https://img.shields.io/badge/NUEVO-Backup-22C55E?style=flat-square" alt="Nuevo"/>
-
-- 💾 **Descarga un respaldo completo** de toda la base de datos en formato JSON
-- 🖱️ **Un solo clic** desde la pantalla de Respaldos; sin conocimientos técnicos
-- 🛡️ Pensado para resguardar tus datos ante pérdidas; ideal para un dueño sin equipo de IT
-
-### 📊 Reportes y Análisis Avanzados
-
-<img src="https://img.shields.io/badge/Módulo-Reportes-06B6D4?style=flat-square" alt="Reportes"/>
-
-- 📈 **Inventario**: Estado actual, valorización, distribución por categorías
-- 💰 **Ventas**: Por período, por cliente, ticket promedio, tendencias
-- 🛒 **Compras**: Por período, por proveedor, análisis de costos
-- 🏆 **Top Productos**: Más vendidos por cantidad e ingresos
-- 📉 **Stock Bajo**: Alertas de productos que requieren reorden
-- 📄 **Exportación**: PDF profesional y Excel para análisis
-- ✅ **Validación de Fechas**: Previene reportes con fechas futuras o rangos inválidos
-
-### 🔍 Búsqueda Global Inteligente
-
-<img src="https://img.shields.io/badge/Feature-Búsqueda_Global-6366F1?style=flat-square" alt="Búsqueda"/>
-
-- ⚡ Búsqueda instantánea en productos, clientes y proveedores
-- ⌨️ Atajo de teclado rápido (Ctrl + / o Cmd + /)
-- 🎯 Resultados en tiempo real mientras escribes
-- 🔗 Navegación directa al detalle del elemento
-- 📱 Funciona en todos los dispositivos
-
-### 🎨 Experiencia de Usuario Premium
-
-<img src="https://img.shields.io/badge/UX-Premium-EC4899?style=flat-square" alt="UX"/>
-
-- 🌓 **Modo oscuro completo** para trabajar de noche
-- 📱 **Diseño responsive** perfecto en móvil, tablet y desktop
-- ✨ **Animaciones fluidas** con Framer Motion
-- 🎯 **Navegación intuitiva** con menú superior y bottom nav móvil
-- 🔔 **Notificaciones toast** para feedback inmediato
-- ⚡ **Carga optimizada** con lazy loading y code splitting
-- 🎨 **Interfaz moderna** con gradientes y efectos visuales
-- ✅ **Validación robusta** en formularios con mensajes claros
-- 🔐 **Validación de datos** en múltiples capas (HTML5, onChange, Submit)
-
----
-
-## 🏗️ Arquitectura Técnica
-
-### 🛠️ Stack Tecnológico
+    WEB -->|REST| API
+    DESK -->|JDBC| PG
+    API --> PG
+    API --> REDIS
+    API --> R2
+```
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-#### Backend
-```
-🐍 Python 3.12+
-🎯 Django 5.2+
-🔌 Django REST Framework 3.14+
-🐘 PostgreSQL 16
-☁️ Cloudflare R2 (Storage)
-📦 boto3 (AWS SDK)
-🔐 django-cors-headers
-📊 Logging avanzado
-🔐 python-dotenv
-🚀 Gunicorn (WSGI)
-```
+### Backend
 
-**Características Backend:**
-- API RESTful completa y documentada
-- Autenticación y autorización robusta
-- Validación de datos en múltiples capas
-- Manejo centralizado de excepciones
-- Middleware personalizado para logging
-- Almacenamiento en la nube con R2
-- Optimización de queries con select_related
+[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=flat-square&logo=django&logoColor=white)](#)
+[![DRF](https://img.shields.io/badge/DRF-REST-A30000?style=flat-square)](#)
+[![JWT](https://img.shields.io/badge/JWT-SimpleJWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)](#)
+[![Gunicorn](https://img.shields.io/badge/Gunicorn-WSGI-499848?style=flat-square&logo=gunicorn&logoColor=white)](#)
+
+- API REST con autenticación JWT en **todos** los endpoints salvo dos
+- Esquema híbrido: ORM de Django conviviendo con SQL crudo donde hace falta
+- Cifrado Fernet para datos de contacto, con clave separada de la de respaldos
+- Auditoría por trigger de PostgreSQL, no por señales de Django
+- Transacciones atómicas con bloqueo de fila en todo lo que toca stock o dinero
 
 </td>
 <td width="50%" valign="top">
 
-#### Frontend
-```
-⚛️ React 19.2.4
-⚡ Vite 7.0 (Build tool)
-🎨 TailwindCSS 4
-✨ Framer Motion (Animaciones)
-🔄 React Query (Server state)
-🐻 Zustand (Client state)
-📊 Recharts (Gráficos)
-🌐 Axios (HTTP client)
-📝 React Hook Form
-🎭 React Router DOM v6
-```
+### Frontend
 
-**Características Frontend:**
-- Componentes reutilizables y modulares
-- Hooks personalizados para lógica compartida
-- Optimización con lazy loading
-- Code splitting automático
-- Caché inteligente con React Query
-- Animaciones fluidas y performantes
-- Modo oscuro completo
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](#)
+[![ReactQuery](https://img.shields.io/badge/TanStack-Query-FF4154?style=flat-square&logo=reactquery&logoColor=white)](#)
+[![Zustand](https://img.shields.io/badge/Zustand-state-443E38?style=flat-square)](#)
+[![Recharts](https://img.shields.io/badge/Recharts-gráficos-22B5BF?style=flat-square)](#)
+
+- 29 pantallas con carga diferida y división de código
+- Caché de servidor con TanStack Query, estado de cliente con Zustand
+- Modo oscuro completo y diseño adaptable a móvil
+- Exportación a PDF (jsPDF) y Excel (ExcelJS) desde el navegador
+- Lectura de código de barras por cámara o lector físico
 
 </td>
 </tr>
 </table>
 
-### 🖥️ Aplicación de Escritorio ![alpha](https://img.shields.io/badge/estado-alpha-red?style=flat-square)
+### Aplicación de escritorio
 
-> **⚠️ En alpha.** Funciona y está probada, pero todavía no tiene rodaje en uso real.
-> Como escribe sobre la misma base de datos que la web, conviene probarla contra una
-> copia y mantener la web como sistema principal por ahora.
+[![Estado](https://img.shields.io/badge/estado-alpha-EF4444?style=flat-square)](#)
+[![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)](#)
+[![JavaFX](https://img.shields.io/badge/JavaFX-21-5382A1?style=flat-square&logo=java&logoColor=white)](#)
 
-Además de la aplicación web, existe **Inventrix Desktop**: un cliente nativo de escritorio
-para Windows, escrito en Java, pensado para el mostrador del taller.
+Cliente nativo de Windows para el mostrador. Se conecta por JDBC **a la misma base
+de datos** que la web, así que los datos son los mismos y en tiempo real.
+Reimplementa la verificación de contraseñas de Django y el cifrado de contactos
+para ser compatible bit a bit con el backend.
 
-```
-☕ Java 21 (Temurin)
-🖼️ JavaFX 21 + AtlantaFX
-🔌 JDBC directo a PostgreSQL (sin API intermedia)
-🏊 HikariCP (pool de conexiones)
-📦 jpackage (ejecutable con runtime embebida)
-```
+Cubre inventario, punto de venta, clientes, proveedores y compras. Taller, caja,
+gastos, cotizaciones y reportes siguen siendo exclusivos de la web. Vive en su
+propio repositorio, con changelog independiente.
 
-Se conecta **a la misma base de datos** que la web, así que los datos son los mismos y en
-tiempo real: una venta hecha en el mostrador aparece de inmediato en la web, y al revés.
-Reimplementa la verificación de contraseñas de Django y el cifrado de datos de contacto
-para ser compatible bit a bit con lo que guarda el backend.
+> [!WARNING]
+> En alpha. Funciona y está probada, pero no tiene rodaje en uso real. Como
+> escribe sobre la misma base de datos que la web, conviene probarla contra una
+> copia y mantener la web como sistema principal.
 
-Cubre el núcleo operativo: inventario, punto de venta, clientes, proveedores y órdenes de
-compra. No requiere navegador, ni que el backend esté levantado, ni tener Java instalado en
-la máquina (la runtime va dentro del ejecutable). Taller, cotizaciones, devoluciones, caja,
-gastos y reportes siguen siendo exclusivos de la web.
-
-Vive en su propio repositorio y lleva su **changelog independiente**, porque su ciclo de
-versiones no va atado al de la web.
-
-### 🏛️ Arquitectura del Sistema
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         FRONTEND                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │  React   │  │ Tailwind │  │  Framer  │  │  React   │   │
-│  │  19.2.4  │  │   CSS    │  │  Motion  │  │  Query   │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │         Components / Pages / Hooks / Utils         │    │
-│  └────────────────────────────────────────────────────┘    │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ HTTP/REST API
-                       │ (Axios)
-┌──────────────────────┴──────────────────────────────────────┐
-│                         BACKEND                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │  Django  │  │   DRF    │  │   CORS   │  │ Logging  │   │
-│  │   5.2+   │  │   3.14   │  │ Headers  │  │ Middleware│  │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐    │
-│  │    Models / Serializers / Views / Services         │    │
-│  └────────────────────────────────────────────────────┘    │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-        ┌──────────────┴──────────────┐
-        │                             │
-┌───────┴────────┐          ┌─────────┴─────────┐
-│   PostgreSQL   │          │  Cloudflare R2    │
-│   Database     │          │  Object Storage   │
-│   (Relational) │          │  (Images)         │
-└────────────────┘          └───────────────────┘
-```
-
-### 🎯 Principios de Diseño
-
-1. **🔌 API First**: Toda la lógica de negocio expuesta vía API REST
-2. **🧩 Componentización**: Componentes reutilizables y modulares
-3. **⚡ Performance**: Optimización de queries, lazy loading, code splitting
-4. **🔒 Seguridad**: Validación en backend, sanitización de inputs, CORS configurado
-5. **📈 Escalabilidad**: Arquitectura preparada para crecer
-6. **🎨 UX/UI**: Diseño centrado en el usuario con feedback inmediato
-7. **📱 Mobile First**: Responsive design desde el inicio
-
-### 🗄️ Características Avanzadas de Base de Datos
-
-#### 🎯 PostgreSQL 16 - Funcionalidades Implementadas
-
-**JSONB para Datos Dinámicos:**
-- ✅ Almacenamiento de **imágenes de bitácora** en formato JSONB
-- ✅ **Snapshots completos** de auditoría en JSON
-- ✅ Queries optimizadas con índices GIN
-
-**Triggers Automáticos:**
-- ✅ **Auditoría de productos**: Registra automáticamente INSERT, UPDATE, DELETE
-- ✅ **Cálculo de diferencias**: Cantidad, precios, cambios
-- ✅ **Metadata**: Usuario, IP, timestamp automáticos
-
-**Funciones PL/pgSQL:**
-- ✅ `fn_auditoria_productos()`: Función de trigger para auditoría
-- ✅ `fn_historial_producto()`: Historial completo de un producto
-- ✅ `fn_estadisticas_auditoria()`: Estadísticas del sistema
-
-**Vistas Materializadas:**
-- ✅ `v_auditoria_reciente`: Últimos 100 cambios
-- ✅ `v_auditoria_por_producto`: Cambios agrupados por producto
-- ✅ `v_auditoria_stock`: Movimientos de inventario
-- ✅ `v_auditoria_precios`: Cambios de precios con porcentajes
-
-**Índices Optimizados:**
-- ✅ Índices compuestos para queries frecuentes
-- ✅ Índices GIN para campos JSONB
-- ✅ Índices parciales para consultas específicas
-
-**Constraints y Validación:**
-- ✅ CHECK constraints para valores válidos
-- ✅ UNIQUE constraints para integridad
-- ✅ Foreign Keys con CASCADE/SET NULL apropiados
-
-**Scripts SQL Documentados:**
-```sql
-backend/SQL_FILES/
-├── create_auditoria_productos.sql     # Sistema completo de auditoría
-├── create_bitacora_table.sql          # Bitácora con JSONB
-├── create_motos_tables.sql            # Tablas de vehículos
-├── create_movimientos_table.sql       # Trazabilidad de inventario
-└── create_producto_proveedor_table.sql # Relaciones N:N
-```
-
-📖 [Ver scripts SQL completos](./backend/SQL_FILES/)
+El servidor le sirve las actualizaciones: la app consulta si hay versión nueva,
+verifica el checksum SHA-256 del instalador y **se niega a instalar si no puede
+comprobarlo**.
 
 ---
 
-## 🚀 Instalación Rápida
+## Instalación
 
-### 📋 Prerrequisitos
+### Requisitos
 
-Antes de comenzar, asegúrate de tener instalado:
+[![Docker](https://img.shields.io/badge/Docker-requerido-2496ED?style=flat-square&logo=docker&logoColor=white)](#)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](#)
+[![Node](https://img.shields.io/badge/Node-20+-339933?style=flat-square&logo=nodedotjs&logoColor=white)](#)
+[![pnpm](https://img.shields.io/badge/pnpm-gestor-F69220?style=flat-square&logo=pnpm&logoColor=white)](#)
 
-- ✅ **Docker** y **Docker Compose** (Recomendado)
-- ✅ **Git** para clonar el repositorio
-- ✅ **4GB RAM** mínimo recomendado
-- ✅ **Puertos disponibles**: 5173 (frontend) y 8000 (backend)
-
-### 🐳 Instalación con Docker (Recomendado)
-
-La forma más rápida de poner en marcha Inventrix:
+### Puesta en marcha
 
 ```bash
-# 1️⃣ Clonar el repositorio
 git clone https://github.com/Iampro1712/BD-Sist-Inv.git
 cd BD-Sist-Inv
 
-# 2️⃣ Configurar variables de entorno
-cp .env.example .env
+# Variables de entorno (ver plantillas para la lista completa)
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 
-# Editar los archivos .env con tus configuraciones
-# Especialmente importante: credenciales de PostgreSQL y Cloudflare R2
-
-# 3️⃣ Iniciar los servicios
-docker-compose up -d
-
-# 4️⃣ Ejecutar migraciones
-docker-compose exec backend python manage.py migrate
-
-# 5️⃣ Crear superusuario (opcional pero recomendado)
-docker-compose exec backend python manage.py createsuperuser
-
-# 6️⃣ Cargar datos de ejemplo (opcional)
-docker-compose exec backend python manage.py loaddata initial_data.json
-
-# ✅ ¡Listo! Accede a la aplicación
-# Frontend: http://localhost:5173
-# Backend API: http://localhost:8000/api
-# Admin Django: http://localhost:8000/admin
+docker compose up -d
+docker compose exec backend python manage.py migrate
+docker compose exec backend python manage.py createsuperuser
 ```
 
-### 💻 Instalación Manual (Desarrollo)
+| Servicio | URL |
+|---|---|
+| Frontend | `http://localhost:5173` |
+| API | `http://localhost:8000/api` |
+| Admin de Django | `http://localhost:8000/admin` |
 
 <details>
-<summary>📖 Click para ver instrucciones detalladas de instalación manual</summary>
+<summary><b>Instalación manual, sin Docker</b></summary>
 
-#### Backend Setup
+<br/>
+
+**Backend**
 
 ```bash
-# Navegar al directorio backend
 cd backend
-
-# Crear entorno virtual
 python -m venv venv
-
-# Activar entorno virtual
-# En Windows:
-venv\Scripts\activate
-# En Linux/Mac:
-source venv/bin/activate
-
-# Instalar dependencias
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus credenciales de PostgreSQL y Cloudflare R2
-
-# Crear base de datos PostgreSQL
-# Asegúrate de que PostgreSQL esté corriendo y crea la base de datos
-createdb inventrix_db
-
-# Ejecutar migraciones
+cp .env.example .env              # completar antes de continuar
 python manage.py migrate
-
-# Crear superusuario
 python manage.py createsuperuser
-
-# Iniciar servidor de desarrollo
 python manage.py runserver
-# Backend corriendo en http://localhost:8000
 ```
 
-#### Frontend Setup
+**Frontend**
 
 ```bash
-# Abrir nueva terminal y navegar al directorio frontend
 cd frontend
-
-# Instalar dependencias (usando pnpm, npm o yarn)
 pnpm install
-# o
-npm install
-# o
-yarn install
-
-# Configurar variables de entorno
 cp .env.example .env
-# Editar .env con la URL de tu backend
-
-# Iniciar servidor de desarrollo
 pnpm dev
-# o
-npm run dev
-# o
-yarn dev
-
-# Frontend corriendo en http://localhost:5173
 ```
-
-#### Configuración de Cloudflare R2 (Para Bitácora)
-
-1. Crea una cuenta en [Cloudflare](https://cloudflare.com)
-2. Crea un bucket R2 en el dashboard
-3. Genera las credenciales de acceso (Access Key ID y Secret Access Key)
-4. Configura las variables en `backend/.env`:
-   ```env
-   R2_ACCESS_URI=https://your-account-id.r2.cloudflarestorage.com
-   R2_ACCESS_KEY_ID=your_access_key_id
-   R2_SECRET_ACCESS_KEY=your_secret_access_key
-   R2_BUCKET_NAME=your_bucket_name
-   R2_PUBLIC_URL=https://your-public-url.com
-   ```
 
 </details>
 
-### 🔧 Configuración Inicial
+<details>
+<summary><b>Base de datos de pruebas</b></summary>
 
-Después de la instalación, configura lo siguiente:
+<br/>
 
-1. **Categorías de Productos**: Crea categorías básicas desde el admin
-2. **Proveedores**: Registra tus proveedores principales
-3. **Productos**: Agrega tu catálogo de productos
-4. **Clientes**: Importa o registra tus clientes
-
-### 🧪 Datos de Prueba
-
-Para probar el sistema con datos de ejemplo:
+El esquema es **híbrido**: parte lo creó Django y parte preexistía. Las migraciones
+`0001`–`0004` describen un esquema antiguo que ya no existe, así que se marcan como
+aplicadas sin ejecutarse.
 
 ```bash
-# Con Docker
-docker-compose exec backend python manage.py loaddata fixtures/demo_data.json
+# Postgres desechable
+docker run -d --name inventrix-test -e POSTGRES_PASSWORD=postgres \
+  -p 55439:5432 postgres:16
 
-# Sin Docker
-python manage.py loaddata fixtures/demo_data.json
+# Cargar el esquema base y aplicar migraciones reales
+psql -h localhost -p 55439 -U postgres -c "CREATE DATABASE test_inventrix_ci;"
+psql -h localhost -p 55439 -U postgres -d test_inventrix_ci \
+  -f backend/SQL_FILES/000_base_schema_snapshot.sql
+
+cd backend
+DB_NAME=test_inventrix_ci python manage.py migrate inventory 0004 --fake
+DB_NAME=test_inventrix_ci python manage.py migrate
+python manage.py test --keepdb
 ```
 
----
-
-## 📚 Documentación
-
-### 📖 Documentación Disponible
-
-| Documento | Descripción |
-|-----------|-------------|
-| [📘 API Documentation](./API_DOCS.md) | Documentación completa de todos los endpoints de la API |
-| [🚀 Deployment Guide](./DEPLOYMENT.md) | Guía detallada de despliegue en producción |
-| [🤝 Contributing Guide](./CONTRIBUTING.md) | Cómo contribuir al proyecto |
-| [📝 Bitácora README](./BITACORA_README.md) | Documentación del sistema de bitácora de servicios |
-| [💵 Pago por Adelantado](./PAGO_ADELANTADO_IMPLEMENTACION.md) | Implementación de abonos / pagos parciales en órdenes de venta |
-| [📅 Validación de Fechas en Órdenes](./VALIDACION_FECHAS_ORDENES.md) | Validación de fechas futuras en órdenes de compra y venta |
-| [📅 Validación de Fechas en Reportes](./VALIDACION_FECHAS_REPORTES.md) | Validación de fechas futuras y rangos en reportes |
-| [📱 Validación de Teléfono](./VALIDACION_TELEFONO_CLIENTES.md) | Validación y formateo automático de números telefónicos |
-| [🔍 Revisión Técnica del Proyecto](./REVISION_DOCUMENTO_TECNICO.md) | Análisis técnico exhaustivo del sistema implementado |
-
-### 🎓 Guías Rápidas
-
-<details>
-<summary>🔍 Cómo usar la Búsqueda Global</summary>
-
-1. Presiona `Ctrl + /` (o `Cmd + /` en Mac)
-2. Escribe el nombre del producto, cliente o proveedor
-3. Haz clic en el resultado para ir directamente al detalle
-4. Presiona `Esc` para cerrar
-
 </details>
 
 <details>
-<summary>📋 Cómo crear una Bitácora de Servicio</summary>
+<summary><b>Datos de demostración</b></summary>
 
-1. Ve a **Clientes** y selecciona un cliente
-2. Haz clic en **Ver Detalle**
-3. Selecciona una moto del cliente
-4. Haz clic en **📋 Bitácora** en el servicio correspondiente
-5. Completa los 4 módulos: Recepción → Diagnóstico → Reparación → Entrega
-6. Sube fotos en cada módulo para documentar el proceso
-
-</details>
-
-<details>
-<summary>💰 Cómo crear una Orden de Venta</summary>
-
-1. Ve a **Ventas** en el menú
-2. Haz clic en **Nueva Venta**
-3. Selecciona el cliente
-4. Agrega productos con sus cantidades
-5. Revisa el total calculado automáticamente
-6. ✅ Verifica que la fecha no sea futura (validación automática)
-7. Haz clic en **Guardar**
-
-</details>
-
-<details>
-<summary>💵 Cómo registrar un Pago por Adelantado (Abono)</summary>
-
-1. Ve a **Ventas** y abre el **detalle** de una venta
-2. En la sección **Estado de pago**, haz clic en **+ Registrar pago**
-3. Ingresa el monto del abono (no puede exceder el saldo pendiente)
-4. Selecciona la fecha y el método de pago (efectivo, tarjeta, transferencia, depósito o cheque)
-5. (Opcional) Agrega una referencia o notas
-6. Haz clic en **Registrar pago**
-7. El estado cambia automáticamente a **Parcial** o **Pagado** según el saldo
-8. Para corregir, puedes **eliminar el último pago** registrado (recalcula el saldo)
-
-</details>
-
-<details>
-<summary>📊 Cómo exportar Reportes</summary>
-
-1. Ve a **Reportes** en el menú
-2. Selecciona el tipo de reporte que necesitas
-3. Configura el rango de fechas (si aplica)
-4. ✅ Verifica que:
-   - Ambas fechas no sean futuras
-   - La fecha de inicio sea menor o igual a la fecha fin
-5. Haz clic en **Generar Reporte**
-6. Haz clic en **Exportar a PDF** o **Exportar a Excel**
-7. El archivo se descargará automáticamente
-
-</details>
-
-<details>
-<summary>📱 Validación de Números Telefónicos</summary>
-
-Al crear un cliente:
-
-1. Ve a **Clientes** → **Nuevo Cliente**
-2. En el campo de teléfono:
-   - ✅ Ingresa 8 dígitos: `87549685`
-   - ✅ O con código de país: `+505 87549685`
-   - ✅ Se formatea automáticamente a: `8754-9685`
-   - ❌ Menos de 8 dígitos: muestra error
-3. Haz clic en **Guardar**
-
-</details>
-
-### 🔗 Enlaces Útiles
-
-- [🐛 Reportar un Bug](https://github.com/Iampro1712/BD-Sist-Inv/issues/new?template=bug_report.md)
-- [💡 Sugerir una Característica](https://github.com/Iampro1712/BD-Sist-Inv/issues/new?template=feature_request.md)
-- [💬 Discusiones](https://github.com/Iampro1712/BD-Sist-Inv/discussions)
-- [📧 Contacto](mailto:master_bc@icloud.com)
-
----
-
-## 📸 Capturas de Pantalla
-
-<div align="center">
-
-### 🏠 Dashboard
-*Vista general con métricas clave y acciones rápidas*
-
-### 📦 Gestión de Productos
-*Catálogo completo con búsqueda y filtros avanzados*
-
-### 👥 Gestión de Clientes
-*Base de datos de clientes con historial de servicios*
-
-### 📋 Sistema de Bitácora
-*Documentación visual de servicios con 4 módulos*
-
-### 📊 Reportes y Análisis
-*Reportes detallados con exportación a PDF y Excel*
-
-### 🔍 Búsqueda Global
-*Búsqueda instantánea en todo el sistema*
-
-</div>
-
-> 💡 **Nota**: Las capturas de pantalla se actualizarán próximamente con la interfaz más reciente.
-
----
-
-## 🎯 Casos de Uso
-
-### 🏪 Pequeños Negocios
-
-<table>
-<tr>
-<td width="33%">
-
-#### Tiendas de Barrio
-- Control de inventario básico
-- Ventas rápidas
-- Alertas de stock bajo
-- Reportes simples
-
-</td>
-<td width="33%">
-
-#### Ferreterías
-- Catálogo extenso
-- Múltiples proveedores
-- Control de precios
-- Gestión de categorías
-
-</td>
-<td width="33%">
-
-#### Farmacias
-- Control de stock crítico
-- Fechas de vencimiento
-- Ventas con receta
-- Reportes regulatorios
-
-</td>
-</tr>
-</table>
-
-### 🏢 Negocios Medianos
-
-<table>
-<tr>
-<td width="33%">
-
-#### Distribuidoras
-- Órdenes de compra masivas
-- Múltiples clientes
-- Análisis de márgenes
-- Reportes avanzados
-
-</td>
-<td width="33%">
-
-#### Talleres Mecánicos
-- Gestión de clientes
-- Registro de vehículos
-- Bitácora de servicios
-- Historial de reparaciones
-
-</td>
-<td width="33%">
-
-#### Restaurantes
-- Control de ingredientes
-- Recetas y costos
-- Inventario perecedero
-- Análisis de consumo
-
-</td>
-</tr>
-</table>
-
-### 🎯 Casos Específicos
-
-- ✅ **Multi-sucursal**: Control de inventario en múltiples ubicaciones
-- ✅ **Productos perecederos**: Seguimiento de fechas de vencimiento
-- ✅ **Servicios técnicos**: Bitácora visual con fotos del proceso
-- ✅ **Consignaciones**: Control de productos en consignación
-- ✅ **Mayoristas**: Gestión de precios por volumen
-
----
-
-## 🏆 Calidad y Validación Técnica
-
-### ✅ Revisión Técnica Completa
-
-El sistema ha sido sometido a una **revisión técnica exhaustiva** que verificó:
-
-<table>
-<tr>
-<td width="50%">
-
-#### ✅ Implementación (10/10)
-- **17 Requerimientos Funcionales** ✅
-- **12 Requerimientos No Funcionales** ✅
-- **Todas las tablas del modelo relacional** ✅
-- **Arquitectura completa y funcional** ✅
-
-</td>
-<td width="50%">
-
-#### ✅ Tecnologías (9/10)
-- **Stack moderno verificado** ✅
-- **React 19, Vite 7, Tailwind 4** ✅
-- **PostgreSQL 16 con funciones avanzadas** ✅
-- **Cloudflare R2 integrado** ✅
-
-</td>
-</tr>
-</table>
-
-### 🎯 Características Destacadas en la Revisión
-
-1. **🗄️ Uso Avanzado de PostgreSQL**
-   - Triggers automáticos para auditoría
-   - JSONB para datos dinámicos
-   - Funciones PL/pgSQL optimizadas
-   - Vistas materializadas para reportes
-
-2. **📋 Sistema de Bitácora Ejemplar**
-   - 4 módulos secuenciales implementados
-   - Almacenamiento en la nube con R2
-   - Referencias JSONB para múltiples imágenes
-   - Documentación visual completa
-
-3. **🔒 Validación Robusta**
-   - Triple capa de validación (HTML5 + JS + Backend)
-   - Prevención de fechas futuras
-   - Validación de rangos en reportes
-   - Formateo automático de teléfonos
-
-4. **🏗️ Arquitectura Escalable**
-   - Separación de responsabilidades
-   - Servicios de negocio aislados
-   - Transacciones atómicas
-   - Manejo centralizado de excepciones
-
-### 📊 Métricas de Calidad
-
-```
-📈 Cobertura de Requisitos:    100% (29/29)
-🎨 Calidad de Código:          9/10
-📚 Documentación:              95/100
-🔐 Seguridad:                  Alta
-⚡ Performance:                Optimizado
-📱 UX/UI:                      Excelente
-```
-
-### 🔍 Documentos de Validación
-
-- 📄 [Revisión Técnica Completa](./REVISION_DOCUMENTO_TECNICO.md) - 14 secciones de análisis
-- 📊 Verificación de 17 RF y 12 RNF
-- 🗄️ Validación de arquitectura y base de datos
-- 🎯 Recomendaciones para versiones futuras
-
----
-
-## 🌟 Roadmap
-
-### 🎯 Versión Actual: 3.0
-
-✅ Sistema completo de gestión de inventario  
-✅ Órdenes de compra y venta  
-✅ Gestión de clientes y proveedores  
-✅ Sistema de bitácora con almacenamiento en la nube  
-✅ Reportes avanzados con exportación  
-✅ Búsqueda global inteligente  
-✅ Modo oscuro completo  
-✅ Diseño responsive  
-✅ Validación robusta de fechas en órdenes y reportes  
-✅ Validación y formateo automático de teléfonos  
-✅ Validación de rangos de fechas en reportes  
-✅ Pago por adelantado (abonos / pagos parciales) con estado de pago y saldo  
-✅ Cuentas por cobrar con antigüedad de saldo y recordatorio por WhatsApp  
-✅ Cotizaciones / proformas con conversión a venta y PDF  
-✅ Devoluciones / notas de crédito con reingreso de stock  
-✅ Recibos y comprobantes de pago en PDF  
-✅ Respaldo de la base de datos con un clic  
-
-### 🚀 Versión 3.1 (Q9 2026)
-
-- [ ] 🏢 **Multi-sucursal / Multi-almacén**
-  - Gestión de múltiples ubicaciones
-  - Transferencias entre sucursales
-  - Inventario consolidado
-  
-- [ ] 📱 **App Móvil Nativa**
-  - iOS y Android
-  - Escaneo de códigos de barras
-  - Modo offline
-  
-- [ ] 🔐 **Sistema de Roles y Permisos**
-  - Roles personalizables
-  - Permisos granulares
-  - Auditoría de acciones
-
-- [ ] 📊 **Dashboard Avanzado**
-  - Widgets personalizables
-  - Gráficos interactivos
-  - Predicciones con IA
-
-- [ ] 🔔 **Notificaciones Avanzadas**
-  - Alertas de stock bajo
-  - Recordatorios de órdenes pendientes
-  - Notificaciones por email
-
-### 🎨 Versión 3.5 (Q11 2026)
-
-- [ ] 🧾 **Facturación Electrónica**
-  - Integración con sistemas fiscales
-  - Generación de facturas
-  - Envío automático por email
-  
-- [ ] 💳 **Integración de Pagos**
-  - Pasarelas de pago
-  - Pagos en línea
-  - Conciliación bancaria
-  
-- [ ] 📦 **Gestión de Lotes y Series**
-  - Control por lote
-  - Números de serie
-  - Trazabilidad completa
-
-- [ ] 🔄 **Sincronización Offline**
-  - Trabajo sin conexión
-  - Sincronización automática
-  - Resolución de conflictos
-
-### 🤖 Versión 4.0 (2027)
-
-- [ ] 🧠 **Inteligencia Artificial**
-  - Predicción de demanda
-  - Recomendaciones de reorden
-  - Detección de anomalías
-  - Optimización de precios
-  
-- [ ] 🌐 **API Pública**
-  - Webhooks
-  - Integraciones con terceros
-  - Marketplace de plugins
-  
-- [ ] 🏭 **Módulo de Producción**
-  - Órdenes de producción
-  - Bill of Materials (BOM)
-  - Control de calidad
-  
-- [ ] 🚚 **Logística Avanzada**
-  - Optimización de rutas
-  - Seguimiento de envíos
-  - Integración con couriers
-
-### 💡 Ideas Futuras
-
-- Integración con sistemas contables (QuickBooks, Xero)
-- Módulo de CRM avanzado
-- Sistema de fidelización de clientes
-- Marketplace B2B integrado
-- Análisis predictivo con Machine Learning
-- Integración con IoT para inventario automático
-
-> 🗳️ **¿Tienes una idea?** [Vota por características](https://github.com/Iampro1712/BD-Sist-Inv/discussions/categories/feature-requests) o sugiere nuevas funcionalidades.
-
----
-
-## 🤝 Contribuir
-
-¡Las contribuciones son bienvenidas y apreciadas! Este proyecto existe gracias a todas las personas que contribuyen.
-
-### 🌟 Formas de Contribuir
-
-<table>
-<tr>
-<td width="33%" align="center">
-
-### 🐛 Reportar Bugs
-Encuentra un error?  
-[Crear Issue](https://github.com/Iampro1712/BD-Sist-Inv/issues/new?template=bug_report.md)
-
-</td>
-<td width="33%" align="center">
-
-### 💡 Sugerir Features
-Tienes una idea?  
-[Sugerir Feature](https://github.com/Iampro1712/BD-Sist-Inv/issues/new?template=feature_request.md)
-
-</td>
-<td width="33%" align="center">
-
-### 🔧 Enviar Pull Request
-Quieres contribuir código?  
-[Ver Guía](./CONTRIBUTING.md)
-
-</td>
-</tr>
-</table>
-
-### 📝 Proceso de Contribución
-
-1. **Fork** el repositorio
-2. **Crea** una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. **Commit** tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. **Push** a la rama (`git push origin feature/AmazingFeature`)
-5. **Abre** un Pull Request
-
-### 📋 Guías de Estilo
-
-- **Python**: Seguir PEP 8
-- **JavaScript**: Seguir ESLint config del proyecto
-- **Commits**: Usar [Conventional Commits](https://www.conventionalcommits.org/)
-- **Documentación**: Actualizar README y docs cuando sea necesario
-
-### 🎯 Áreas donde Necesitamos Ayuda
-
-- 📝 Mejorar documentación
-- 🌐 Traducciones a otros idiomas
-- 🧪 Escribir tests
-- 🎨 Mejorar UI/UX
-- 🐛 Corregir bugs
-- ⚡ Optimizar performance
-
-### 💬 Comunidad
-
-- [💬 Discussions](https://github.com/Iampro1712/BD-Sist-Inv/discussions) - Preguntas y discusiones
-- [🐛 Issues](https://github.com/Iampro1712/BD-Sist-Inv/issues) - Reportar bugs y sugerir features
-- [📧 Email](mailto:master_bc@icloud.com) - Contacto directo
-
----
-
-## 📊 Estadísticas del Proyecto
-
-<div align="center">
-
-![GitHub stars](https://img.shields.io/github/stars/Iampro1712/BD-Sist-Inv?style=social)
-![GitHub forks](https://img.shields.io/github/forks/Iampro1712/BD-Sist-Inv?style=social)
-![GitHub watchers](https://img.shields.io/github/watchers/Iampro1712/BD-Sist-Inv?style=social)
-
-![GitHub issues](https://img.shields.io/github/issues/Iampro1712/BD-Sist-Inv)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/Iampro1712/BD-Sist-Inv)
-![GitHub last commit](https://img.shields.io/github/last-commit/Iampro1712/BD-Sist-Inv)
-![GitHub repo size](https://img.shields.io/github/repo-size/Iampro1712/BD-Sist-Inv)
-
-</div>
-
----
-
-## 📝 Licencia
-
-Este proyecto está bajo la **Licencia MIT**. Esto significa que puedes:
-
-- ✅ Usar comercialmente
-- ✅ Modificar el código
-- ✅ Distribuir
-- ✅ Uso privado
-
-Ver el archivo [LICENSE](LICENSE) para más detalles.
-
----
-
-## 🔒 Validaciones y Seguridad
-
-### ✅ Validaciones Implementadas
-
-#### 📅 Validación de Fechas
-
-**En Órdenes de Compra y Venta:**
-- ✅ Previene creación de órdenes con fechas futuras
-- ✅ Triple validación: HTML5 + onChange + Submit
-- ✅ Mensaje de error claro: "No se pueden crear órdenes con fechas futuras"
-- 📖 [Ver documentación completa](./VALIDACION_FECHAS_ORDENES.md)
-
-**En Reportes:**
-- ✅ Previene generación de reportes con fechas futuras
-- ✅ Valida que fecha_inicio ≤ fecha_fin
-- ✅ Cuádruple validación: HTML5 + onChange + Submit + Rango
-- ✅ Mensajes específicos para cada tipo de error
-- 📖 [Ver documentación completa](./VALIDACION_FECHAS_REPORTES.md)
-
-#### 📱 Validación de Teléfono
-
-**En Formulario de Clientes:**
-- ✅ Mínimo 8 dígitos requeridos
-- ✅ Detecta y elimina código de país (+505)
-- ✅ Formateo automático en tiempo real: `8754-9685`
-- ✅ Soporta entrada con o sin código de país
-- 📖 [Ver documentación completa](./VALIDACION_TELEFONO_CLIENTES.md)
-
-### 🔐 Seguridad General
-
-- ✅ Validación en múltiples capas (Frontend + Backend)
-- ✅ Sanitización de inputs
-- ✅ CORS configurado correctamente
-- ✅ Autenticación y autorización robusta
-- ✅ Manejo centralizado de excepciones
-- ✅ Logging de acciones importantes
-- ✅ Protección contra inyección SQL (ORM)
-- ✅ Almacenamiento seguro en la nube (Cloudflare R2)
-
----
-
-## 👥 Autores y Reconocimientos
-
-### 👨‍💻 Desarrollador Principal
-
-<table>
-<tr>
-<td align="center">
-<a href="https://github.com/Iampro1712">
-<img src="https://github.com/Iampro1712.png" width="100px;" alt="Edu Dev"/><br />
-<sub><b>Edu Dev</b></sub>
-</a><br />
-<sub>Desarrollo Full Stack</sub>
-</td>
-</tr>
-</table>
-
-### 🌟 Contribuidores
-
-¿Quieres aparecer aquí? [Contribuye al proyecto](#-contribuir)!
-
----
-
-## 📞 Soporte y Contacto
-
-<div align="center">
-
-### 💬 ¿Necesitas Ayuda?
-
-<table>
-<tr>
-<td align="center" width="33%">
-
-#### 📧 Email
-[master_bc@icloud.com](mailto:master_bc@icloud.com)
-
-</td>
-<td align="center" width="33%">
-
-#### 🐛 Issues
-[GitHub Issues](https://github.com/Iampro1712/BD-Sist-Inv/issues)
-
-</td>
-<td align="center" width="33%">
-
-#### 💬 Discussions
-[GitHub Discussions](https://github.com/Iampro1712/BD-Sist-Inv/discussions)
-
-</td>
-</tr>
-</table>
-
-### 🔗 Enlaces Importantes
-
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/Iampro1712/BD-Sist-Inv)
-[![Documentation](https://img.shields.io/badge/Docs-Documentation-blue?style=for-the-badge&logo=readthedocs)](./API_DOCS.md)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
-
-</div>
-
----
-
-## ⚡ FAQ (Preguntas Frecuentes)
-
-<details>
-<summary><b>¿Es gratis Inventrix?</b></summary>
-
-Sí, Inventrix es completamente gratuito y de código abierto bajo la licencia MIT. Puedes usarlo, modificarlo y distribuirlo libremente.
-
-</details>
-
-<details>
-<summary><b>¿Necesito conocimientos técnicos para instalarlo?</b></summary>
-
-Con Docker, la instalación es muy sencilla. Solo necesitas seguir los pasos de la guía de instalación. Para instalación manual, se requieren conocimientos básicos de Python y Node.js.
-
-</details>
-
-<details>
-<summary><b>¿Puedo usar Inventrix para mi negocio?</b></summary>
-
-¡Por supuesto! Inventrix está diseñado específicamente para pequeñas y medianas empresas. Puedes usarlo comercialmente sin restricciones.
-
-</details>
-
-<details>
-<summary><b>¿Cómo actualizo a la última versión?</b></summary>
+<br/>
 
 ```bash
-git pull origin main
-docker-compose down
-docker-compose up -d --build
-docker-compose exec backend python manage.py migrate
+# Historial de ventas con estacionalidad real de Nicaragua
+python manage.py seed_demanda_demo
+
+# Compras con plazos de entrega variables para el análisis de proveedores
+python manage.py seed_proveedores_demo
+
+# Ambos aceptan --limpiar para revertir, y se niegan a correr
+# contra producción sin --forzar.
 ```
 
 </details>
 
-<details>
-<summary><b>¿Dónde se almacenan las imágenes de la bitácora?</b></summary>
+---
 
-Las imágenes se almacenan en Cloudflare R2, un servicio de almacenamiento en la nube compatible con S3. Necesitas configurar tus credenciales en el archivo `.env`.
+## Seguridad
 
-</details>
+El sistema pasó por una auditoría de 10 hallazgos (v1.11.x) y una revisión de los
+endpoints públicos (v1.12.x). Lo que hay hoy:
 
-<details>
-<summary><b>¿Qué validaciones tiene el sistema?</b></summary>
+| Área | Implementación |
+|---|---|
+| **Autenticación** | JWT con rotación y lista de revocación. Todos los endpoints la exigen salvo los dos de actualización de la app de escritorio |
+| **Autorización** | Roles dueño/operador. Los campos financieros se anulan por serializer para el operador, no se ocultan solo en la interfaz |
+| **Fuerza bruta** | Límite de 5 intentos/min en login, con la identidad del cliente tomada de la entrada que agrega el proxy, no de la que manda el cliente |
+| **Cifrado en reposo** | Fernet para datos de contacto y claves de IA, con claves separadas por propósito |
+| **Integridad del dinero** | Transacciones atómicas con `SELECT FOR UPDATE` en stock, pagos y caja |
+| **Auditoría** | Trigger de PostgreSQL que registra usuario, IP y snapshot JSONB de cada cambio |
+| **Respaldos** | `pg_dump` verificado con `pg_restore --list` antes de darse por válido; excluye tablas de sesión y token |
+| **Producción** | HSTS, cookies seguras, sin `DEBUG`, `SECRET_KEY` validada al arrancar y Redis obligatorio |
 
-Inventrix incluye validaciones robustas:
+> [!IMPORTANT]
+> Ninguna credencial, dominio ni clave vive en el repositorio. Todo se configura
+> por variables de entorno; las plantillas `.env.example` documentan qué hace
+> falta sin exponer valores.
 
-- **Fechas**: Previene órdenes y reportes con fechas futuras
-- **Rangos de fechas**: Valida que inicio ≤ fin en reportes
-- **Teléfono**: Valida mínimo 8 dígitos y formatea automáticamente
-- **Inventario**: Previene ventas sin stock disponible
-- **Datos**: Validación en múltiples capas (HTML5, Frontend, Backend)
+---
 
-Ver [Validaciones y Seguridad](#-validaciones-y-seguridad) para más detalles.
+## Calidad
 
-</details>
+[![Tests](https://img.shields.io/badge/316-tests-22C55E?style=for-the-badge&logo=pytest&logoColor=white)](#)
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](./.github/workflows/backend-ci.yml)
 
-<details>
-<summary><b>¿Puedo contribuir al proyecto?</b></summary>
+Los tests corren contra **PostgreSQL real**, no SQLite: buena parte del sistema usa
+SQL crudo, triggers y restricciones de la base, y nada de eso se comporta igual en
+otro motor.
 
-¡Sí! Las contribuciones son bienvenidas. Lee nuestra [Guía de Contribución](./CONTRIBUTING.md) para comenzar.
+Cada migración se valida en un Postgres desechable antes de tocar producción:
+cargar el esquema base, aplicar, revertir, reaplicar. La regla de la casa es que
+**producción se toca con respaldo previo y confirmación explícita**, nunca en
+automático.
 
-</details>
+---
 
-<details>
-<summary><b>¿Hay soporte técnico disponible?</b></summary>
+## Documentación
 
-El soporte comunitario está disponible a través de GitHub Issues y Discussions. Para soporte empresarial, contacta por email.
+| Documento | Contenido |
+|---|---|
+| [CHANGELOG](./CHANGELOG.md) | Historial de versiones en formato Keep a Changelog |
+| [Auditoría del sistema](./AUDITORIA_SISTEMA.md) | Análisis de seguridad y correcciones |
+| [Correcciones de seguridad](./FIXES_SEGURIDAD.md) | Detalle de los hallazgos resueltos |
+| [Respaldos](./RESPALDOS.md) | Cómo generar y restaurar un respaldo |
+| [Bitácora de servicios](./BITACORA_README.md) | Los 4 módulos del registro fotográfico |
 
-</details>
+---
+
+## Estado del proyecto
+
+**Implementado y en uso:** inventario con ubicaciones, punto de venta con lector,
+caja por turnos, taller en Kanban con presupuestos, cuentas por cobrar y pagar,
+devoluciones en ambos sentidos, garantías, rentabilidad, pronóstico de demanda,
+análisis de proveedores, respaldos restaurables y auditoría por trigger.
+
+**Deliberadamente fuera de alcance, por ahora:**
+
+| No tiene | Por qué |
+|---|---|
+| Facturación fiscal / DGI | Un taller bajo régimen de cuota fija no la necesita hoy. Sería lo primero al pasar a régimen general |
+| Multi-sucursal | Un solo local. Agregarlo antes de necesitarlo complica cada consulta del sistema |
+| Modo sin conexión | Requiere resolución de conflictos, que es un problema mayor que el que resuelve |
+| App móvil nativa | La web adaptable cubre el caso; una app nativa duplicaría el mantenimiento |
 
 ---
 
 <div align="center">
 
-## 🌟 ¡Apoya el Proyecto!
+<sub>
 
-Si Inventrix te ha sido útil, considera:
+**Inventrix** · Construido para JC Motoshop, Managua
 
-⭐ **Dar una estrella al repositorio**  
-🐛 **Reportar bugs y sugerir mejoras**  
-🔧 **Contribuir con código**  
-📢 **Compartir con otros**  
-☕ **Invitar un café al desarrollador**
+[Reportar un problema](https://github.com/Iampro1712/BD-Sist-Inv/issues) ·
+[Changelog](./CHANGELOG.md)
 
----
+</sub>
 
-### 📈 Hecho con ❤️
-
-**Inventrix** - Sistema Profesional de Gestión de Inventario
-
-*Última actualización: Junio 2026*
-
-[![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red?style=for-the-badge)](https://github.com/Iampro1712/BD-Sist-Inv)
-[![Built with Django](https://img.shields.io/badge/Built%20with-Django-092E20?style=for-the-badge&logo=django)](https://www.djangoproject.com/)
-[![Powered by React](https://img.shields.io/badge/Powered%20by-React-61DAFB?style=for-the-badge&logo=react)](https://reactjs.org/)
-
----
-
-**[⬆ Volver arriba](#-inventrix---sistema-de-gestión-de-inventario)**
+<sub>Última actualización: agosto de 2026 · v1.12.1</sub>
 
 </div>

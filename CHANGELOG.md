@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.12.0-4F46E5?style=flat-square)](#1120---2026-08-03)
+[![Version](https://img.shields.io/badge/version-1.12.1-4F46E5?style=flat-square)](#1121---2026-08-04)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,95 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.12.1] - 2026-08-04
+
+Revisión de seguridad de los dos endpoints públicos que estrenó la 1.12.0, más
+cuatro fallos que venían de antes y estaban reportados pero sin corregir.
+
+### Security
+
+- **El límite de intentos de inicio de sesión se podía saltar cambiando una
+  cabecera.** El sistema identificaba a quien llamaba usando un dato que el
+  propio cliente envía, así que bastaba con variarlo en cada intento para
+  estrenar un contador nuevo. En la práctica, el tope de 5 intentos por minuto
+  —la defensa contra alguien probando contraseñas a la fuerza— no limitaba nada.
+  Ahora se usa el dato que agrega el servidor de entrada, que el cliente no
+  puede escribir. Esto afectaba a todo el sistema, no sólo a las actualizaciones
+  de la app de escritorio.
+- **El registro de auditoría anotaba direcciones falseables.** Por el mismo
+  motivo, quien hiciera un cambio podía hacer que quedara registrado desde una
+  dirección inventada. Ahora se anota la que observó el servidor de entrada.
+- **Las órdenes de compra de un proveedor mostraban los montos a cualquiera.**
+  La pantalla que lista las compras hechas a un proveedor no aplicaba la regla
+  de que el total, lo pagado y el saldo son sólo para el dueño. Venía tapado por
+  un error de servidor que impedía que la pantalla cargara (ver *Fixed*), de
+  modo que al arreglar ese error se habría destapado la fuga.
+- **Un endpoint público podía usarse para tumbar el sistema entero.** La
+  descarga del instalador de la app de escritorio consultaba a GitHub en cada
+  petición, sin guardar el resultado. Como no requiere iniciar sesión,
+  llamándola en bucle se agotaba la cuota del servidor contra GitHub —dejando
+  sin actualizaciones a todos los equipos del taller— y, peor, se ocupaban los
+  procesos del servidor esperando respuesta, con lo que **dejaba de responder
+  toda la aplicación, punto de venta y caja incluidos**. Ahora la respuesta se
+  guarda y se reutiliza.
+- **Las notas de cada versión se publicaban sin filtrar.** Se redactan a partir
+  del historial de cambios, que describe con detalle qué fallo de seguridad se
+  corrigió y en qué versión; ese texto salía por un endpoint público. Es
+  justamente el mapa que necesita alguien para atacar los equipos que todavía no
+  se actualizaron. Ahora se filtra todo lo que toque seguridad, permisos o datos
+  sensibles antes de publicarlo.
+- **La redirección de descarga no comprobaba a dónde apuntaba.** Ahora sólo se
+  redirige a GitHub y por conexión cifrada; cualquier otro destino se rechaza.
+- **Los mensajes de error delataban la configuración del servidor.** Distinguían
+  entre "falta configurar", "la credencial fue rechazada" y "no hay conexión", y
+  nombraban dónde está alojado el instalador. Eso le confirma a quien tantea en
+  qué estado está la credencial del servidor. Ahora todos responden lo mismo y
+  el detalle queda en el registro interno, que es donde le sirve a quien opera el
+  sistema.
+
+### Fixed
+
+- **Un presupuesto de reparación aprobado y luego convertido en venta descontaba
+  el inventario dos veces.** Al aprobar el presupuesto, los repuestos ya salen
+  del inventario y se cargan a la orden de trabajo. Si además se convertía en
+  venta, se descontaban otra vez y se cobraban dos veces los mismos repuestos:
+  el stock quedaba por debajo de lo real y el cliente podía terminar pagando de
+  más. Ahora se rechaza con un aviso que explica que ese trabajo se cobra al
+  entregar la orden.
+- **La pantalla de compras de un proveedor no cargaba nunca.** Fallaba por dos
+  errores encadenados: buscaba las órdenes de una forma incompatible con cómo
+  están guardadas, y ordenaba por una fecha que no existe. Respondía con error
+  de servidor en todos los casos.
+- **Varios selectores mostraban sólo los primeros 20 registros.** El sistema
+  ignoraba en silencio la cantidad de elementos que la pantalla pedía. El
+  selector de clientes al agendar un servicio pedía 200 y recibía 20: **del
+  cliente número 21 en adelante no se podía elegir a nadie**. Pasaba lo mismo
+  con el tablero del taller y con el selector de proveedores al crear un
+  producto. Ahora se respeta lo que pide la pantalla, con un tope para que nadie
+  pueda exigir la tabla completa.
+- **Ciertos errores dejaban la aplicación en blanco en vez de mostrar un
+  aviso.** Cuando el servidor respondía con un error detallado, la pantalla
+  intentaba mostrarlo de una forma que rompía la interfaz entera y obligaba a
+  recargar, perdiendo el trabajo en curso. Ocurría al convertir una cotización,
+  al generar un respaldo, al importar productos, al pedir el análisis del
+  pronóstico y en la configuración de proveedores de IA, entre otros. Se
+  corrigieron los 16 puntos afectados y se unificó el manejo de errores en un
+  solo lugar, en vez de siete copias del mismo código.
+
+### Changed
+
+- **README reescrito.** Documentaba 17 módulos que ya existían pero no estaban
+  mencionados (punto de venta, caja por turnos, taller, gastos, ubicaciones,
+  conteo físico, etiquetas, garantías, rentabilidad, pronóstico de demanda,
+  análisis de proveedores y otros). Se corrigieron datos que no coincidían con
+  el sistema: anunciaba una versión que no era la real, enlazaba a ocho
+  documentos inexistentes, citaba una licencia sin archivo que la respaldara y
+  listaba como funciones soportadas cosas que no están implementadas
+  (multi-sucursal, control de vencimientos, recetas). Se agregó una sección que
+  declara explícitamente qué **no** hace el sistema y por qué.
 
 ---
 

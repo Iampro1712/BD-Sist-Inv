@@ -4,6 +4,7 @@ import { fadeIn, staggerContainer } from '../utils/animations'
 import { backupService } from '../services/backup.service'
 import { useToast } from '../hooks/useToast'
 import { Button, Card } from '../components/ui'
+import { extraerMensajeError } from '../utils/errores'
 
 const Respaldos = () => {
   const [loading, setLoading] = useState(false)
@@ -31,7 +32,7 @@ const Respaldos = () => {
       setUltimo(new Date())
       toast.success('Respaldo descargado correctamente')
     } catch (err) {
-      toast.error(err.response?.data?.error || err.message || 'Error al generar el respaldo')
+      toast.error(extraerMensajeError(err, 'Error al generar el respaldo'))
     } finally {
       setLoading(false)
     }
