@@ -15,7 +15,7 @@ y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ---
 
-## [1.12.3] - 2026-08-04
+## [1.12.3] - 2026-08-06
 
 Cierra los tres hallazgos que quedaban de la auditoría de correctitud. Falta
 sólo el descuadre por centavos en las líneas de venta, que necesita cambiar la
@@ -55,7 +55,7 @@ base de datos y va aparte.
 
 ---
 
-## [1.12.2] - 2026-08-04
+## [1.12.2] - 2026-08-06
 
 Cuatro fallos por los que el sistema aceptaba datos de dinero sin cruzarlos
 contra la venta original. Salieron de una auditoría de correctitud posterior a
