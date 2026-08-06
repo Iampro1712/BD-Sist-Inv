@@ -5104,3 +5104,172 @@ class PresupuestoAprobadoNoSeConvierteEnVentaTestCase(APITestCase):
         self.assertEqual(
             MovimientoInventario.objects.filter(producto=self.producto).count(),
             antes)
+
+
+class IntegridadDevolucionesVentaTestCase(APITestCase):
+    """El importe de una devolución y el tope de un cobro salen de la venta, no
+    de lo que mande el cliente."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_dev_int', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+        self.prov = Proveedor.objects.create(nombre_empresa='Prov DevInt')
+        self.cliente = Cliente.objects.create(nombre='Cliente DevInt')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-DEVINT', nombre='Repuesto DevInt',
+            cantidad_actual=100, cantidad_total=100, cantidad_minima=1,
+            precio_compra_unitario=10, precio_final='100.00',
+            id_proveedor=self.prov)
+
+    def _venta(self, cantidad, precio):
+        r = self.client.post('/api/ordenes-venta/', {
+            'cliente': self.cliente.id_cliente,
+            'fecha': str(datetime.date.today()),
+            'total': str(cantidad * precio),
+            'detalles': [{'producto': self.producto.id_producto,
+                          'cantidad': cantidad, 'precio_unitario': precio}],
+        }, format='json')
+        assert r.status_code == 201, r.data
+        return r.data['id_venta']
+
+    def _devolver(self, id_venta, cantidad, precio):
+        return self.client.post('/api/devoluciones/', {
+            'venta': id_venta, 'fecha': str(datetime.date.today()),
+            'detalles': [{'producto': self.producto.id_producto,
+                          'cantidad': cantidad, 'precio_unitario': precio}],
+        }, format='json')
+
+    def test_el_precio_inflado_de_la_peticion_se_ignora(self):
+        """Se devolvía un repuesto de C$100 declarando C$5.000 y la venta
+        quedaba con un saldo a favor de C$4.900 inventado."""
+        id_venta = self._venta(1, 100)
+        r = self._devolver(id_venta, 1, 5000)
+
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+
+        venta = OrdenVenta.objects.get(pk=id_venta)
+        self.assertEqual(venta.total_devuelto(), Decimal('100'))
+        self.assertEqual(venta.saldo_a_favor(), Decimal('0'))
+
+    def test_el_precio_a_la_baja_tampoco_se_toma(self):
+        """El espejo: declarar 0 dejaba la deuda intacta pese a la devolución."""
+        id_venta = self._venta(1, 100)
+        self._devolver(id_venta, 1, 0)
+
+        venta = OrdenVenta.objects.get(pk=id_venta)
+        self.assertEqual(venta.total_devuelto(), Decimal('100'))
+
+    def test_no_se_puede_cobrar_lo_que_ya_se_devolvio(self):
+        """Venta de 5.000 con 2.000 devueltos: la deuda real es 3.000."""
+        id_venta = self._venta(5, 1000)
+        self._devolver(id_venta, 2, 1000)
+        SesionCaja.objects.create(
+            usuario=self.admin, monto_apertura=0, estado='abierta')
+
+        r = self.client.post(
+            '/api/ordenes-venta/{}/registrar-pago/'.format(id_venta), {
+                'monto': 5000, 'metodo_pago': 'efectivo',
+                'fecha_pago': str(datetime.date.today()),
+            }, format='json')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, r.data)
+        self.assertIn('3000', str(r.data))
+
+    def test_el_cobro_por_la_deuda_real_si_pasa(self):
+        id_venta = self._venta(5, 1000)
+        self._devolver(id_venta, 2, 1000)
+        SesionCaja.objects.create(
+            usuario=self.admin, monto_apertura=0, estado='abierta')
+
+        r = self.client.post(
+            '/api/ordenes-venta/{}/registrar-pago/'.format(id_venta), {
+                'monto': 3000, 'metodo_pago': 'efectivo',
+                'fecha_pago': str(datetime.date.today()),
+            }, format='json')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+
+    def test_cancelar_una_venta_ya_devuelta_se_rechaza(self):
+        """Cancelar reingresaba TODO lo vendido, incluida la mercadería que la
+        devolución ya había puesto de vuelta: quedaban unidades fantasma."""
+        id_venta = self._venta(10, 50)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 90)
+
+        self._devolver(id_venta, 4, 50)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 94)
+
+        r = self.client.post(
+            '/api/ordenes-venta/{}/cancelar/'.format(id_venta), {},
+            format='json')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, r.data)
+
+        # Lo que importa: el stock no se infló a 104.
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 94)
+        self.assertTrue(OrdenVenta.objects.filter(pk=id_venta).exists())
+
+    def test_cancelar_una_venta_sin_devoluciones_sigue_funcionando(self):
+        id_venta = self._venta(10, 50)
+        r = self.client.post(
+            '/api/ordenes-venta/{}/cancelar/'.format(id_venta), {},
+            format='json')
+
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 100)
+
+
+class CajaActualPorRolTestCase(APITestCase):
+    """El arqueo en vivo es de quien tiene el turno. `actual` no se puede
+    bloquear (media docena de pantallas lo usan para saber si se puede cobrar),
+    así que lo que se recorta es el detalle."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.duenio = User.objects.create_user(
+            username='caja_duenio', password='x')
+        self.otro = User.objects.create_user(username='caja_otro', password='x')
+        self.admin = User.objects.create_user(
+            username='caja_admin_rol', password='x', is_staff=True)
+
+        self.client.force_authenticate(user=self.duenio)
+        self.client.post('/api/caja/abrir/', {'monto_apertura': '5000.00'},
+                         format='json')
+
+    def test_el_dueno_del_turno_ve_su_arqueo(self):
+        datos = self.client.get('/api/caja/actual/').json()
+
+        self.assertTrue(datos['es_propia'])
+        self.assertEqual(float(datos['monto_apertura']), 5000.0)
+        self.assertIn('totales', datos)
+
+    def test_otro_usuario_no_ve_los_montos_del_turno_ajeno(self):
+        self.client.force_authenticate(user=self.otro)
+        r = self.client.get('/api/caja/actual/')
+
+        self.assertEqual(r.status_code, 200)
+        datos = r.json()
+        # Sigue sabiendo que hay caja abierta: es lo que el POS necesita.
+        self.assertFalse(datos['es_propia'])
+        self.assertEqual(datos['usuario_nombre'], 'caja_duenio')
+        # Pero no el arqueo.
+        for campo in ('monto_apertura', 'esperado_actual', 'totales',
+                      'movimientos', 'diferencia'):
+            self.assertNotIn(campo, datos, campo)
+        self.assertNotIn('5000', r.content.decode())
+
+    def test_el_dueno_del_negocio_si_ve_cualquier_turno(self):
+        self.client.force_authenticate(user=self.admin)
+        datos = self.client.get('/api/caja/actual/').json()
+
+        self.assertTrue(datos['es_propia'])
+        self.assertEqual(float(datos['monto_apertura']), 5000.0)
+
+    def test_sin_caja_abierta_responde_nulo(self):
+        SesionCaja.objects.all().delete()
+        self.client.force_authenticate(user=self.otro)
+        # `Response(None)` no lleva Content-Type, así que .json() no sirve acá.
+        self.assertIsNone(self.client.get('/api/caja/actual/').data)

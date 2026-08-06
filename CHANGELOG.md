@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.12.1-4F46E5?style=flat-square)](#1121---2026-08-04)
+[![Version](https://img.shields.io/badge/version-1.12.2-4F46E5?style=flat-square)](#1122---2026-08-04)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,57 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.12.2] - 2026-08-04
+
+Cuatro fallos por los que el sistema aceptaba datos de dinero sin cruzarlos
+contra la venta original. Salieron de una auditoría de correctitud posterior a
+la 1.12.1 y **se reprodujeron uno por uno contra una base de datos real** antes
+de tocar nada.
+
+### Security
+
+- **Cualquier usuario podía inventar una deuda del taller hacia un cliente.** Al
+  registrar una devolución, el sistema comprobaba que la cantidad no excediera
+  lo vendido, pero **se creía el precio que viniera en la petición**. Devolviendo
+  un repuesto de C$100 y declarando que valía C$5.000, la venta quedaba con un
+  saldo a favor de C$4.900 a nombre del cliente: dinero que el sistema afirmaba
+  deberle. No hacía falta ser el dueño, y como una devolución no se edita ni se
+  borra, el asiento quedaba fijo. Ahora el importe se toma del precio al que
+  realmente se vendió y lo que mande el cliente se descarta.
+- **El mismo fallo del lado de las compras.** El tope del reembolso a un
+  proveedor sí se validaba contra el precio congelado de la compra, pero al
+  guardar se usaba el que mandara el cliente. Declarando precio cero, la
+  devolución quedaba registrada en C$0 y el reembolso inflaba la deuda al
+  proveedor por la diferencia. Ahora ambos usan el mismo precio.
+- **El arqueo de caja de un turno ajeno era visible para todo el equipo.** La
+  consulta de "¿hay caja abierta?" devolvía el turno completo: fondo inicial,
+  efectivo esperado, desglose por método de pago y cada movimiento con su motivo
+  y su autor. Como sólo hay un turno abierto a la vez, cualquiera veía el arqueo
+  en vivo de quien estuviera en caja — justo lo que ya estaba bloqueado al
+  cerrar la caja o al listar sus movimientos. Esa consulta no se puede restringir
+  del todo (media docena de pantallas la usan para saber si se puede cobrar), así
+  que ahora responde sólo que hay caja abierta y de quién es; el detalle queda
+  para su dueño y para el dueño del negocio. La pantalla de Caja avisa de quién
+  es el turno en vez de mostrar montos en cero.
+
+### Fixed
+
+- **Se podía cobrar de más después de una devolución.** El tope de un abono se
+  calculaba sobre el total original de la venta, sin restar lo devuelto. En una
+  venta de C$5.000 con C$2.000 en mercadería devuelta —deuda real C$3.000— el
+  sistema aceptaba cobrar los C$5.000 completos: entraba al cajón plata que el
+  cliente ya no debía y la venta quedaba con un saldo negativo. El lado de las
+  compras siempre usó la fórmula completa; la diferencia estaba sólo en ventas.
+- **Cancelar una venta ya devuelta dejaba mercadería fantasma en el
+  inventario.** Cancelar reingresaba todo lo vendido, incluido lo que la
+  devolución ya había puesto de vuelta: se vendían 10 unidades, se devolvían 4 y
+  al cancelar entraban otras 10, con lo que el sistema terminaba creyendo que
+  tenía 4 unidades que no existen. Ahora se rechaza con un aviso: una venta con
+  devoluciones no se cancela, se termina de revertir con otra devolución.
+  Cancelar una venta sin devoluciones sigue funcionando igual.
 
 ---
 

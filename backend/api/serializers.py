@@ -601,7 +601,14 @@ class PagoVentaCreateSerializer(serializers.ModelSerializer):
         venta = self.context['venta']
         total = venta.calcular_total()
         pagado = venta.pagos.aggregate(total=Sum('monto'))['total'] or 0
-        saldo = total - pagado
+        # Se resta lo devuelto, igual que `OrdenVenta.calcular_saldo()`. Sin
+        # este término el tope era el total original: en una venta de C$5.000
+        # con C$2.000 devueltos se aceptaba cobrar los C$5.000 completos, y
+        # entraba al cajón plata que el cliente ya no debía. El lado de compras
+        # (`PagoCompraCreateSerializer`) siempre usó la fórmula completa; la
+        # asimetría estaba sólo acá.
+        devuelto = venta.total_devuelto()
+        saldo = total - devuelto - pagado
         if data['monto'] > saldo:
             raise serializers.ValidationError({
                 'monto': f'El monto excede el saldo pendiente de C${saldo:.2f}'
@@ -1670,13 +1677,22 @@ class DevolucionCreateSerializer(serializers.Serializer):
             if cursor.fetchone() is None:
                 raise serializers.ValidationError({'venta': 'La venta indicada no existe'})
 
-            # Cantidad vendida por producto en esta venta.
+            # Cantidad vendida por producto en esta venta, y a qué precio.
+            #
+            # El precio se lee acá y se **impone** en `create`: antes se
+            # guardaba el que mandara el cliente, sin cruzarlo contra nada. Con
+            # eso se devolvía un repuesto de C$100 declarando C$5.000, y la
+            # venta quedaba con un saldo a favor de C$4.900 inventado —dinero
+            # que el sistema decía que el taller le debía al cliente—. Como las
+            # devoluciones no se editan ni se borran, ese asiento quedaba fijo.
             cursor.execute(
-                "SELECT id_producto, SUM(cantidad) FROM producto_venta "
-                "WHERE id_venta = %s GROUP BY id_producto",
+                "SELECT id_producto, SUM(cantidad), MAX(precio_unitario) "
+                "FROM producto_venta WHERE id_venta = %s GROUP BY id_producto",
                 [id_venta],
             )
-            vendido = {row[0]: int(row[1]) for row in cursor.fetchall()}
+            filas = cursor.fetchall()
+            vendido = {row[0]: int(row[1]) for row in filas}
+            precio_vendido = {row[0]: row[2] for row in filas}
 
             # Cantidad ya devuelta por producto en devoluciones previas de esta venta.
             cursor.execute(
@@ -1712,12 +1728,19 @@ class DevolucionCreateSerializer(serializers.Serializer):
                     )}
                 )
 
+        # Se le pega a cada línea el precio al que realmente se vendió. Lo que
+        # haya mandado el cliente se descarta: el importe de una devolución sale
+        # de la venta, no de la petición.
+        for d in detalles:
+            d['precio_unitario'] = precio_vendido[int(d['producto'])]
+
         return data
 
     def create(self, validated_data):
         from django.db import transaction
         detalles = validated_data.pop('detalles')
-        total = sum(float(d['precio_unitario']) * int(d['cantidad']) for d in detalles)
+        total = sum(Decimal(str(d['precio_unitario'])) * int(d['cantidad'])
+                    for d in detalles)
         with transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute("""
@@ -2220,11 +2243,13 @@ class DevolucionCompraCreateSerializer(serializers.Serializer):
                 for d in detalles:
                     pid = int(d['producto'])
                     cantidad = int(d['cantidad'])
-                    # Precio de la compra original, no el actual del catálogo.
-                    precio = d.get('precio_unitario')
-                    if precio in (None, ''):
-                        precio = recibido[pid][1] or 0
-                    precio = Decimal(str(precio))
+                    # Precio de la compra original, **siempre**. Antes se usaba
+                    # el que mandara el cliente y sólo se caía a este si venía
+                    # vacío, con lo cual el tope del reembolso —que sí se valida
+                    # contra el precio congelado— quedaba sin efecto: mandando
+                    # `precio_unitario: 0` la devolución se registraba con total
+                    # 0 y el reembolso inflaba la deuda al proveedor.
+                    precio = Decimal(str(recibido[pid][1] or 0))
 
                     ProductoDevolucionCompra.objects.create(
                         id_devolucion_compra=devolucion,

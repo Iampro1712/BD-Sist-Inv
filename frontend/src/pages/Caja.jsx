@@ -79,8 +79,23 @@ const Caja = () => {
         </Card>
       )}
 
+      {/* Caja abierta por otra persona: el arqueo es de quien la abrió, así que
+          el servidor no manda los montos. Se avisa en vez de pintar ceros, que
+          se leerían como "no ha entrado plata". */}
+      {sesion && sesion.es_propia === false && (
+        <Card className="p-6">
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-400">
+            <span className="w-2 h-2 rounded-full bg-amber-500" /> Caja abierta por otra persona
+          </span>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+            El turno lo tiene {sesion.usuario_nombre} desde {fmtFecha(sesion.fecha_apertura)}.
+            Podés cobrar con normalidad, pero el arqueo y el cierre le corresponden a esa persona.
+          </p>
+        </Card>
+      )}
+
       {/* Caja abierta */}
-      {sesion && (
+      {sesion && sesion.es_propia !== false && (
         <>
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">

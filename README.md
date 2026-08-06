@@ -9,8 +9,8 @@ Construido para un taller de motos real en Managua, Nicaragua.
 
 <br/>
 
-[![Versión](https://img.shields.io/badge/versión-1.12.1-4F46E5?style=flat-square)](./CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-316_passing-22C55E?style=flat-square&logo=pytest&logoColor=white)](#calidad)
+[![Versión](https://img.shields.io/badge/versión-1.12.2-4F46E5?style=flat-square)](./CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-326_passing-22C55E?style=flat-square&logo=pytest&logoColor=white)](#calidad)
 [![Changelog](https://img.shields.io/badge/changelog-Keep_a_Changelog-F59E0B?style=flat-square)](./CHANGELOG.md)
 [![SemVer](https://img.shields.io/badge/semver-2.0.0-3B82F6?style=flat-square&logo=semver&logoColor=white)](https://semver.org/lang/es/)
 
@@ -407,6 +407,6 @@ análisis de proveedores, respaldos restaurables y auditoría por trigger.
 
 </sub>
 
-<sub>Última actualización: agosto de 2026 · v1.12.1</sub>
+<sub>Última actualización: agosto de 2026 · v1.12.2</sub>
 
 </div>

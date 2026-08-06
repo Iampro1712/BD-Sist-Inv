@@ -763,6 +763,25 @@ class OrdenVentaViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             orden = OrdenVenta.objects.select_for_update().get(pk=self.get_object().pk)
 
+            # Una venta con devoluciones ya fue revertida en parte, y cancelarla
+            # volvía a reingresar TODO lo vendido: se vendían 10, se devolvían 4
+            # (que ya habían vuelto al inventario) y al cancelar entraban otros
+            # 10, dejando 4 unidades fantasma que el sistema creía tener.
+            #
+            # No se intenta descontar lo devuelto y seguir: la devolución además
+            # movió dinero y dejó su propio rastro, y borrar la venta la dejaría
+            # huérfana. Deshacer las dos cosas de forma coordinada es
+            # justamente lo que este sistema decidió no hacer —una devolución no
+            # se edita ni se borra—, así que se bloquea y se dice por qué.
+            devuelto = orden.total_devuelto()
+            if devuelto and devuelto > 0:
+                raise DRFValidationError({'error': (
+                    f'Esta venta tiene devoluciones registradas por C${devuelto}. '
+                    f'Cancelarla reingresaría mercadería que ya volvió al '
+                    f'inventario. Si hay que revertir el resto, registrá una '
+                    f'devolución por lo que queda.'
+                )})
+
             with connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT id_producto, cantidad FROM producto_venta WHERE id_venta = %s",
@@ -2332,11 +2351,38 @@ class SesionCajaViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'])
     def actual(self, request):
-        """Devuelve la sesión abierta actual, o null si no hay ninguna."""
+        """Devuelve la sesión abierta actual, o null si no hay ninguna.
+
+        A diferencia de `cerrar` y `movimientos`, este endpoint no se puede
+        bloquear para quien no es dueño del turno: media docena de pantallas lo
+        usan sólo para saber si se puede cobrar (el POS, los abonos, los
+        reembolsos), y como sólo hay un turno abierto en todo el sistema,
+        exigir propiedad dejaría al resto del equipo sin poder vender.
+
+        Lo que sí se recorta es el detalle: el arqueo en vivo —fondo inicial,
+        efectivo esperado, desglose por método y los movimientos con su motivo y
+        su autor— es de quien tiene la caja. Antes salía entero para cualquiera,
+        que es justo lo que `_verificar_propietario` evita por las otras dos
+        puertas.
+        """
         sesion = SesionCaja.objects.filter(estado='abierta').select_related('usuario').first()
         if sesion is None:
             return Response(None)
-        return Response(SesionCajaSerializer(sesion).data)
+
+        propia = request.user.is_staff or sesion.usuario_id == request.user.id
+        if not propia:
+            # Lo justo para saber que hay caja abierta y de quién es.
+            return Response({
+                'id_sesion': sesion.id_sesion,
+                'estado': sesion.estado,
+                'usuario_nombre': sesion.usuario.get_full_name() or sesion.usuario.username,
+                'fecha_apertura': sesion.fecha_apertura,
+                'es_propia': False,
+            })
+
+        datos = SesionCajaSerializer(sesion).data
+        datos['es_propia'] = True
+        return Response(datos)
 
     @action(detail=False, methods=['post'])
     def abrir(self, request):
