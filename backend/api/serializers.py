@@ -860,12 +860,13 @@ class OrdenVentaCreateSerializer(serializers.Serializer):
                 # sumada. Insertarlo dos veces violaría la PK de producto_venta.
                 for producto_id, info in productos_bloqueados.items():
                     cantidad = info['cantidad']
-                    # `producto_venta.precio_unitario` es una columna entera, así
-                    # que un precio con centavos hay que redondearlo: mandarlo tal
-                    # cual aborta la venta con un error de tipo de PostgreSQL.
-                    precio_unitario = int(
-                        (info['subtotal'] / cantidad).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-                    )
+                    # Se conservan los centavos (la columna es NUMERIC(10,2)
+                    # desde la 0025). Antes había que redondear a entero, y esa
+                    # diferencia rompía el saldo: la suma de las líneas dejaba
+                    # de cuadrar con `ventas.total` y el cobro exacto se
+                    # rechazaba por "excede el saldo pendiente".
+                    precio_unitario = (info['subtotal'] / cantidad).quantize(
+                        Decimal('0.01'), rounding=ROUND_HALF_UP)
                     cursor.execute("""
                         INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
                         VALUES (%s, %s, %s, %s)

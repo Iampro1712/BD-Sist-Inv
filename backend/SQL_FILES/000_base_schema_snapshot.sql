@@ -2,7 +2,8 @@
 -- SNAPSHOT DE ESQUEMA BASE (solo estructura, sin datos)
 -- Generado con: pg_dump --schema-only --no-owner --no-privileges
 --   --exclude-table=<tablas administradas por Django, ver mas abajo>
--- Fecha: 2026-07-24 (regenerado tras mitigar R03: unificacion de esquema)
+-- Fecha: 2026-08-06 (producto_venta.precio_unitario pasa a numeric, mig. 0025)
+-- Anterior: 2026-07-24 (regenerado tras mitigar R03: unificacion de esquema)
 --
 -- Este archivo NO se ejecuta contra la base de datos de produccion/dev
 -- (las tablas ya existen ahi). Su proposito es:
@@ -1120,7 +1121,7 @@ CREATE TABLE public.producto_venta (
     id_venta integer NOT NULL,
     id_producto integer NOT NULL,
     cantidad integer NOT NULL,
-    precio_unitario integer NOT NULL
+    precio_unitario numeric(10,2) NOT NULL
 );
 
 

@@ -2,7 +2,7 @@
 ViewSets para la API de Inventrix
 """
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.utils import timezone
 from rest_framework import viewsets, status, filters
@@ -1978,7 +1978,19 @@ class CotizacionViewSet(viewsets.ModelViewSet):
                         f'{producto.cantidad_actual} y la cotización pide {cantidad}.'
                     )})
 
-            total = sum(subtotales.values())
+            # El precio de cada línea se redondea al centavo ANTES de sumar el
+            # total, no después. Si se sumaran los subtotales sin redondear, el
+            # total podría no coincidir con lo que quede guardado: un subtotal
+            # de C$100 en 3 unidades da C$33,333… por unidad, que la columna
+            # guarda como C$33,33 y vuelve a sumar C$99,99. Así `ventas.total`
+            # y la suma de las líneas —que es de donde sale el saldo— cuadran
+            # por construcción.
+            precios = {
+                id_producto: (subtotales[id_producto] / cantidad).quantize(
+                    Decimal('0.01'), rounding=ROUND_HALF_UP)
+                for id_producto, cantidad in requerido.items()
+            }
+            total = sum(precios[pid] * cant for pid, cant in requerido.items())
 
             with connection.cursor() as cursor:
                 # `saldo_pendiente` se setea explícitamente: es nullable y sin
@@ -1997,11 +2009,10 @@ class CotizacionViewSet(viewsets.ModelViewSet):
                     # cantidad × precio siga cuadrando con el total de la venta
                     # cuando la cotización trae el mismo producto a precios
                     # distintos (un promedio ponderado, no el primero que salga).
-                    precio = subtotales[id_producto] / cantidad
                     cursor.execute("""
                         INSERT INTO producto_venta (id_venta, id_producto, cantidad, precio_unitario)
                         VALUES (%s, %s, %s, %s)
-                    """, [id_venta, id_producto, cantidad, precio])
+                    """, [id_venta, id_producto, cantidad, precios[id_producto]])
 
                 for id_producto, cantidad in requerido.items():
                     cursor.execute(

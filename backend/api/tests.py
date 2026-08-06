@@ -5475,3 +5475,176 @@ class AjusteInventarioAtomicoTestCase(APITestCase):
             'producto_id': 'abc', 'cantidad': 1,
         }, format='json')
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class PreciosConCentavosTestCase(APITestCase):
+    """`producto_venta.precio_unitario` era una columna entera, así que todo
+    precio con centavos se redondeaba al guardarlo y la suma de las líneas
+    dejaba de cuadrar con el total facturado. Como el saldo sale de las líneas,
+    el cobro correcto se rechazaba y la venta se daba por saldada de menos."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_centavos', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+        self.prov = Proveedor.objects.create(nombre_empresa='Prov Centavos')
+        self.cliente = Cliente.objects.create(nombre='Cliente Centavos')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-CENTAVOS', nombre='Repuesto Centavos',
+            cantidad_actual=100, cantidad_total=100, cantidad_minima=1,
+            precio_compra_unitario=5, precio_final='10.10',
+            id_proveedor=self.prov)
+
+    def _venta(self, cantidad, precio):
+        r = self.client.post('/api/ordenes-venta/', {
+            'cliente': self.cliente.id_cliente,
+            'fecha': str(datetime.date.today()),
+            'total': str(Decimal(str(precio)) * cantidad),
+            'detalles': [{'producto': self.producto.id_producto,
+                          'cantidad': cantidad, 'precio_unitario': precio}],
+        }, format='json')
+        assert r.status_code == 201, r.data
+        return r.data['id_venta']
+
+    def test_el_precio_de_linea_conserva_los_centavos(self):
+        id_venta = self._venta(3, '10.10')
+
+        with connection.cursor() as c:
+            c.execute('SELECT precio_unitario FROM producto_venta '
+                      'WHERE id_venta = %s', [id_venta])
+            self.assertEqual(c.fetchone()[0], Decimal('10.10'))
+
+    def test_la_suma_de_las_lineas_cuadra_con_lo_facturado(self):
+        """El descuadre concreto: 3 x C$10,10 facturaba C$30,30 pero las
+        líneas sumaban C$30,00."""
+        id_venta = self._venta(3, '10.10')
+        venta = OrdenVenta.objects.get(pk=id_venta)
+
+        self.assertEqual(venta.calcular_total(), Decimal('30.30'))
+
+        with connection.cursor() as c:
+            c.execute('SELECT total FROM ventas WHERE id_venta = %s', [id_venta])
+            self.assertEqual(c.fetchone()[0], venta.calcular_total())
+
+    def test_se_puede_cobrar_el_importe_exacto(self):
+        """Era la consecuencia visible: el cobro correcto de C$30,30 se
+        rechazaba por 'excede el saldo pendiente de C$30,00'."""
+        id_venta = self._venta(3, '10.10')
+        SesionCaja.objects.create(
+            usuario=self.admin, monto_apertura=0, estado='abierta')
+
+        r = self.client.post(
+            '/api/ordenes-venta/{}/registrar-pago/'.format(id_venta), {
+                'monto': '30.30', 'metodo_pago': 'efectivo',
+                'fecha_pago': str(datetime.date.today()),
+            }, format='json')
+
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+        venta = OrdenVenta.objects.get(pk=id_venta)
+        venta.calcular_saldo()
+        self.assertEqual(venta.estado_pago, 'pagado')
+
+    def test_pagar_de_menos_ya_no_salda_la_venta(self):
+        """El reverso del mismo bug: al cobrar C$30,00 la venta quedaba
+        'pagada' y esos 30 centavos se perdían sin rastro."""
+        id_venta = self._venta(3, '10.10')
+        SesionCaja.objects.create(
+            usuario=self.admin, monto_apertura=0, estado='abierta')
+
+        self.client.post(
+            '/api/ordenes-venta/{}/registrar-pago/'.format(id_venta), {
+                'monto': '30.00', 'metodo_pago': 'efectivo',
+                'fecha_pago': str(datetime.date.today()),
+            }, format='json')
+
+        venta = OrdenVenta.objects.get(pk=id_venta)
+        venta.calcular_saldo()
+        self.assertEqual(venta.saldo_pendiente, Decimal('0.30'))
+        self.assertEqual(venta.estado_pago, 'parcial')
+
+    def test_el_precio_con_muchos_decimales_se_redondea_al_centavo(self):
+        """La columna admite dos decimales: un promedio que no da exacto se
+        redondea, pero el total se calcula DESPUÉS de redondear para que las
+        dos cifras no puedan discrepar."""
+        cot = Cotizacion.objects.create(
+            id_cliente=self.cliente.id_cliente,
+            fecha=datetime.date.today(), total=Decimal('100.00'),
+            estado='aprobada', tipo='producto')
+        with connection.cursor() as c:
+            # C$100 entre 3 unidades: C$33,333... por unidad.
+            c.execute("""
+                INSERT INTO producto_cotizacion
+                    (id_cotizacion, id_producto, cantidad, precio_unitario)
+                VALUES (%s, %s, 3, %s)
+            """, [cot.id_cotizacion, self.producto.id_producto,
+                  Decimal('33.333333')])
+
+        r = self.client.post(
+            '/api/cotizaciones/{}/convertir-venta/'.format(cot.id_cotizacion),
+            {}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+
+        id_venta = r.data['id_venta']
+        venta = OrdenVenta.objects.get(pk=id_venta)
+        with connection.cursor() as c:
+            c.execute('SELECT total FROM ventas WHERE id_venta = %s', [id_venta])
+            facturado = c.fetchone()[0]
+
+        # Lo que importa no es el valor exacto sino que las dos cifras
+        # coincidan: de ahí sale el saldo.
+        self.assertEqual(facturado, venta.calcular_total())
+        self.assertEqual(venta.calcular_total(), Decimal('99.99'))
+
+
+class VerificarTotalesVentaTestCase(APITestCase):
+    """El comando que lista las ventas cuyo total no cuadra con sus líneas."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_verif_tot', password='x', is_staff=True)
+        self.prov = Proveedor.objects.create(nombre_empresa='Prov Verif')
+        self.cliente = Cliente.objects.create(nombre='Cliente Verif')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-VERIF-TOT', nombre='Repuesto Verif',
+            cantidad_actual=100, cantidad_total=100, cantidad_minima=1,
+            precio_compra_unitario=5, precio_final='10.10',
+            id_proveedor=self.prov)
+
+    def _venta_cruda(self, total, precio_linea, cantidad=3):
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO ventas (id_cliente, fecha, total, monto_pagado,
+                                    saldo_pendiente, estado_pago)
+                VALUES (%s, CURRENT_DATE, %s, 0, %s, 'pendiente')
+                RETURNING id_venta
+            """, [self.cliente.id_cliente, total, total])
+            id_venta = c.fetchone()[0]
+            c.execute("""
+                INSERT INTO producto_venta
+                    (id_venta, id_producto, cantidad, precio_unitario)
+                VALUES (%s, %s, %s, %s)
+            """, [id_venta, self.producto.id_producto, cantidad, precio_linea])
+        return id_venta
+
+    def test_no_reporta_nada_cuando_todo_cuadra(self):
+        self._venta_cruda(Decimal('30.30'), Decimal('10.10'))
+
+        salida = StringIO()
+        call_command('verificar_totales_venta', stdout=salida)
+        self.assertIn('cuadran', salida.getvalue())
+
+    def test_detecta_la_venta_descuadrada(self):
+        """Así quedaron las históricas: el total con centavos, la línea
+        redondeada."""
+        id_venta = self._venta_cruda(Decimal('30.30'), Decimal('10.00'))
+
+        salida = StringIO()
+        call_command('verificar_totales_venta', '--detalle', stdout=salida)
+        texto = salida.getvalue()
+
+        self.assertIn('no cuadran', texto)
+        self.assertIn(str(id_venta), texto)
+        self.assertIn('0.30', texto)

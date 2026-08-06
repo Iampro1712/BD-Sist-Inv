@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.12.3-4F46E5?style=flat-square)](#1123---2026-08-04)
+[![Version](https://img.shields.io/badge/version-1.13.0-4F46E5?style=flat-square)](#1130---2026-08-06)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,59 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.13.0] - 2026-08-06
+
+Las ventas con centavos ya cuadran. Cierra el último hallazgo de la auditoría de
+correctitud, el único que necesitaba cambiar la base de datos.
+
+### Fixed
+
+- **Una venta con centavos nunca cuadraba con la suma de sus líneas.** El precio
+  de cada línea se guardaba como número entero, mientras que el total de la venta
+  sí conservaba los centavos. Tres unidades a C$10,10 se facturaban como C$30,30
+  pero las líneas sumaban C$30,00.
+
+  No era un detalle de presentación: **el saldo se calcula desde las líneas**, así
+  que el cobro correcto de C$30,30 se rechazaba con "el monto excede el saldo
+  pendiente de C$30,00", y al cobrar los C$30,00 la venta se daba por saldada
+  perdiendo la diferencia. Con precios que redondean hacia arriba pasaba al
+  revés: quedaba una deuda de centavos imposible de cobrar, que además aparecía
+  en cuentas por cobrar. El listado de ventas y el detalle de una misma venta
+  llegaban a mostrar cifras distintas.
+
+  De los tres caminos que registran una venta, sólo el punto de venta redondeaba
+  a propósito; **la entrega de una orden de taller y la conversión de una
+  cotización perdían los centavos sin que nada lo indicara**.
+
+  Las tablas equivalentes de cotizaciones y devoluciones ya guardaban centavos;
+  ésta se había quedado atrás.
+
+- **El total de una cotización convertida podía no coincidir con sus líneas.** Al
+  repartir un subtotal entre varias unidades el precio puede no dar exacto
+  (C$100 entre 3 son C$33,3333… por unidad). El total se calculaba antes de
+  redondear y las líneas después, así que las dos cifras podían discrepar por
+  centavos. Ahora se redondea primero y el total se suma de ahí, con lo que
+  coinciden siempre.
+
+### Added
+
+- **Comando para revisar las ventas históricas.** Las ventas registradas antes de
+  esta versión conservan el redondeo con el que se guardaron: ese centavo no
+  quedó registrado en ninguna parte y no se puede recuperar. `manage.py
+  verificar_totales_venta --detalle` lista cuáles son y por cuánto difieren, para
+  poder decidir qué hacer con cada una en vez de descubrirlo al intentar cobrar.
+
+### Notas de despliegue
+
+- Incluye la **migración 0025**, que ensancha `producto_venta.precio_unitario` de
+  entero a numérico con dos decimales. No borra ni transforma datos: los valores
+  existentes pasan a tener dos decimales en cero. Validada en una base desechable
+  aplicando, revirtiendo y reaplicando.
+- Como toda migración de este proyecto, se aplica **con respaldo previo** y
+  confirmación explícita antes de tocar producción.
 
 ---
 
