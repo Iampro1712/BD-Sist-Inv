@@ -2020,9 +2020,19 @@ class PagoCompraCreateSerializer(serializers.ModelSerializer):
         saldo = (orden.calcular_total() - orden.total_devuelto()
                  + orden.total_reembolsado() - pagado)
         if data['monto'] > saldo:
-            raise serializers.ValidationError({
-                'monto': f'El monto excede el saldo pendiente de C${saldo:.2f}'
-            })
+            # El saldo exacto sólo se le dice al dueño. Para el resto el mensaje
+            # va sin cifra: repitiendo el intento con montos distintos se
+            # despejaba la deuda con cada proveedor —el mismo dato que el
+            # reporte de cuentas por pagar reserva para el dueño— sin más que
+            # leer el error de validación.
+            request = self.context.get('request')
+            es_duenio = bool(request and request.user and request.user.is_staff)
+            if es_duenio:
+                mensaje = f'El monto excede el saldo pendiente de C${saldo:.2f}'
+            else:
+                mensaje = ('El monto excede el saldo pendiente de esta compra. '
+                           'Consultá con el dueño el saldo exacto.')
+            raise serializers.ValidationError({'monto': mensaje})
         return data
 
     def create(self, validated_data):

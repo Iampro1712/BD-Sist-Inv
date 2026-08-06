@@ -33,6 +33,7 @@ from inventory.models import (
 from .ia_catalogo import (
     PROVEEDORES, catalogo_publico, listar_modelos, probar_credencial,
 )
+from .filtros import id_de_query
 from .serializers import (
     ProveedorListSerializer, ProveedorDetailSerializer,
     MarcaSerializer, CategoriaSerializer,
@@ -444,11 +445,22 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
     ordering = ['-fecha_creacion']
 
     def get_permissions(self):
-        # Registrar/consultar pagos a proveedor lo puede hacer cualquier usuario
-        # autenticado (un pago en efectivo es un egreso del turno, necesario para
-        # el arqueo). Gestionar la orden (crear/confirmar/recibir) sigue admin.
-        if self.action in ('pagos', 'registrar_pago', 'eliminar_pago'):
+        # Registrar un pago a proveedor lo puede hacer cualquier usuario
+        # autenticado: un pago en efectivo es un egreso del turno y sin eso el
+        # arqueo no cierra. Gestionar la orden (crear/confirmar/recibir) sigue
+        # siendo del dueño.
+        if self.action in ('registrar_pago', 'eliminar_pago'):
             return [IsAuthenticated()]
+        # Listar los pagos, en cambio, es del dueño: sumando los montos se
+        # reconstruye el `monto_pagado` que `CamposSoloAdminMixin` acababa de
+        # ocultar en el listado y el detalle de la compra. Era un rodeo que
+        # devolvía justo el dato reservado. Ninguna pantalla lo usa (el servicio
+        # del frontend lo declara pero no lo llama), así que no se pierde nada.
+        #
+        # Va `IsAdminUser` y no `IsAdminOrReadOnly` porque esto es un GET, y esa
+        # otra clase deja pasar cualquier lectura: es justo lo que no se quiere.
+        if self.action == 'pagos':
+            return [IsAdminUser()]
         return [IsAdminOrReadOnly()]
 
     def get_serializer_class(self):
@@ -474,7 +486,8 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(id_estado=estado_id)
         
         # Filtro por proveedor
-        proveedor = self.request.query_params.get('proveedor', None)
+        proveedor = id_de_query(
+            self.request.query_params.get('proveedor'), 'proveedor')
         if proveedor:
             queryset = queryset.filter(id_proveedor=proveedor)
         
@@ -633,8 +646,10 @@ class OrdenCompraViewSet(viewsets.ModelViewSet):
                     {'error': 'Esta compra ya está completamente pagada'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            # El `request` va en el contexto porque el mensaje de saldo
+            # insuficiente sólo lleva la cifra exacta si quien paga es el dueño.
             serializer = PagoCompraCreateSerializer(
-                data=request.data, context={'orden': orden}
+                data=request.data, context={'orden': orden, 'request': request}
             )
             serializer.is_valid(raise_exception=True)
             pago = serializer.save()
@@ -897,7 +912,7 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
         if tipo:
             queryset = queryset.filter(tipo=tipo.upper())
         
-        producto = self.request.query_params.get('producto', None)
+        producto = id_de_query(self.request.query_params.get('producto'), 'producto')
         if producto:
             queryset = queryset.filter(producto_id=producto)
         
@@ -905,76 +920,80 @@ class MovimientoInventarioViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def ajuste(self, request):
-        """Crear un ajuste manual de inventario"""
+        """Crear un ajuste manual de inventario.
+
+        Todo dentro de una transacción y con la fila del producto bloqueada,
+        como ya hacía `aplicar_conteo` acá abajo. Antes se leía el stock, se
+        calculaba el nuevo valor en Python y recién después se guardaba, con
+        tres consecuencias:
+
+        - Si entraba una venta entre la lectura y el guardado, se perdía: un
+          ajuste de +5 sobre un stock de 10 dejaba 15 aunque en el medio se
+          hubieran vendido 2, y esas 2 unidades reaparecían en el inventario.
+        - El `save()` sin `update_fields` reescribía la fila entera desde una
+          copia vieja, así que un cambio de precio o de ubicación hecho en
+          paralelo se revertía solo.
+        - Sin transacción, si fallaba el guardado quedaba el movimiento
+          registrado sin el cambio de stock, y la bitácora dejaba de explicar
+          el inventario.
+        """
+        producto_id = id_de_query(request.data.get('producto_id'), 'producto_id')
+        cantidad = request.data.get('cantidad')
+        notas = request.data.get('notas', '')
+
+        if not producto_id or cantidad is None:
+            return Response(
+                {'error': 'Se requieren producto_id y cantidad'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
-            producto_id = request.data.get('producto_id')
-            cantidad = request.data.get('cantidad')
-            notas = request.data.get('notas', '')
+            cantidad = int(cantidad)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'La cantidad debe ser un número entero'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-            if not producto_id or cantidad is None:
-                return Response(
-                    {'error': 'Se requieren producto_id y cantidad'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Convertir cantidad a entero
+        with transaction.atomic():
             try:
-                cantidad = int(cantidad)
-            except (ValueError, TypeError):
-                return Response(
-                    {'error': 'La cantidad debe ser un número entero'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Verificar que el producto existe
-            try:
-                producto = Producto.objects.get(id_producto=producto_id)
+                producto = Producto.objects.select_for_update().get(
+                    id_producto=producto_id)
             except Producto.DoesNotExist:
                 return Response(
                     {'error': 'Producto no encontrado'},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Verificar que el ajuste no deje stock negativo
+            # Se lee con la fila ya bloqueada: nadie puede moverla hasta commit.
             nuevo_stock = producto.cantidad_actual + cantidad
             if nuevo_stock < 0:
                 return Response(
-                    {'error': f'El ajuste dejaría el stock en {nuevo_stock}. No se puede tener stock negativo.'},
+                    {'error': f'El ajuste dejaría el stock en {nuevo_stock}. '
+                              f'No se puede tener stock negativo.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Crear el movimiento de ajuste
-            movimiento_data = {
+            serializer = MovimientoInventarioCreateSerializer(data={
                 'producto': producto_id,
                 'tipo': 'AJUSTE',
                 'cantidad': cantidad,
                 'referencia': 'AJUSTE_MANUAL',
-                'notas': notas
-            }
+                'notas': notas,
+            })
+            # `raise_exception` en vez de devolver los errores a mano: un
+            # `return` desde dentro de un bloque atómico hace commit, no
+            # rollback, y dejaría el movimiento a medias.
+            serializer.is_valid(raise_exception=True)
+            movimiento = serializer.save()
 
-            serializer = MovimientoInventarioCreateSerializer(data=movimiento_data)
-            if serializer.is_valid():
-                movimiento = serializer.save()
-                
-                # Actualizar el stock del producto
-                producto.cantidad_actual = nuevo_stock
-                producto.save()
+            producto.cantidad_actual = nuevo_stock
+            producto.save(update_fields=['cantidad_actual'])
 
-                return Response(
-                    MovimientoInventarioSerializer(movimiento).data,
-                    status=status.HTTP_201_CREATED
-                )
-            else:
-                return Response(
-                    serializer.errors,
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        except Exception as e:
-            return Response(
-                {'error': f'Error al crear ajuste: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        return Response(
+            MovimientoInventarioSerializer(movimiento).data,
+            status=status.HTTP_201_CREATED
+        )
 
     @action(detail=False, methods=['post'], url_path='aplicar-conteo')
     def aplicar_conteo(self, request):
@@ -1107,7 +1126,7 @@ class MotoViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filtrar motos por cliente si se proporciona el parámetro"""
         queryset = super().get_queryset()
-        cliente_id = self.request.query_params.get('cliente', None)
+        cliente_id = id_de_query(self.request.query_params.get('cliente'), 'cliente')
         if cliente_id:
             queryset = queryset.filter(id_cliente=cliente_id)
         return queryset
@@ -1139,7 +1158,7 @@ class ServicioMotoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        moto_id = self.request.query_params.get('moto', None)
+        moto_id = id_de_query(self.request.query_params.get('moto'), 'moto')
         if moto_id:
             queryset = queryset.filter(id_moto=moto_id)
         estado = self.request.query_params.get('estado', None)
@@ -1573,7 +1592,7 @@ class BitacoraServicioViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(id_servicio=id_servicio)
         
         # Filtrar por moto
-        id_moto = self.request.query_params.get('id_moto', None)
+        id_moto = id_de_query(self.request.query_params.get('id_moto'), 'id_moto')
         if id_moto:
             queryset = queryset.filter(id_moto=id_moto)
         
@@ -1653,7 +1672,7 @@ class ServicioMotoConBitacoraViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = super().get_queryset()
         
         # Filtrar por moto
-        id_moto = self.request.query_params.get('id_moto', None)
+        id_moto = id_de_query(self.request.query_params.get('id_moto'), 'id_moto')
         if id_moto:
             queryset = queryset.filter(id_moto=id_moto)
         
@@ -1685,7 +1704,8 @@ class AuditoriaProductoViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = super().get_queryset()
         
         # Filtrar por producto
-        id_producto = self.request.query_params.get('id_producto', None)
+        id_producto = id_de_query(
+            self.request.query_params.get('id_producto'), 'id_producto')
         if id_producto:
             queryset = queryset.filter(id_producto=id_producto)
         
@@ -1774,7 +1794,7 @@ class GarantiaViewSet(viewsets.ReadOnlyModelViewSet):
         if estado:
             queryset = queryset.filter(estado=estado)
 
-        cliente = self.request.query_params.get('cliente')
+        cliente = id_de_query(self.request.query_params.get('cliente'), 'cliente')
         if cliente:
             queryset = queryset.filter(id_cliente=cliente)
 
@@ -1782,7 +1802,7 @@ class GarantiaViewSet(viewsets.ReadOnlyModelViewSet):
         if producto:
             queryset = queryset.filter(id_producto_id=producto)
 
-        venta = self.request.query_params.get('venta')
+        venta = id_de_query(self.request.query_params.get('venta'), 'venta')
         if venta:
             queryset = queryset.filter(id_venta=venta)
 
@@ -1863,12 +1883,9 @@ class CotizacionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        cliente = self.request.query_params.get('cliente', None)
+        cliente = id_de_query(self.request.query_params.get('cliente'), 'cliente')
         if cliente:
-            try:
-                queryset = queryset.filter(id_cliente=int(cliente))
-            except (ValueError, TypeError):
-                pass
+            queryset = queryset.filter(id_cliente=cliente)
         estado = self.request.query_params.get('estado', None)
         if estado:
             queryset = queryset.filter(estado=estado)
@@ -2130,18 +2147,12 @@ class DevolucionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        cliente = self.request.query_params.get('cliente', None)
+        cliente = id_de_query(self.request.query_params.get('cliente'), 'cliente')
         if cliente:
-            try:
-                queryset = queryset.filter(id_cliente=int(cliente))
-            except (ValueError, TypeError):
-                pass
-        venta = self.request.query_params.get('venta', None)
+            queryset = queryset.filter(id_cliente=cliente)
+        venta = id_de_query(self.request.query_params.get('venta'), 'venta')
         if venta:
-            try:
-                queryset = queryset.filter(id_venta=int(venta))
-            except (ValueError, TypeError):
-                pass
+            queryset = queryset.filter(id_venta=venta)
         return queryset
 
 
@@ -2175,18 +2186,13 @@ class DevolucionCompraViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        proveedor = self.request.query_params.get('proveedor', None)
+        proveedor = id_de_query(
+            self.request.query_params.get('proveedor'), 'proveedor')
         if proveedor:
-            try:
-                queryset = queryset.filter(id_proveedor=int(proveedor))
-            except (ValueError, TypeError):
-                pass
-        orden = self.request.query_params.get('orden', None)
+            queryset = queryset.filter(id_proveedor=proveedor)
+        orden = id_de_query(self.request.query_params.get('orden'), 'orden')
         if orden:
-            try:
-                queryset = queryset.filter(id_orden=int(orden))
-            except (ValueError, TypeError):
-                pass
+            queryset = queryset.filter(id_orden=orden)
         return queryset
 
     @action(detail=False, methods=['get'], url_path='devolvible/(?P<id_orden>[^/.]+)')

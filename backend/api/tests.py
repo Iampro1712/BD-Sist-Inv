@@ -5273,3 +5273,205 @@ class CajaActualPorRolTestCase(APITestCase):
         self.client.force_authenticate(user=self.otro)
         # `Response(None)` no lleva Content-Type, así que .json() no sirve acá.
         self.assertIsNone(self.client.get('/api/caja/actual/').data)
+
+
+class RodeosDeAutorizacionCompraTestCase(APITestCase):
+    """Dos caminos laterales devolvían el dato financiero que el listado y el
+    detalle de la compra ya ocultaban al operador."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user(
+            username='admin_rodeo', password='x', is_staff=True)
+        self.operador = User.objects.create_user(
+            username='oper_rodeo', password='x')
+
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO estado (id_estado, cancelado, pendiente) VALUES
+                    (1,'SI','NO'), (2,'NO','SI'), (3,'NO','NO')
+                ON CONFLICT (id_estado) DO NOTHING
+            """)
+
+        self.prov = Proveedor.objects.create(nombre_empresa='Prov Rodeo')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-RODEO', nombre='Repuesto Rodeo',
+            cantidad_actual=10, cantidad_total=10, cantidad_minima=1,
+            precio_compra_unitario=100, precio_final='300.00',
+            id_proveedor=self.prov)
+        self.orden = OrdenCompra.objects.create(
+            id_proveedor=self.prov.id_proveedor,
+            id_estado=OrdenCompra.ESTADO_PENDIENTE,
+            fecha_creacion=timezone.localdate())
+        with connection.cursor() as c:
+            c.execute("""
+                INSERT INTO orden_producto
+                    (id_orden, id_producto, cantidad, precio_unitario)
+                VALUES (%s, %s, 10, 500)
+            """, [self.orden.id_orden, self.producto.id_producto])
+        self.orden.calcular_saldo()
+
+    def test_el_operador_no_puede_listar_los_pagos_de_una_compra(self):
+        """Sumando los montos se reconstruía el `monto_pagado` oculto."""
+        self.client.force_authenticate(user=self.operador)
+        r = self.client.get(
+            '/api/ordenes-compra/{}/pagos/'.format(self.orden.id_orden))
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_el_dueno_si_puede_listarlos(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(
+            '/api/ordenes-compra/{}/pagos/'.format(self.orden.id_orden))
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+
+    def test_el_operador_sigue_pudiendo_registrar_un_pago(self):
+        """Un pago en efectivo es un egreso del turno: sin esto el arqueo no
+        cierra. Es la razón por la que la acción no es solo del dueño."""
+        self.client.force_authenticate(user=self.operador)
+        SesionCaja.objects.create(
+            usuario=self.operador, monto_apertura=10000, estado='abierta')
+
+        r = self.client.post(
+            '/api/ordenes-compra/{}/registrar-pago/'.format(self.orden.id_orden),
+            {'monto': 1000, 'metodo_pago': 'efectivo',
+             'fecha_pago': str(datetime.date.today())}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+
+    def test_el_error_de_saldo_no_le_revela_la_cifra_al_operador(self):
+        """Repitiendo el intento con montos distintos se despejaba la deuda con
+        cada proveedor, que es lo que el reporte de cuentas por pagar reserva."""
+        self.client.force_authenticate(user=self.operador)
+        SesionCaja.objects.create(
+            usuario=self.operador, monto_apertura=0, estado='abierta')
+
+        r = self.client.post(
+            '/api/ordenes-compra/{}/registrar-pago/'.format(self.orden.id_orden),
+            {'monto': 999999, 'metodo_pago': 'efectivo',
+             'fecha_pago': str(datetime.date.today())}, format='json')
+
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        # El saldo real es 5000 (10 x 500). No debe aparecer.
+        self.assertNotIn('5000', r.content.decode())
+
+    def test_al_dueno_si_se_le_dice_el_saldo_exacto(self):
+        self.client.force_authenticate(user=self.admin)
+        SesionCaja.objects.create(
+            usuario=self.admin, monto_apertura=0, estado='abierta')
+
+        r = self.client.post(
+            '/api/ordenes-compra/{}/registrar-pago/'.format(self.orden.id_orden),
+            {'monto': 999999, 'metodo_pago': 'efectivo',
+             'fecha_pago': str(datetime.date.today())}, format='json')
+
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('5000', r.content.decode())
+
+
+class FiltrosNoNumericosTestCase(APITestCase):
+    """Un filtro con basura daba 500 (culpa del servidor por un dato del
+    cliente) o, peor, se ignoraba en silencio y devolvía la tabla entera como
+    si fuera el resultado del filtro."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = get_user_model().objects.create_user(
+            username='admin_filtros', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+    def test_ningun_filtro_responde_error_de_servidor(self):
+        rutas = [
+            '/api/ordenes-compra/?proveedor=abc',
+            '/api/movimientos/?producto=abc',
+            '/api/motos/?cliente=abc',
+            '/api/servicios-motos/?moto=abc',
+            '/api/devoluciones/?cliente=abc',
+            '/api/devoluciones/?venta=abc',
+            '/api/devoluciones-compra/?proveedor=abc',
+            '/api/devoluciones-compra/?orden=abc',
+        ]
+        for ruta in rutas:
+            r = self.client.get(ruta)
+            self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, ruta)
+
+    def test_un_filtro_invalido_no_devuelve_la_tabla_entera(self):
+        """Era el riesgo silencioso: pedir las devoluciones del cliente 5 con un
+        error de tipeo devolvía TODAS, como si fueran de ese cliente."""
+        r = self.client.get('/api/devoluciones/?cliente=abc')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('cliente', str(r.data).lower())
+
+    def test_los_filtros_validos_siguen_funcionando(self):
+        for ruta in ('/api/ordenes-compra/?proveedor=1',
+                     '/api/movimientos/?producto=1',
+                     '/api/devoluciones/?cliente=1'):
+            r = self.client.get(ruta)
+            self.assertEqual(r.status_code, status.HTTP_200_OK, ruta)
+
+    def test_sin_filtro_no_se_rompe_nada(self):
+        r = self.client.get('/api/ordenes-compra/')
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+
+
+class AjusteInventarioAtomicoTestCase(APITestCase):
+    """El ajuste manual movía stock sin transacción ni bloqueo de fila."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = get_user_model().objects.create_user(
+            username='admin_ajuste_at', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.admin)
+
+        self.prov = Proveedor.objects.create(nombre_empresa='Prov Ajuste')
+        self.producto = Producto.objects.create(
+            sku_producto='SKU-AJUSTE-AT', nombre='Repuesto Ajuste',
+            cantidad_actual=10, cantidad_total=10, cantidad_minima=1,
+            precio_compra_unitario=100, precio_final='300.00',
+            id_proveedor=self.prov)
+
+    def test_el_ajuste_mueve_stock_y_deja_su_movimiento(self):
+        r = self.client.post('/api/movimientos/ajuste/', {
+            'producto_id': self.producto.id_producto,
+            'cantidad': 5, 'notas': 'conteo',
+        }, format='json')
+
+        self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 15)
+        self.assertTrue(MovimientoInventario.objects.filter(
+            producto=self.producto, tipo='AJUSTE').exists())
+
+    def test_el_ajuste_no_pisa_otros_campos_del_producto(self):
+        """`save()` sin `update_fields` reescribía la fila entera desde una
+        copia vieja: un cambio de precio hecho en paralelo se revertía solo."""
+        Producto.objects.filter(pk=self.producto.pk).update(precio_final='999.00')
+
+        self.client.post('/api/movimientos/ajuste/', {
+            'producto_id': self.producto.id_producto, 'cantidad': 1,
+        }, format='json')
+
+        self.producto.refresh_from_db()
+        self.assertEqual(str(self.producto.precio_final), '999.00')
+        self.assertEqual(self.producto.cantidad_actual, 11)
+
+    def test_un_ajuste_que_deja_stock_negativo_se_rechaza(self):
+        r = self.client.post('/api/movimientos/ajuste/', {
+            'producto_id': self.producto.id_producto, 'cantidad': -50,
+        }, format='json')
+
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.cantidad_actual, 10)
+        self.assertFalse(MovimientoInventario.objects.filter(
+            producto=self.producto).exists())
+
+    def test_un_producto_inexistente_da_404_no_500(self):
+        r = self.client.post('/api/movimientos/ajuste/', {
+            'producto_id': 999999, 'cantidad': 1,
+        }, format='json')
+        self.assertEqual(r.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_un_producto_no_numerico_da_400_no_500(self):
+        r = self.client.post('/api/movimientos/ajuste/', {
+            'producto_id': 'abc', 'cantidad': 1,
+        }, format='json')
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)

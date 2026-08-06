@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.12.2-4F46E5?style=flat-square)](#1122---2026-08-04)
+[![Version](https://img.shields.io/badge/version-1.12.3-4F46E5?style=flat-square)](#1123---2026-08-04)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,46 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.12.3] - 2026-08-04
+
+Cierra los tres hallazgos que quedaban de la auditoría de correctitud. Falta
+sólo el descuadre por centavos en las líneas de venta, que necesita cambiar la
+base de datos y va aparte.
+
+### Security
+
+- **Dos rodeos devolvían los montos de una compra a quien no debía verlos.** El
+  listado de pagos de una orden dejaba sumar los abonos y reconstruir cuánto se
+  le pagó al proveedor, justo el dato que el sistema acababa de ocultar en el
+  listado y el detalle. Y al intentar pagar de más, el mensaje de error decía la
+  cifra exacta del saldo: repitiendo el intento con distintos montos se despejaba
+  la deuda con cada proveedor, que es lo que el reporte de cuentas por pagar
+  reserva para el dueño. Ahora el listado de pagos es sólo del dueño y el
+  mensaje lleva la cifra únicamente para él. **Registrar** un pago lo sigue
+  pudiendo hacer cualquiera: un pago en efectivo es un egreso del turno y sin eso
+  el arqueo no cierra.
+
+### Fixed
+
+- **Un ajuste de inventario podía borrar una venta hecha al mismo tiempo.** El
+  ajuste leía el stock, calculaba el nuevo valor y recién después lo guardaba,
+  sin bloquear la fila. Si entre esos dos momentos entraba una venta, se perdía:
+  un ajuste de +5 sobre 10 unidades dejaba 15 aunque se hubieran vendido 2 en el
+  medio, y esas 2 reaparecían en el inventario. Además el guardado reescribía la
+  fila completa desde una copia vieja, así que un cambio de precio o de ubicación
+  hecho en paralelo se revertía solo, y si fallaba a mitad de camino quedaba el
+  movimiento registrado sin el cambio de stock. Ahora va todo en una sola
+  operación con la fila bloqueada, como ya hacía el conteo físico.
+- **Un filtro mal escrito rompía la pantalla o, peor, mentía.** Escribir algo que
+  no fuera un número en un filtro de proveedor, cliente, venta, moto o producto
+  daba un error de servidor en unas pantallas y en otras **se ignoraba en
+  silencio**: pedir las devoluciones del cliente 5 con un error de tipeo devolvía
+  *todas* las devoluciones del sistema, presentadas como si fueran de ese
+  cliente. Ahora los quince filtros afectados responden lo mismo —un aviso de
+  que el valor tiene que ser un número— en vez de fallar o inventar resultados.
 
 ---
 
