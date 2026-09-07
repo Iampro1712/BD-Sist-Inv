@@ -18,41 +18,73 @@ const pronosticoItem = { name: 'Pronóstico', path: '/pronostico-demanda', icon:
 const configuracionItem = { name: 'Configuración', path: '/configuracion', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' }
 const analisisProvItem = { name: 'Análisis proveedores', path: '/analisis-proveedores', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' }
 
-// Ítems principales (siempre visibles en el nav de escritorio)
-const primaryNav = [
-  { name: 'Home', path: '/', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-  { name: 'Productos', path: '/productos', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
-  { name: 'Clientes', path: '/clientes', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-  { name: 'Ventas', path: '/ventas', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
-  { name: 'POS', path: '/pos', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
-  { name: 'Caja', path: '/caja', icon: 'M3 10h18M3 10l1.5-6h15L21 10M4 10v9a1 1 0 001 1h14a1 1 0 001-1v-9M9 14h6' },
-  { name: 'Taller', path: '/taller', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
-  { name: 'Cuentas x Cobrar', path: '/cuentas-cobrar', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
-  { name: 'Reportes', path: '/reportes', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
-]
+// Home vive solo, fuera de los grupos: es esta misma pantalla.
+const homeItem = { name: 'Home', path: '/', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' }
 
-// Ítems secundarios (agrupados bajo "Más" en escritorio)
-const moreNav = [
-  { name: 'Cotizaciones', path: '/cotizaciones', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { name: 'Devoluciones', path: '/devoluciones', icon: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6' },
-  { name: 'Compras', path: '/ordenes-compra', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
-  { name: 'Cuentas x Pagar', path: '/cuentas-pagar', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
-  { name: 'Preventivo', path: '/preventivo', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { name: 'Proveedores', path: '/proveedores', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
-  { name: 'Rentabilidad', path: '/rentabilidad', icon: 'M3 3v18h18M7 14l4-4 4 4 5-6' },
-  { name: 'Ubicaciones', path: '/ubicaciones', icon: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z' },
-  { name: 'Etiquetas', path: '/etiquetas', icon: 'M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z' },
-  { name: 'Garantías', path: '/garantias', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
-  { name: 'Respaldos', path: '/respaldos', icon: 'M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M12 11v6m0 0l-3-3m3 3l3-3' },
-  { name: 'Logs', path: '/logs-auditoria', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-]
+const administracionGroup = {
+  name: 'Administración',
+  icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+  items: [usuariosItem, configuracionItem],
+}
 
-// Lista completa para el menú lateral móvil
-const navItems = [...primaryNav, ...moreNav]
+// Navegación agrupada por los 4 pilares del negocio (reorganiza la navbar de
+// 9 ítems planos + "Más" a grupos con sentido, en vez de una fila que escala
+// mal con ~30 páginas). Cada grupo es un dropdown de escritorio; los ítems
+// admin-only van dentro de su grupo temático, y "Administración" (Usuarios,
+// Configuración) solo aparece para is_staff.
+const getNavGroups = (isAdmin) => [
+  {
+    name: 'Operación',
+    icon: 'M13 10V3L4 14h7v7l9-11h-7z',
+    items: [
+      { name: 'POS', path: '/pos', icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z' },
+      { name: 'Caja', path: '/caja', icon: 'M3 10h18M3 10l1.5-6h15L21 10M4 10v9a1 1 0 001 1h14a1 1 0 001-1v-9M9 14h6' },
+      { name: 'Taller', path: '/taller', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
+      { name: 'Ventas', path: '/ventas', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+      { name: 'Órdenes de compra', path: '/ordenes-compra', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
+    ],
+  },
+  {
+    name: 'Inventario',
+    icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+    items: [
+      { name: 'Productos', path: '/productos', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
+      { name: 'Ubicaciones', path: '/ubicaciones', icon: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z' },
+      { name: 'Etiquetas', path: '/etiquetas', icon: 'M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z' },
+      { name: 'Proveedores', path: '/proveedores', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
+      ...(isAdmin ? [conteoItem] : []),
+    ],
+  },
+  {
+    name: 'Dinero',
+    icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
+    items: [
+      { name: 'Cuentas x Cobrar', path: '/cuentas-cobrar', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
+      { name: 'Cuentas x Pagar', path: '/cuentas-pagar', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
+      { name: 'Cotizaciones', path: '/cotizaciones', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+      { name: 'Devoluciones', path: '/devoluciones', icon: 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6' },
+      { name: 'Garantías', path: '/garantias', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+      ...(isAdmin ? [gastosItem] : []),
+    ],
+  },
+  {
+    name: 'Análisis',
+    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+    items: [
+      { name: 'Reportes', path: '/reportes', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+      { name: 'Rentabilidad', path: '/rentabilidad', icon: 'M3 3v18h18M7 14l4-4 4 4 5-6' },
+      { name: 'Preventivo', path: '/preventivo', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { name: 'Respaldos', path: '/respaldos', icon: 'M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7M4 7c0-2 1-3 3-3h10c2 0 3 1 3 3M4 7h16M12 11v6m0 0l-3-3m3 3l3-3' },
+      { name: 'Logs', path: '/logs-auditoria', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+      ...(isAdmin ? [analisisProvItem, pronosticoItem] : []),
+    ],
+  },
+  ...(isAdmin ? [administracionGroup] : []),
+]
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const [openGroup, setOpenGroup] = useState(null) // nombre del grupo con dropdown abierto, o null
   const moreRef = useRef(null)
   const location = useLocation()
   const navigate = useNavigate()
@@ -61,12 +93,8 @@ const Navbar = () => {
   const logout = useAuthStore((s) => s.logout)
 
   const isAdmin = !!user?.is_staff
-  // "Gastos" y "Usuarios" solo para administradores
-  const adminItems = isAdmin
-    ? [gastosItem, conteoItem, analisisProvItem, pronosticoItem, usuariosItem, configuracionItem]
-    : []
-  const moreItems = [...moreNav, ...adminItems]
-  const mobileItems = [...navItems, ...adminItems]
+  const navGroups = getNavGroups(isAdmin)
+  const mobileItems = [homeItem, ...navGroups.flatMap((g) => g.items)]
 
   const handleLogout = async () => {
     const refresh = localStorage.getItem('auth_refresh')
@@ -76,13 +104,13 @@ const Navbar = () => {
   }
 
   const isActive = (path) => location.pathname === path
-  const isMoreActive = moreItems.some((i) => isActive(i.path))
+  const isGroupActive = (group) => group.items.some((i) => isActive(i.path))
 
-  // Cerrar el dropdown "Más" al hacer clic fuera o al cambiar de ruta
-  useEffect(() => { setIsMoreOpen(false) }, [location.pathname])
+  // Cerrar el dropdown de grupo abierto al hacer clic fuera o al cambiar de ruta
+  useEffect(() => { setOpenGroup(null) }, [location.pathname])
   useEffect(() => {
     const handler = (e) => {
-      if (moreRef.current && !moreRef.current.contains(e.target)) setIsMoreOpen(false)
+      if (moreRef.current && !moreRef.current.contains(e.target)) setOpenGroup(null)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -113,70 +141,68 @@ const Navbar = () => {
               <GlobalSearch />
             </div>
 
-            {/* Desktop Navigation - Only on XL screens */}
-            <div className="hidden xl:flex items-center space-x-1">
-              {primaryNav.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
-                    isActive(item.path)
-                      ? 'text-primary-600 bg-primary-50 dark:bg-primary-900 dark:text-primary-300'
-                      : 'text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {item.name}
-                </Link>
+            {/* Desktop Navigation - Only on XL screens: Home + 4-5 grupos con dropdown */}
+            <div className="hidden xl:flex items-center space-x-1" ref={moreRef}>
+              <Link
+                to={homeItem.path}
+                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
+                  isActive(homeItem.path)
+                    ? 'text-primary-600 bg-primary-50 dark:bg-primary-900 dark:text-primary-300'
+                    : 'text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {homeItem.name}
+              </Link>
+
+              {navGroups.map((group) => (
+                <div className="relative" key={group.name}>
+                  <button
+                    onClick={() => setOpenGroup((g) => (g === group.name ? null : group.name))}
+                    className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
+                      isGroupActive(group) || openGroup === group.name
+                        ? 'text-primary-600 bg-primary-50 dark:bg-primary-900 dark:text-primary-300'
+                        : 'text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                    aria-haspopup="true"
+                    aria-expanded={openGroup === group.name}
+                  >
+                    {group.name}
+                    <svg className={`w-4 h-4 transition-transform ${openGroup === group.name ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  <AnimatePresence>
+                    {openGroup === group.name && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
+                      >
+                        {group.items.map((item) => (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={() => setOpenGroup(null)}
+                            className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                              isActive(item.path)
+                                ? 'text-primary-600 bg-primary-50 dark:bg-primary-900/40 dark:text-primary-300'
+                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+                            </svg>
+                            <span className="font-medium">{item.name}</span>
+                          </Link>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               ))}
-
-              {/* Dropdown "Más" con los ítems secundarios */}
-              <div className="relative" ref={moreRef}>
-                <button
-                  onClick={() => setIsMoreOpen((o) => !o)}
-                  className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
-                    isMoreActive || isMoreOpen
-                      ? 'text-primary-600 bg-primary-50 dark:bg-primary-900 dark:text-primary-300'
-                      : 'text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                  aria-haspopup="true"
-                  aria-expanded={isMoreOpen}
-                >
-                  Más
-                  <svg className={`w-4 h-4 transition-transform ${isMoreOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                <AnimatePresence>
-                  {isMoreOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -8, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -8, scale: 0.97 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
-                    >
-                      {moreItems.map((item) => (
-                        <Link
-                          key={item.path}
-                          to={item.path}
-                          onClick={() => setIsMoreOpen(false)}
-                          className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                            isActive(item.path)
-                              ? 'text-primary-600 bg-primary-50 dark:bg-primary-900/40 dark:text-primary-300'
-                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                          }`}
-                        >
-                          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                          </svg>
-                          <span className="font-medium">{item.name}</span>
-                        </Link>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
             </div>
 
             {/* Dark Mode Toggle & Mobile/Tablet menu button */}

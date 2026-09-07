@@ -44,15 +44,15 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-md w-full text-center"
           >
             {/* Error Icon */}
-            <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-red-100 mb-6">
-              <svg className="h-12 w-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-red-100 dark:bg-red-900/30 mb-6">
+              <svg className="h-12 w-12 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -63,17 +63,17 @@ class ErrorBoundary extends Component {
             </div>
 
             {/* Error Message */}
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Algo salió mal!</h1>
-            <p className="text-gray-600 mb-6">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">¡Algo salió mal!</h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
               Lo sentimos, ha ocurrido un error inesperado. Por favor, intenta recargar la página.
             </p>
 
             {/* Error Details (solo en desarrollo) */}
             {import.meta.env.DEV && this.state.error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-left">
-                <p className="text-sm font-mono text-red-800 mb-2">{this.state.error.toString()}</p>
+              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-left">
+                <p className="text-sm font-mono text-red-800 dark:text-red-300 mb-2">{this.state.error.toString()}</p>
                 {this.state.errorInfo && (
-                  <details className="text-xs text-red-700">
+                  <details className="text-xs text-red-700 dark:text-red-400">
                     <summary className="cursor-pointer font-semibold mb-2">Stack Trace</summary>
                     <pre className="whitespace-pre-wrap overflow-auto max-h-40">
                       {this.state.errorInfo.componentStack}
@@ -101,7 +101,7 @@ class ErrorBoundary extends Component {
               </button>
               <button
                 onClick={this.handleGoHome}
-                className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+                className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-base font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path

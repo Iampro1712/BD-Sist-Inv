@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.13.0-4F46E5?style=flat-square)](#1130---2026-08-06)
+[![Version](https://img.shields.io/badge/version-1.14.0-4F46E5?style=flat-square)](#1140---2026-09-07)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,33 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.14.0] - 2026-09-07
+
+Rediseño del home y reorganización de la navegación de escritorio.
+
+### Changed
+
+- **Home rediseñado alrededor de las dos acciones que abren el día**: "Vender"
+  y "Nueva reparación" pasan a ser los dos bloques grandes de la pantalla, en
+  vez del hero con degradado y la grilla de 5 KPIs que ocupaban antes ese
+  espacio. Debajo, un grid de 4 accesos secundarios (Nuevo cliente, Hacer
+  compra, Buscar producto, Ver reportes) y una barra de estado con los datos
+  reales del negocio: caja abierta/cerrada, ventas, productos, clientes,
+  proveedores, compras y la alerta de stock bajo cuando aplica.
+- **Navegación de escritorio reagrupada por área de negocio.** La barra
+  superior tenía 9 enlaces sueltos más un menú "Más" que ya no escalaba con
+  las ~30 páginas de la app. Ahora es Home + cuatro grupos con menú
+  desplegable — Operación (POS, Caja, Taller, Ventas, Órdenes de compra),
+  Inventario (Productos, Ubicaciones, Etiquetas, Proveedores), Dinero (CxC,
+  CxP, Cotizaciones, Devoluciones, Garantías) y Análisis (Reportes,
+  Rentabilidad, Preventivo, Respaldos, Logs) — y un quinto grupo
+  "Administración" (Usuarios, Configuración) visible solo para
+  administradores. Los ítems que antes eran admin-only sueltos (Gastos,
+  Conteo físico, Análisis de proveedores, Pronóstico de demanda) ahora viven
+  dentro de su grupo temático. El menú lateral móvil no cambia.
 
 ---
 

@@ -23,6 +23,18 @@
 /* Dark mode via class selector (equivalente a darkMode: 'class') */
 @variant dark (&:where(.dark, .dark *));
 
+/* Negro profundo para el modo oscuro: toda la app usa bg-gray-900 (fondo de
+   página) y bg-gray-800 (paneles elevados — cards, navbar, modals, tablas)
+   como sus dos superficies oscuras. Sobrescribir las variables de color aquí,
+   en vez de tocar cada clase dark:bg-gray-9xx/8xx en ~55 archivos, cambia el
+   valor resuelto de esas utilidades sin tocar el JSX ni afectar el modo claro
+   ni el resto de la escala gray (texto, bordes, hovers en 700/600/etc. no
+   cambian). */
+.dark {
+  --color-gray-900: #0a0c12;
+  --color-gray-800: #12161f;
+}
+
 @layer base {
   body {
     @apply font-sans antialiased bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200;

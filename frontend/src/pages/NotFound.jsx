@@ -6,7 +6,7 @@ import { motion } from 'framer-motion'
  */
 const NotFound = () => {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -23,15 +23,15 @@ const NotFound = () => {
         </motion.h1>
 
         {/* Message */}
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Página no encontrada</h2>
-        <p className="text-gray-600 mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Página no encontrada</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-8">
           Lo sentimos, la página que buscas no existe o ha sido movida.
         </p>
 
         {/* Illustration */}
         <div className="mb-8">
           <svg
-            className="mx-auto h-48 w-48 text-gray-400"
+            className="mx-auto h-48 w-48 text-gray-400 dark:text-gray-600"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -63,7 +63,7 @@ const NotFound = () => {
           </Link>
           <button
             onClick={() => window.history.back()}
-            className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+            className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-base font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />

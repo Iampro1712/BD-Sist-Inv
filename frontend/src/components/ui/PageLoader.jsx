@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
  */
 const PageLoader = () => {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -38,7 +38,7 @@ const PageLoader = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-gray-600 font-medium"
+          className="text-gray-600 dark:text-gray-400 font-medium"
         >
           Cargando...
         </motion.p>
