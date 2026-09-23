@@ -1,11 +1,12 @@
 ================================================================================
          INVENTRIX - DOCUMENTO DE REQUERIMIENTOS DEL SISTEMA
-         Sistema de Gestión de Inventario, Ventas y Servicios
+         Sistema de Gestión de Inventario, Ventas, Taller y Finanzas
 ================================================================================
-Versión: 1.1
-Fecha: 2026-05-27
+Versión: 2.0
+Fecha: 2026-09-23
 Proyecto: Inventrix
 Repositorio: inventrix-db
+Versión de la aplicación al momento de este documento: 1.14.0
 ================================================================================
 
 LEYENDA DE PRIORIDADES
@@ -16,6 +17,19 @@ LEYENDA DE PRIORIDADES
   [BAJA]   - Mejora la calidad o usabilidad, pero puede posponerse a una
              versión posterior sin impacto crítico.
 
+CAMBIOS RESPECTO A LA VERSIÓN 1.1 (2026-05-27)
+  Esta versión incorpora todo lo agregado entre mayo y septiembre de 2026:
+  autenticación JWT con roles, taller con ciclo de vida completo de órdenes de
+  trabajo y consumo de repuestos, cotizaciones/presupuestos, devoluciones
+  (cliente y proveedor), garantías y reclamaciones, cuentas por cobrar y por
+  pagar con pagos parciales (abonos), sesiones de caja con arqueo, gastos
+  operativos, ubicaciones físicas de almacén, pronóstico de demanda con
+  interpretación opcional por IA, punto de venta (POS) con escáner de
+  código de barras y generación de etiquetas, respaldo de base de datos
+  descargable, y actualizaciones de la aplicación de escritorio. Se agregaron
+  además cifrado en reposo de datos de contacto (PII) y throttling
+  anti-fuerza-bruta.
+
 ================================================================================
 1. DESCRIPCIÓN GENERAL DEL SISTEMA
 ================================================================================
@@ -23,15 +37,31 @@ LEYENDA DE PRIORIDADES
 Inventrix es un sistema web de gestión empresarial orientado a pequeñas y
 medianas empresas, con enfoque especial en talleres de motos y negocios de
 venta minorista en América Latina (Nicaragua). El sistema integra control de
-inventario, gestión de ventas y compras, relaciones con clientes y proveedores,
-y un sistema especializado de bitácora de servicios para motos con soporte
-fotográfico en la nube.
+inventario, gestión de ventas y compras, relaciones con clientes y
+proveedores, un ciclo completo de órdenes de trabajo de taller con bitácora
+fotográfica, cotizaciones y presupuestos, garantías, devoluciones, cuentas por
+cobrar/pagar, caja y gastos operativos, reportes gerenciales (incluyendo
+pronóstico de demanda asistido por IA) y una aplicación de escritorio
+complementaria para el punto de venta.
 
 Tecnologías principales:
-  - Backend:  Django 6.0 + Django REST Framework + PostgreSQL 16
-  - Frontend: React 19 + Vite 7 + TailwindCSS 4 + React Query + Zustand
-  - Storage:  Cloudflare R2 (compatible con S3) para almacenamiento de imágenes
-  - Deploy:   Docker / Vercel (frontend) / Gunicorn (backend)
+  - Backend:  Django 6.x + Django REST Framework + PostgreSQL 16
+  - Auth:     JWT (djangorestframework-simplejwt) con roles administrador/
+              usuario, rotación de refresh tokens y throttling de login
+  - Cifrado:  Fernet (paquete `cryptography`) para datos de contacto sensibles
+              en reposo (teléfono/email de clientes y proveedores, claves de
+              proveedores de IA)
+  - Frontend: React 19 + Vite 7 + TailwindCSS 4 + React Query + Zustand +
+              React Router
+  - Storage:  Cloudflare R2 (compatible con S3) para imágenes de productos y
+              bitácora de servicios
+  - IA:       Integración opcional con OpenAI, Google Gemini, DeepSeek y
+              Anthropic (Claude) para interpretar el pronóstico de demanda
+  - App de escritorio: cliente nativo con verificación/descarga de
+              actualizaciones intermediada por el backend (repo privado en
+              GitHub)
+  - Deploy:   Docker Compose (desarrollo/producción) / Vercel (frontend) /
+              Gunicorn (backend)
 
 
 ================================================================================
@@ -45,7 +75,7 @@ RF-01.1  [ALTA]   El sistema debe permitir crear, editar, visualizar y eliminar
          productos.
 RF-01.2  [ALTA]   Cada producto debe tener: SKU único, nombre, descripción,
          precio de costo, precio de venta, stock actual, stock mínimo, stock
-         total, categoría, marca, proveedor e imagen.
+         total, categoría, marca, proveedor, ubicación física e imagen.
 RF-01.3  [ALTA]   El sistema debe generar alertas visuales cuando el stock de
          un producto caiga por debajo del stock mínimo definido.
 RF-01.4  [ALTA]   El sistema debe permitir buscar productos por SKU, nombre u
@@ -63,6 +93,12 @@ RF-01.9  [MEDIA]  El sistema debe soportar carga y almacenamiento de imágenes
          de productos en Cloudflare R2.
 RF-01.10 [ALTA]   El sistema debe exponer un filtro de productos con bajo stock
          en la API.
+RF-01.11 [MEDIA]  El sistema debe permitir importar productos de forma masiva
+         (por ejemplo, desde CSV).
+RF-01.12 [MEDIA]  El sistema debe permitir generar e imprimir etiquetas con
+         código de barras para los productos.
+RF-01.13 [MEDIA]  El sistema debe permitir asociar cada producto a una
+         ubicación física (bodega, pasillo, estante, gaveta).
 
 ------------------------------------------------------------------------
 RF-02: GESTIÓN DE CATEGORÍAS
@@ -80,188 +116,473 @@ RF-03.1  [MEDIA]  El sistema debe permitir crear, editar y eliminar marcas.
 RF-03.2  [MEDIA]  Cada producto debe poder estar asociado a una marca.
 
 ------------------------------------------------------------------------
-RF-04: GESTIÓN DE PROVEEDORES
+RF-04: GESTIÓN DE UBICACIONES DE ALMACÉN
 ------------------------------------------------------------------------
-RF-04.1  [ALTA]   El sistema debe permitir crear, editar, visualizar y eliminar
-         proveedores.
-RF-04.2  [ALTA]   Cada proveedor debe tener: nombre de empresa, persona de
-         contacto, teléfono, correo electrónico y dirección.
-RF-04.3  [MEDIA]  El sistema debe mostrar el historial de órdenes de compra
-         asociadas a cada proveedor.
-RF-04.4  [BAJA]   El sistema debe mostrar análisis de costos y evaluación de
-         desempeño por proveedor.
-RF-04.5  [ALTA]   El sistema debe permitir asociar múltiples productos a un
-         proveedor.
+RF-04.1  [MEDIA]  El sistema debe permitir crear, editar y desactivar
+         ubicaciones físicas de almacenamiento (bodega, pasillo, estante,
+         gaveta).
+RF-04.2  [MEDIA]  El sistema debe impedir la creación de ubicaciones
+         duplicadas (mismos niveles de bodega/pasillo/estante/gaveta).
+RF-04.3  [MEDIA]  El sistema debe permitir generar una hoja de conteo físico
+         de inventario agrupada y ordenada por ubicación.
 
 ------------------------------------------------------------------------
-RF-05: GESTIÓN DE CLIENTES
+RF-05: GESTIÓN DE PROVEEDORES
 ------------------------------------------------------------------------
 RF-05.1  [ALTA]   El sistema debe permitir crear, editar, visualizar y eliminar
+         proveedores.
+RF-05.2  [ALTA]   Cada proveedor debe tener: nombre de empresa, persona de
+         contacto, teléfono, correo electrónico, dirección y días de entrega
+         estimados.
+RF-05.3  [MEDIA]  El sistema debe mostrar el historial de órdenes de compra
+         asociadas a cada proveedor.
+RF-05.4  [MEDIA]  El sistema debe mostrar análisis de desempeño por proveedor:
+         velocidad y puntualidad de entrega, monto comprado y comparación de
+         precios entre proveedores para un mismo producto.
+RF-05.5  [ALTA]   El sistema debe permitir asociar múltiples productos a un
+         proveedor.
+RF-05.6  [ALTA]   Los datos de contacto del proveedor (teléfono, email) deben
+         almacenarse cifrados en la base de datos.
+
+------------------------------------------------------------------------
+RF-06: GESTIÓN DE CLIENTES
+------------------------------------------------------------------------
+RF-06.1  [ALTA]   El sistema debe permitir crear, editar, visualizar y eliminar
          clientes.
-RF-05.2  [ALTA]   Cada cliente debe tener: nombre, teléfono, correo electrónico
+RF-06.2  [ALTA]   Cada cliente debe tener: nombre, teléfono, correo electrónico
          y dirección.
-RF-05.3  [MEDIA]  El sistema debe mostrar el historial de órdenes de venta por
+RF-06.3  [MEDIA]  El sistema debe mostrar el historial de órdenes de venta por
          cliente.
-RF-05.4  [ALTA]   El sistema debe permitir registrar motos asociadas a cada
+RF-06.4  [ALTA]   El sistema debe permitir registrar motos asociadas a cada
          cliente.
-RF-05.5  [MEDIA]  El sistema debe mostrar el historial de servicios realizados
+RF-06.5  [MEDIA]  El sistema debe mostrar el historial de servicios realizados
          a las motos de cada cliente.
-RF-05.6  [MEDIA]  El teléfono debe validarse con un mínimo de 8 dígitos y
+RF-06.6  [MEDIA]  El teléfono debe validarse con un mínimo de 8 dígitos y
          formatearse automáticamente en formato XXXX-XXXX, detectando y
          eliminando el prefijo de país (+505).
+RF-06.7  [ALTA]   Los datos de contacto del cliente (teléfono, email) deben
+         almacenarse cifrados en la base de datos.
 
 ------------------------------------------------------------------------
-RF-06: GESTIÓN DE MOTOS
+RF-07: GESTIÓN DE MOTOS
 ------------------------------------------------------------------------
-RF-06.1  [ALTA]   El sistema debe permitir registrar motos con: marca, modelo,
+RF-07.1  [ALTA]   El sistema debe permitir registrar motos con: marca, modelo,
          año y placa de circulación.
-RF-06.2  [ALTA]   Cada moto debe estar asociada a un cliente propietario.
-RF-06.3  [MEDIA]  El sistema debe mostrar el historial completo de servicios
+RF-07.2  [ALTA]   Cada moto debe estar asociada a un cliente propietario.
+RF-07.3  [MEDIA]  El sistema debe mostrar el historial completo de servicios
          por moto.
-RF-06.4  [MEDIA]  El sistema debe permitir filtrar motos por cliente.
+RF-07.4  [MEDIA]  El sistema debe permitir filtrar motos por cliente.
+RF-07.5  [MEDIA]  El sistema debe registrar el kilometraje actual de la moto y
+         sugerir la fecha o kilometraje del próximo mantenimiento preventivo.
 
 ------------------------------------------------------------------------
-RF-07: GESTIÓN DE SERVICIOS (CATÁLOGO)
+RF-08: CATÁLOGO DE SERVICIOS (MANO DE OBRA)
 ------------------------------------------------------------------------
-RF-07.1  [MEDIA]  El sistema debe mantener un catálogo de servicios estándar
-         con nombre y precio de mano de obra predefinido.
-RF-07.2  [MEDIA]  El catálogo debe estar disponible como referencia al crear
-         servicios para motos.
+RF-08.1  [MEDIA]  El sistema debe mantener un catálogo de servicios estándar
+         (plantillas) con nombre y precio de mano de obra predefinido.
+RF-08.2  [MEDIA]  El catálogo debe estar disponible como referencia al agendar
+         órdenes de trabajo y al construir presupuestos de reparación.
+RF-08.3  [BAJA]   El sistema debe conservar como registro histórico intocable
+         las filas de servicios realizados antes de existir el catálogo de
+         plantillas.
 
 ------------------------------------------------------------------------
-RF-08: SERVICIOS DE MOTO
+RF-09: TALLER - ÓRDENES DE TRABAJO (SERVICIOS DE MOTO)
 ------------------------------------------------------------------------
-RF-08.1  [ALTA]   El sistema debe permitir registrar servicios realizados a
-         una moto, incluyendo: tipo de servicio, costo, descripción y fecha.
-RF-08.2  [ALTA]   Cada servicio debe estar asociado a una moto y a un cliente.
-RF-08.3  [MEDIA]  El sistema debe permitir filtrar servicios por moto.
-
-------------------------------------------------------------------------
-RF-09: BITÁCORA DE SERVICIOS (4 MÓDULOS)
-------------------------------------------------------------------------
-RF-09.1  [ALTA]   El sistema debe gestionar una bitácora de servicio con 4
-         etapas secuenciales: Recepción, Diagnóstico, Reparación y Entrega.
-RF-09.2  [ALTA]   Cada etapa debe permitir: notas detalladas, nombre del
-         técnico responsable y carga de múltiples fotografías.
-RF-09.3  [ALTA]   Las fotografías deben almacenarse en Cloudflare R2 y
-         referenciarse mediante URLs en un array JSONB en la base de datos.
-RF-09.4  [MEDIA]  La etapa de Recepción debe documentar: estado inicial, nivel
-         de combustible y daños preexistentes.
-RF-09.5  [MEDIA]  La etapa de Diagnóstico debe documentar: problemas
-         identificados con evidencia fotográfica.
-RF-09.6  [ALTA]   La etapa de Reparación debe documentar: trabajos realizados,
-         técnico responsable y fotos de progreso.
-RF-09.7  [MEDIA]  La etapa de Entrega debe incluir: checklist de finalización
-         y confirmación de entrega al cliente.
-RF-09.8  [MEDIA]  El sistema debe exponer una vista combinada de servicio +
-         bitácora.
-
-------------------------------------------------------------------------
-RF-10: ÓRDENES DE COMPRA
-------------------------------------------------------------------------
-RF-10.1  [ALTA]   El sistema debe permitir crear órdenes de compra con
-         múltiples productos, asociadas a un proveedor.
-RF-10.2  [ALTA]   Cada orden debe gestionar su estado: Pendiente, Recibida o
+RF-09.1  [ALTA]   El sistema debe gestionar el ciclo de vida completo de una
+         orden de trabajo con los estados: Agendada, Recibida, En diagnóstico,
+         En reparación, Esperando repuesto, Lista para entrega, Entregada y
          Cancelada.
-RF-10.3  [ALTA]   Al marcar una orden como Recibida, el sistema debe incrementar
-         automáticamente el stock de los productos involucrados.
-RF-10.4  [ALTA]   El sistema debe calcular automáticamente subtotales, impuestos
-         y totales de cada orden.
-RF-10.5  [MEDIA]  El sistema debe permitir exportar órdenes de compra en PDF y
+RF-09.2  [ALTA]   El sistema debe validar las transiciones de estado
+         permitidas y rechazar cambios de estado inválidos (por ejemplo, no
+         se puede pasar de "Agendada" directo a "Entregada").
+RF-09.3  [ALTA]   Cada orden de trabajo debe poder asociarse a un mecánico
+         responsable.
+RF-09.4  [ALTA]   El sistema debe permitir registrar los repuestos consumidos
+         en una orden de trabajo, descontando automáticamente el stock del
+         inventario.
+RF-09.5  [ALTA]   El costo total de la orden de trabajo debe calcularse
+         automáticamente como la suma de la mano de obra (precio congelado al
+         agendar) más el valor de los repuestos consumidos.
+RF-09.6  [MEDIA]  El sistema debe permitir agendar una cita (fecha y hora) para
+         la orden de trabajo.
+RF-09.7  [ALTA]   Al entregar una orden de trabajo, el sistema debe generar
+         automáticamente la venta correspondiente (productos + mano de obra).
+RF-09.8  [MEDIA]  Si la orden de trabajo tiene un presupuesto de reparación
+         asociado, el sistema debe exigir que esté aprobado antes de permitir
+         iniciar la reparación.
+RF-09.9  [MEDIA]  El sistema debe generar un reporte de agenda del taller con
+         la carga de trabajo por mecánico y la antigüedad de las órdenes por
+         estado.
+RF-09.10 [MEDIA]  El sistema debe generar un reporte de mantenimiento
+         preventivo con las motos que ya deben revisarse según lo sugerido en
+         su última entrega.
+
+------------------------------------------------------------------------
+RF-10: BITÁCORA DE SERVICIOS (4 MÓDULOS)
+------------------------------------------------------------------------
+RF-10.1  [ALTA]   El sistema debe gestionar una bitácora de servicio con 4
+         etapas: Recepción, Diagnóstico, Reparación y Entrega, vinculadas a
+         los estados de la orden de trabajo.
+RF-10.2  [ALTA]   Cada etapa debe permitir: notas detalladas, nombre del
+         técnico responsable y carga de múltiples fotografías.
+RF-10.3  [ALTA]   Las fotografías deben almacenarse en Cloudflare R2 y
+         referenciarse mediante URLs en un array JSONB en la base de datos.
+RF-10.4  [MEDIA]  La etapa de Recepción debe documentar: nivel de combustible
+         y daños/rayones preexistentes.
+RF-10.5  [MEDIA]  La etapa de Diagnóstico debe documentar: fallas encontradas
+         con evidencia fotográfica.
+RF-10.6  [ALTA]   La etapa de Reparación debe documentar: trabajo realizado,
+         técnico responsable y fotos de progreso.
+RF-10.7  [MEDIA]  La etapa de Entrega debe incluir: checklist de finalización
+         y firma/confirmación de entrega al cliente.
+RF-10.8  [MEDIA]  El sistema debe exponer una vista combinada de orden de
+         trabajo + bitácora.
+
+------------------------------------------------------------------------
+RF-11: COTIZACIONES Y PRESUPUESTOS
+------------------------------------------------------------------------
+RF-11.1  [ALTA]   El sistema debe permitir crear cotizaciones de dos tipos:
+         proforma de productos (para clientes que solo compran mercadería) y
+         presupuesto de reparación (ligado a una orden de trabajo del taller).
+RF-11.2  [ALTA]   Cada cotización debe gestionar su estado: Pendiente,
+         Aprobada, Rechazada o Convertida en venta.
+RF-11.3  [ALTA]   El sistema debe calcular el total de la cotización como la
+         suma de líneas de producto y líneas de mano de obra.
+RF-11.4  [MEDIA]  El sistema debe calcular la fecha de vencimiento de la
+         cotización a partir de su fecha de emisión y los días de validez
+         configurados.
+RF-11.5  [ALTA]   Al aprobar un presupuesto de reparación, el sistema debe
+         cargar sus repuestos a la orden de trabajo y descontar el stock una
+         única vez (protegido contra doble aprobación).
+RF-11.6  [MEDIA]  El sistema debe permitir convertir una cotización aprobada en
+         una orden de venta.
+RF-11.7  [MEDIA]  El sistema debe permitir generar el documento de la
+         cotización/presupuesto en PDF.
+
+------------------------------------------------------------------------
+RF-12: ÓRDENES DE COMPRA
+------------------------------------------------------------------------
+RF-12.1  [ALTA]   El sistema debe permitir crear órdenes de compra con
+         múltiples productos, asociadas a un proveedor.
+RF-12.2  [ALTA]   Cada orden debe gestionar su estado: Pendiente, Recibida o
+         Cancelada.
+RF-12.3  [ALTA]   Al marcar una orden como Recibida, el sistema debe
+         incrementar automáticamente el stock de los productos involucrados,
+         de forma idempotente (recibir dos veces no debe duplicar el stock).
+RF-12.4  [ALTA]   El sistema debe calcular automáticamente subtotales,
+         impuestos y totales de cada orden.
+RF-12.5  [MEDIA]  El sistema debe permitir exportar órdenes de compra en PDF y
          Excel.
-RF-10.6  [ALTA]   El sistema debe permitir agregar múltiples ítems (líneas de
+RF-12.6  [ALTA]   El sistema debe permitir agregar múltiples ítems (líneas de
          detalle) a cada orden, con cantidad y precio unitario por ítem.
+RF-12.7  [ALTA]   El sistema debe registrar la fecha esperada y la fecha real
+         de recepción de cada orden, para medir el desempeño del proveedor
+         (velocidad y puntualidad de entrega).
+RF-12.8  [ALTA]   El sistema debe gestionar cuentas por pagar por orden de
+         compra: monto pagado, saldo pendiente y estado de pago (Pendiente,
+         Pago Parcial, Pagado), permitiendo registrar pagos parciales (abonos)
+         a proveedores.
 
 ------------------------------------------------------------------------
-RF-11: ÓRDENES DE VENTA
+RF-13: ÓRDENES DE VENTA
 ------------------------------------------------------------------------
-RF-11.1  [ALTA]   El sistema debe permitir crear órdenes de venta con múltiples
-         productos, asociadas a un cliente.
-RF-11.2  [ALTA]   Al registrar una venta, el sistema debe decrementar
+RF-13.1  [ALTA]   El sistema debe permitir crear órdenes de venta con múltiples
+         productos y/o servicios de taller, asociadas a un cliente.
+RF-13.2  [ALTA]   Al registrar una venta, el sistema debe decrementar
          automáticamente el stock de los productos vendidos.
-RF-11.3  [ALTA]   El sistema debe calcular automáticamente subtotales y totales,
-         soportando descuentos.
-RF-11.4  [ALTA]   El sistema debe validar que la fecha de venta no sea una
+RF-13.3  [ALTA]   El sistema debe calcular automáticamente subtotales y
+         totales, soportando descuentos.
+RF-13.4  [ALTA]   El sistema debe validar que la fecha de venta no sea una
          fecha futura.
-RF-11.5  [MEDIA]  El sistema debe mantener el historial de ventas por cliente.
-RF-11.6  [ALTA]   El sistema debe prevenir ventas cuando el stock disponible sea
-         insuficiente para cubrir la cantidad solicitada.
+RF-13.5  [MEDIA]  El sistema debe mantener el historial de ventas por cliente.
+RF-13.6  [ALTA]   El sistema debe prevenir ventas cuando el stock disponible
+         sea insuficiente para cubrir la cantidad solicitada.
+RF-13.7  [ALTA]   El sistema debe permitir pagos por adelantado (abonos)
+         sobre una venta, gestionando monto pagado, saldo pendiente y estado
+         de pago (Pendiente, Pago Parcial, Pagado).
+RF-13.8  [ALTA]   El sistema debe generar automáticamente una garantía por
+         cada producto vendido que tenga garantía configurada.
+RF-13.9  [MEDIA]  El sistema debe permitir generar e imprimir un recibo en PDF
+         de la venta.
+RF-13.10 [MEDIA]  El sistema debe generar un reporte de cuentas por cobrar,
+         mostrando la antigüedad (aging) del saldo pendiente por cliente.
 
 ------------------------------------------------------------------------
-RF-12: MOVIMIENTOS DE INVENTARIO
+RF-14: DEVOLUCIONES DE CLIENTES
 ------------------------------------------------------------------------
-RF-12.1  [ALTA]   El sistema debe registrar automáticamente un movimiento de
+RF-14.1  [ALTA]   El sistema debe permitir registrar devoluciones de mercadería
+         vendida, asociadas a una venta y un cliente.
+RF-14.2  [ALTA]   El importe de la devolución debe derivarse de las líneas
+         reales de la venta, no de un monto ingresado libremente.
+RF-14.3  [ALTA]   Una devolución procesada debe reingresar el stock devuelto
+         al inventario.
+RF-14.4  [ALTA]   El saldo pendiente de cobro de la venta debe recalcularse
+         restando el valor de las devoluciones procesadas.
+RF-14.5  [MEDIA]  El sistema debe permitir anular una devolución, revirtiendo
+         su efecto sobre el saldo.
+
+------------------------------------------------------------------------
+RF-15: DEVOLUCIONES A PROVEEDORES
+------------------------------------------------------------------------
+RF-15.1  [ALTA]   El sistema debe permitir registrar devoluciones de mercadería
+         a un proveedor, asociadas a una orden de compra recibida.
+RF-15.2  [ALTA]   Una devolución a proveedor debe descontar el stock devuelto
+         del inventario.
+RF-15.3  [ALTA]   El sistema debe permitir registrar si el proveedor reembolsó
+         el dinero (efectivo, transferencia, depósito, cheque o nota de
+         crédito) y con qué monto.
+RF-15.4  [ALTA]   El saldo pendiente de pago de la orden de compra debe
+         recalcularse considerando lo devuelto y lo reembolsado.
+RF-15.5  [MEDIA]  El sistema debe generar un reporte de devoluciones a
+         proveedores, con motivo y monto por proveedor.
+
+------------------------------------------------------------------------
+RF-16: GARANTÍAS Y RECLAMACIONES
+------------------------------------------------------------------------
+RF-16.1  [ALTA]   El sistema debe generar automáticamente una garantía al
+         vender un producto que tenga garantía configurada (meses, tipo y
+         descripción).
+RF-16.2  [ALTA]   Cada garantía debe gestionar su estado: Activa, Vencida o
+         Reclamada, con fecha de inicio y fecha de fin calculadas.
+RF-16.3  [ALTA]   El sistema debe permitir registrar reclamaciones sobre una
+         garantía activa, con descripción del problema.
+RF-16.4  [ALTA]   Cada reclamación debe gestionar su estado: Pendiente, En
+         proceso, Resuelto o Rechazado, con fecha y descripción de la
+         resolución.
+
+------------------------------------------------------------------------
+RF-17: MOVIMIENTOS DE INVENTARIO
+------------------------------------------------------------------------
+RF-17.1  [ALTA]   El sistema debe registrar automáticamente un movimiento de
          inventario ante cada cambio de stock: entrada, salida o ajuste.
-RF-12.2  [ALTA]   Cada movimiento debe registrar: producto, tipo, cantidad,
-         referencia (orden de compra, orden de venta, ajuste manual) y notas.
-RF-12.3  [MEDIA]  El sistema debe permitir realizar ajustes manuales de
+RF-17.2  [ALTA]   Cada movimiento debe registrar: producto, tipo, cantidad,
+         referencia (orden de compra, orden de venta, servicio de taller,
+         ajuste manual) y notas.
+RF-17.3  [MEDIA]  El sistema debe permitir realizar ajustes manuales de
          inventario mediante un endpoint dedicado.
-RF-12.4  [MEDIA]  El sistema debe permitir búsqueda y filtrado de movimientos
+RF-17.4  [MEDIA]  El sistema debe permitir búsqueda y filtrado de movimientos
          por producto, tipo y rango de fecha.
-RF-12.5  [ALTA]   El historial de movimientos debe ser de solo consulta (no
+RF-17.5  [ALTA]   El historial de movimientos debe ser de solo consulta (no
          editable una vez registrado).
 
 ------------------------------------------------------------------------
-RF-13: REPORTES
+RF-18: CAJA (SESIONES DE CAJA)
 ------------------------------------------------------------------------
-RF-13.1  [ALTA]   El sistema debe generar un reporte de inventario con: estado
-         actual, valorización total, distribución por categoría y alertas de
-         bajo stock.
-RF-13.2  [ALTA]   El sistema debe generar un reporte de ventas filtrable por
-         rango de fechas, incluyendo: ventas por cliente, ticket promedio y
-         tendencias.
-RF-13.3  [ALTA]   El sistema debe generar un reporte de compras filtrable por
-         rango de fechas, incluyendo: compras por proveedor y análisis de costos.
-RF-13.4  [MEDIA]  El sistema debe generar un reporte de productos más vendidos
-         (top products) filtrable por período.
-RF-13.5  [ALTA]   El sistema debe validar rangos de fechas en reportes: la fecha
-         de inicio debe ser menor o igual a la fecha de fin, y ninguna fecha
-         puede ser futura.
-RF-13.6  [MEDIA]  El sistema debe permitir exportar todos los reportes en PDF y
-         Excel con formato profesional.
+RF-18.1  [ALTA]   El sistema debe permitir abrir una sesión de caja con un
+         monto de apertura (fondo inicial), registrando el usuario que la
+         abre.
+RF-18.2  [ALTA]   El sistema debe garantizar que solo exista una sesión de
+         caja abierta a la vez en todo el sistema.
+RF-18.3  [ALTA]   El sistema debe permitir registrar movimientos manuales de
+         efectivo (ingresos y retiros) dentro de una sesión abierta.
+RF-18.4  [ALTA]   El sistema debe calcular el efectivo esperado en caja a
+         partir del fondo inicial, los pagos en efectivo recibidos (ventas,
+         abonos), los reembolsos de proveedores en efectivo, los ingresos y
+         retiros manuales, los gastos operativos en efectivo y los pagos a
+         proveedores en efectivo.
+RF-18.5  [ALTA]   Al cerrar una sesión de caja, el sistema debe registrar el
+         efectivo contado físicamente y calcular la diferencia (faltante o
+         sobrante) contra el efectivo esperado.
+RF-18.6  [ALTA]   Solo el usuario dueño de una sesión de caja abierta (o un
+         administrador) puede cerrarla o registrar/consultar sus movimientos
+         y su arqueo en vivo.
+RF-18.7  [MEDIA]  Cualquier usuario autenticado debe poder consultar si hay una
+         sesión de caja abierta y su titular, para saber si puede cobrar.
+RF-18.8  [ALTA]   El listado histórico de sesiones de caja debe estar
+         restringido a administradores.
 
 ------------------------------------------------------------------------
-RF-14: AUDITORÍA DE PRODUCTOS
+RF-19: GASTOS OPERATIVOS
 ------------------------------------------------------------------------
-RF-14.1  [ALTA]   El sistema debe registrar automáticamente, mediante triggers
+RF-19.1  [ALTA]   El sistema debe permitir un catálogo de categorías de gasto
+         (alquiler, servicios, salarios, etc.), administrable solo por
+         administradores.
+RF-19.2  [ALTA]   Cualquier usuario autenticado debe poder registrar un gasto
+         operativo (fecha, categoría, monto, método de pago, descripción).
+RF-19.3  [ALTA]   Un gasto en efectivo debe descontarse del efectivo esperado
+         de la sesión de caja abierta.
+RF-19.4  [MEDIA]  Consultar el listado completo, editar o eliminar gastos debe
+         estar restringido a administradores.
+RF-19.5  [MEDIA]  El sistema debe permitir filtrar gastos por categoría y rango
+         de fechas.
+
+------------------------------------------------------------------------
+RF-20: AUDITORÍA DE PRODUCTOS
+------------------------------------------------------------------------
+RF-20.1  [ALTA]   El sistema debe registrar automáticamente, mediante triggers
          de base de datos, cada modificación realizada a un producto.
-RF-14.2  [ALTA]   Cada registro de auditoría debe capturar: campo modificado,
-         valor anterior (JSON), valor nuevo (JSON), usuario responsable y
-         timestamp.
-RF-14.3  [MEDIA]  El sistema debe exponer una página de "Logs de Auditoría"
-         donde se pueda visualizar el historial completo de cambios a productos.
+RF-20.2  [ALTA]   Cada registro de auditoría debe capturar: campo modificado,
+         valor anterior (JSON), valor nuevo (JSON), usuario responsable real
+         (no el rol de conexión de la base de datos) y timestamp.
+RF-20.3  [MEDIA]  El sistema debe exponer una página de "Logs de Auditoría"
+         donde se pueda visualizar el historial completo de cambios a
+         productos, de solo lectura.
 
 ------------------------------------------------------------------------
-RF-15: BÚSQUEDA GLOBAL
+RF-21: AUTENTICACIÓN Y GESTIÓN DE USUARIOS
 ------------------------------------------------------------------------
-RF-15.1  [MEDIA]  El sistema debe ofrecer un buscador global que permita
+RF-21.1  [ALTA]   El sistema debe requerir autenticación (JWT) para acceder a
+         prácticamente todos los endpoints de la API, con las únicas
+         excepciones públicas de los endpoints de actualización de la app de
+         escritorio.
+RF-21.2  [ALTA]   El sistema debe emitir un token de acceso y uno de
+         actualización (refresh) al iniciar sesión, con rotación y lista
+         negra del refresh token al renovarlo o cerrar sesión.
+RF-21.3  [ALTA]   El sistema debe soportar dos roles: Administrador (acceso
+         total) y Usuario (operación del día a día: ventas, pagos, POS,
+         cotizaciones, devoluciones, alta de clientes/proveedores), sin
+         permiso para acciones destructivas sobre catálogo/inventario
+         (eliminar productos/clientes/proveedores, importar productos, ajustar
+         stock, gestionar órdenes de compra).
+RF-21.4  [ALTA]   El intento de inicio de sesión debe estar limitado en tasa
+         (rate limiting) para mitigar ataques de fuerza bruta.
+RF-21.5  [MEDIA]  El sistema debe exponer el perfil del usuario autenticado
+         (nombre de usuario, email, rol) y permitir cerrar sesión invalidando
+         el token en el servidor.
+RF-21.6  [MEDIA]  El sistema debe permitir a un administrador crear, editar y
+         desactivar usuarios del sistema.
+
+------------------------------------------------------------------------
+RF-22: PUNTO DE VENTA (POS)
+------------------------------------------------------------------------
+RF-22.1  [ALTA]   El sistema debe ofrecer una pantalla de punto de venta
+         optimizada para registrar ventas rápidamente.
+RF-22.2  [MEDIA]  El POS debe permitir escanear códigos de barras de productos
+         mediante la cámara del dispositivo para agregarlos a la venta.
+RF-22.3  [MEDIA]  El POS debe reflejar en tiempo real si hay una sesión de
+         caja abierta antes de permitir cobrar.
+
+------------------------------------------------------------------------
+RF-23: PRONÓSTICO DE DEMANDA E INTEGRACIÓN CON IA
+------------------------------------------------------------------------
+RF-23.1  [MEDIA]  El sistema debe generar un reporte de pronóstico de demanda
+         que recomiende qué, cuándo y cuánto recomprar por producto, con un
+         indicador de confianza basado en los meses de historial de venta
+         disponibles.
+RF-23.2  [MEDIA]  El pronóstico debe usar el plazo de entrega medido de cada
+         proveedor cuando exista histórico suficiente, y el estimado manual
+         como respaldo.
+RF-23.3  [BAJA]   El sistema debe permitir interpretar el pronóstico de
+         demanda mediante un proveedor de IA configurado (análisis en lenguaje
+         natural), de forma opcional y desacoplada del cálculo numérico (si la
+         IA falla, el pronóstico igual responde).
+RF-23.4  [MEDIA]  El sistema debe permitir configurar, por proveedor de IA
+         (OpenAI, Google Gemini, DeepSeek, Anthropic), la clave de API y el
+         modelo a usar, y probar la conexión antes de activarlo.
+RF-23.5  [ALTA]   Solo un proveedor de IA puede estar activo a la vez.
+RF-23.6  [ALTA]   La clave de API de cada proveedor de IA debe almacenarse
+         cifrada, no debe salir nunca del backend, y la API debe exponer
+         únicamente una versión enmascarada.
+RF-23.7  [ALTA]   La configuración de proveedores de IA debe estar restringida
+         a administradores y debe excluirse de los respaldos exportables.
+
+------------------------------------------------------------------------
+RF-24: RESPALDOS DE BASE DE DATOS
+------------------------------------------------------------------------
+RF-24.1  [ALTA]   El sistema debe permitir a un administrador descargar un
+         respaldo lógico (JSON) de todas las tablas de negocio con un solo
+         clic.
+RF-24.2  [ALTA]   El respaldo debe excluir tablas internas de Django/auth,
+         credenciales de sesión (tokens JWT) y claves de proveedores de IA.
+RF-24.3  [MEDIA]  El sistema debe soportar además un respaldo automatizado
+         (job programado) restaurable mediante `pg_dump`.
+RF-24.4  [ALTA]   La descarga de respaldos debe estar restringida a
+         administradores.
+
+------------------------------------------------------------------------
+RF-25: ACTUALIZACIONES DE LA APLICACIÓN DE ESCRITORIO
+------------------------------------------------------------------------
+RF-25.1  [MEDIA]  El sistema debe exponer un endpoint público que informe la
+         última versión publicada de la app de escritorio (versión, notas,
+         tamaño, checksum SHA-256, fecha de publicación).
+RF-25.2  [MEDIA]  El sistema debe exponer un endpoint público que redirija a
+         la descarga del instalador vigente, sin exponer el token de acceso al
+         repositorio privado de GitHub.
+RF-25.3  [ALTA]   Las notas de la nueva versión mostradas al cliente deben
+         filtrar automáticamente cualquier contenido relacionado con
+         seguridad, vulnerabilidades o credenciales antes de publicarse.
+RF-25.4  [MEDIA]  Ambos endpoints deben tener limitación de tasa (rate
+         limiting) propia y cachear la respuesta de GitHub para no agotar su
+         cuota de API ni bloquear workers del servidor.
+RF-25.5  [ALTA]   La descarga del instalador debe validarse contra una lista
+         de hosts de confianza (GitHub) antes de redirigir al cliente.
+
+------------------------------------------------------------------------
+RF-26: REPORTES
+------------------------------------------------------------------------
+RF-26.1  [ALTA]   El sistema debe generar un reporte de inventario con: estado
+         actual, valorización total, distribución por categoría/ubicación y
+         alertas de bajo stock.
+RF-26.2  [ALTA]   El sistema debe generar un reporte de ventas filtrable por
+         rango de fechas, incluyendo: ventas por cliente, productos y
+         servicios vendidos, ticket promedio y tendencias.
+RF-26.3  [ALTA]   El sistema debe generar un reporte de compras filtrable por
+         rango de fechas, incluyendo: compras por proveedor y análisis de
+         costos.
+RF-26.4  [MEDIA]  El sistema debe generar un reporte de productos más vendidos
+         (top products) filtrable por período.
+RF-26.5  [ALTA]   El sistema debe generar un reporte de cuentas por cobrar
+         (ventas con saldo pendiente y su antigüedad) y uno de cuentas por
+         pagar (compras con saldo pendiente y su antigüedad), sin cachear
+         (datos financieros en vivo).
+RF-26.6  [MEDIA]  El sistema debe generar un reporte de rentabilidad por
+         producto: margen unitario y utilidad realizada en ventas.
+RF-26.7  [MEDIA]  El sistema debe generar un reporte de stock muerto:
+         productos con stock que no se han vendido en los últimos N días
+         (por defecto 90).
+RF-26.8  [MEDIA]  El sistema debe generar un estado de resultados (P&L) del
+         período: ingresos, costo de ventas y gastos operativos.
+RF-26.9  [MEDIA]  El sistema debe generar un reporte de agenda del taller y uno
+         de mantenimiento preventivo (ver RF-09.9 y RF-09.10).
+RF-26.10 [MEDIA]  El sistema debe generar una hoja de conteo físico de
+         inventario agrupada por ubicación (ver RF-04.3).
+RF-26.11 [MEDIA]  El sistema debe generar un reporte de desempeño de
+         proveedores (velocidad y puntualidad de entrega, monto comprado) y
+         uno de comparación de precios entre proveedores por producto.
+RF-26.12 [MEDIA]  El sistema debe generar un reporte de devoluciones a
+         proveedores (ver RF-15.5) y el pronóstico de demanda (ver RF-23.1).
+RF-26.13 [ALTA]   El sistema debe validar rangos de fechas en reportes: la
+         fecha de inicio debe ser menor o igual a la fecha de fin, y ninguna
+         fecha puede ser futura.
+RF-26.14 [MEDIA]  El sistema debe permitir exportar los reportes aplicables en
+         PDF y Excel con formato profesional.
+
+------------------------------------------------------------------------
+RF-27: BÚSQUEDA GLOBAL
+------------------------------------------------------------------------
+RF-27.1  [MEDIA]  El sistema debe ofrecer un buscador global que permita
          encontrar productos, clientes y proveedores en tiempo real desde
          cualquier página de la aplicación.
-RF-15.2  [BAJA]   La búsqueda global debe activarse con el atajo de teclado
+RF-27.2  [BAJA]   La búsqueda global debe activarse con el atajo de teclado
          Ctrl+/ o Cmd+/ y debe permitir navegar directamente a la página del
          resultado.
-RF-15.3  [MEDIA]  La búsqueda debe implementar debounce para optimizar las
+RF-27.3  [MEDIA]  La búsqueda debe implementar debounce para optimizar las
          solicitudes al servidor.
+RF-27.4  [BAJA]   Los campos cifrados (teléfono/email) no pueden incluirse en
+         la búsqueda por coincidencia parcial, dado que el texto cifrado no
+         preserva subcadenas del original.
 
 ------------------------------------------------------------------------
-RF-16: DASHBOARD
+RF-28: DASHBOARD
 ------------------------------------------------------------------------
-RF-16.1  [ALTA]   El dashboard debe mostrar métricas en tiempo real: total de
+RF-28.1  [ALTA]   El dashboard debe mostrar métricas en tiempo real: total de
          productos, clientes, proveedores y órdenes activas.
-RF-16.2  [ALTA]   El dashboard debe listar los productos con stock bajo.
-RF-16.3  [MEDIA]  El dashboard debe incluir accesos rápidos a las operaciones
-         más frecuentes del sistema.
-RF-16.4  [BAJA]   El dashboard debe mostrar un saludo personalizado con fecha y
+RF-28.2  [ALTA]   El dashboard debe listar los productos con stock bajo.
+RF-28.3  [MEDIA]  El dashboard debe incluir accesos rápidos, agrupados por área
+         de negocio, a las operaciones más frecuentes del sistema.
+RF-28.4  [BAJA]   El dashboard debe mostrar un saludo personalizado con fecha y
          hora actuales.
 
 ------------------------------------------------------------------------
-RF-17: PAGINACIÓN, FILTRADO Y ORDENAMIENTO
+RF-29: PAGINACIÓN, FILTRADO Y ORDENAMIENTO
 ------------------------------------------------------------------------
-RF-17.1  [ALTA]   Todos los listados de recursos deben soportar paginación
+RF-29.1  [ALTA]   Todos los listados de recursos deben soportar paginación
          configurable (por defecto 20 ítems por página).
-RF-17.2  [MEDIA]  Los listados deben soportar filtrado por los campos relevantes
-         de cada entidad (categoría, marca, proveedor, estado, etc.).
-RF-17.3  [MEDIA]  Los listados deben soportar ordenamiento por nombre, fecha,
+RF-29.2  [MEDIA]  Los listados deben soportar filtrado por los campos
+         relevantes de cada entidad (categoría, marca, proveedor, estado,
+         etc.).
+RF-29.3  [MEDIA]  Los listados deben soportar ordenamiento por nombre, fecha,
          precio y cantidad mediante parámetros en la API.
 
 
@@ -285,33 +606,65 @@ RNF-01.5 [MEDIA]  El sistema debe usar React Query para cachear respuestas del
          servidor y reducir llamadas redundantes a la API.
 RNF-01.6 [BAJA]   Las imágenes subidas deben optimizarse antes del
          almacenamiento y servirse desde CDN (Cloudflare R2).
+RNF-01.7 [MEDIA]  Los reportes financieros en vivo (cuentas por cobrar/pagar)
+         no deben cachearse; el resto de reportes puede cachearse brevemente
+         para reducir carga en la base de datos.
 
 ------------------------------------------------------------------------
 RNF-02: SEGURIDAD
 ------------------------------------------------------------------------
 RNF-02.1 [ALTA]   Todos los secretos del sistema (claves de base de datos,
-         credenciales de R2, tokens) deben gestionarse mediante variables de
-         entorno y no deben estar en el código fuente.
+         credenciales de R2, SECRET_KEY, clave de cifrado, token de GitHub)
+         deben gestionarse mediante variables de entorno y no deben estar en
+         el código fuente.
 RNF-02.2 [ALTA]   El sistema debe configurar CORS restringido a los dominios
-         autorizados en producción.
+         autorizados en producción, sin permitir credenciales cross-origin
+         (la autenticación viaja por header Authorization, no por cookies).
 RNF-02.3 [ALTA]   Todos los datos de entrada del usuario deben ser validados y
          sanitizados mediante los serializers de Django REST Framework para
          prevenir inyección SQL y otros ataques.
-RNF-02.4 [ALTA]   El modo DEBUG de Django debe estar deshabilitado en producción.
-RNF-02.5 [ALTA]   Las contraseñas y datos sensibles nunca deben loguearse ni
-         exponerse en respuestas de la API.
+RNF-02.4 [ALTA]   El modo DEBUG de Django debe estar deshabilitado en
+         producción.
+RNF-02.5 [ALTA]   Las contraseñas, tokens y datos sensibles nunca deben
+         loguearse ni exponerse en respuestas de la API.
 RNF-02.6 [ALTA]   El sistema debe proteger contra XSS mediante el manejo seguro
          de contenido dinámico en React.
-RNF-02.7 [MEDIA]  Los endpoints de la API deben requerir autenticación para
-         operaciones de escritura (cuando se implemente autenticación).
+RNF-02.7 [ALTA]   Prácticamente todos los endpoints de la API deben requerir
+         autenticación JWT; las únicas excepciones públicas deben limitarse a
+         endpoints que no reciben datos de entrada ni tocan la base de datos
+         (verificación/descarga de la app de escritorio).
+RNF-02.8 [ALTA]   El sistema debe implementar segregación de funciones por rol
+         (administrador/usuario) en las operaciones de escritura, incluyendo
+         reglas de propiedad (por ejemplo, un operador solo puede cerrar u
+         operar su propia sesión de caja).
+RNF-02.9 [ALTA]   El sistema debe limitar la tasa de peticiones (throttling)
+         de forma diferenciada: anónimas, autenticadas, login (anti fuerza
+         bruta) y verificación de actualizaciones de escritorio; debe
+         calcular el cliente real detrás de un proxy inverso de forma
+         confiable (no basarse en cabeceras que el cliente pueda falsificar).
+RNF-02.10 [ALTA]  Los datos de contacto sensibles (teléfono y email de
+         clientes y proveedores) y las claves de proveedores de IA deben
+         cifrarse en reposo mediante un mecanismo simétrico auditado (Fernet),
+         con la clave de cifrado gestionada fuera del código fuente.
+RNF-02.11 [ALTA]  Los tokens JWT emitidos deben tener vida corta (access
+         token), soportar renovación transparente (refresh con rotación) e
+         invalidarse (lista negra) al cerrar sesión o rotar.
+RNF-02.12 [ALTA]  Los respaldos de base de datos exportables deben excluir
+         credenciales de sesión y claves de proveedores de IA, y su descarga
+         debe restringirse a administradores.
+RNF-02.13 [MEDIA] En producción, el sistema debe habilitar cabeceras de
+         seguridad HTTP adicionales (HSTS, X-Content-Type-Options) y operar
+         detrás de HTTPS terminado por el proxy inverso.
 
 ------------------------------------------------------------------------
 RNF-03: DISPONIBILIDAD Y CONFIABILIDAD
 ------------------------------------------------------------------------
 RNF-03.1 [ALTA]   El sistema debe garantizar consistencia transaccional: las
-         operaciones que afectan múltiples tablas (e.g., recibir una orden
-         actualiza stock y crea movimiento) deben ejecutarse dentro de una
-         transacción atómica.
+         operaciones que afectan múltiples tablas (p. ej., recibir una orden
+         actualiza stock y crea movimiento; cerrar caja congela el arqueo) se
+         deben ejecutar dentro de una transacción atómica, con bloqueo cuando
+         corresponda para evitar condiciones de carrera (p. ej., abrir dos
+         cajas simultáneamente).
 RNF-03.2 [ALTA]   Las operaciones de eliminación deben gestionar correctamente
          las restricciones de clave foránea y notificar al usuario cuando no
          sea posible eliminar un registro con dependencias activas.
@@ -320,6 +673,14 @@ RNF-03.3 [ALTA]   El sistema debe implementar manejo centralizado de errores
          frontend.
 RNF-03.4 [MEDIA]  El sistema debe mostrar notificaciones toast al usuario ante
          éxitos y errores en operaciones críticas.
+RNF-03.5 [ALTA]   Las operaciones que descuentan o reingresan stock, y las que
+         actualizan saldos financieros (ventas, compras, devoluciones, pagos),
+         deben ser idempotentes ante reintentos (no deben poder aplicarse dos
+         veces por error).
+RNF-03.6 [MEDIA]  Los endpoints públicos (actualizaciones de escritorio) deben
+         cachear la dependencia externa (GitHub) para no degradar la
+         disponibilidad del resto de la API ante fallas o lentitud de
+         terceros.
 
 ------------------------------------------------------------------------
 RNF-04: ESCALABILIDAD
@@ -328,26 +689,33 @@ RNF-04.1 [MEDIA]  La arquitectura debe soportar la adición de nuevos módulos
          sin refactorización mayor de los existentes.
 RNF-04.2 [MEDIA]  El backend debe estar preparado para escalar horizontalmente
          mediante el uso de Gunicorn con múltiples workers.
-RNF-04.3 [ALTA]   El sistema de almacenamiento de imágenes debe ser independiente
-         del servidor de aplicación, utilizando Cloudflare R2.
+RNF-04.3 [ALTA]   El sistema de almacenamiento de imágenes debe ser
+         independiente del servidor de aplicación, utilizando Cloudflare R2.
 RNF-04.4 [ALTA]   La base de datos debe ser PostgreSQL en producción para
          soportar funcionalidades avanzadas (JSONB, triggers, índices
-         compuestos).
+         compuestos, constraints condicionales).
+RNF-04.5 [MEDIA]  El catálogo de proveedores de IA debe poder ampliarse
+         agregando una entrada de configuración, sin cambios al modelo de
+         datos ni a las migraciones.
 
 ------------------------------------------------------------------------
 RNF-05: MANTENIBILIDAD
 ------------------------------------------------------------------------
 RNF-05.1 [ALTA]   El backend debe seguir el patrón de capas: Views →
-         Serializers → Services → Models, separando responsabilidades
+         Serializers → Services/Utils → Models, separando responsabilidades
          claramente.
 RNF-05.2 [ALTA]   El frontend debe organizar el código en: pages, components
-         (ui / forms / domain), hooks, services y utils.
+         (ui / forms / domain / layout / auth), hooks, services y utils.
 RNF-05.3 [MEDIA]  Los hooks de React deben encapsular la lógica de estado y
          llamadas a la API, evitando código duplicado entre páginas.
 RNF-05.4 [ALTA]   El sistema de base de datos debe versionarse mediante
          migraciones de Django para garantizar reproducibilidad del esquema.
 RNF-05.5 [MEDIA]  Los cambios en la base de datos (triggers de auditoría,
          scripts SQL) deben documentarse y versionarse junto con el código.
+RNF-05.6 [MEDIA]  Las decisiones de diseño no evidentes (por qué un campo se
+         cifra o no, por qué un endpoint es público, por qué se congela un
+         precio) deben documentarse en el código como comentarios que
+         expliquen el motivo, no el qué.
 
 ------------------------------------------------------------------------
 RNF-06: USABILIDAD
@@ -365,9 +733,10 @@ RNF-06.5 [ALTA]   Los diálogos de confirmación deben presentarse antes de
          ejecutar operaciones destructivas (eliminaciones).
 RNF-06.6 [MEDIA]  El sistema debe mostrar indicadores de estado visual para
          registros con datos críticos (e.g., productos con bajo stock
-         resaltados).
-RNF-06.7 [MEDIA]  La navegación debe ser intuitiva con accesos directos desde
-         el dashboard a las secciones más utilizadas.
+         resaltados, saldo pendiente, sesión de caja abierta).
+RNF-06.7 [MEDIA]  La navegación debe ser intuitiva, con el inicio organizado
+         por áreas de negocio y accesos directos a las secciones más
+         utilizadas.
 
 ------------------------------------------------------------------------
 RNF-07: COMPATIBILIDAD
@@ -380,22 +749,29 @@ RNF-07.2 [MEDIA]  La API REST debe seguir las convenciones estándar HTTP
 RNF-07.3 [BAJA]   El sistema de almacenamiento de archivos debe ser compatible
          con la API S3 para facilitar la migración a otros proveedores cloud.
 RNF-07.4 [ALTA]   El sistema debe funcionar correctamente en entornos de
-         desarrollo (Docker Compose), staging y producción sin cambios de
-         código, solo mediante variables de entorno.
+         desarrollo, staging y producción sin cambios de código, solo mediante
+         variables de entorno.
+RNF-07.5 [MEDIA]  El escaneo de códigos de barras del POS debe funcionar desde
+         el navegador usando la cámara del dispositivo, sin hardware
+         dedicado.
 
 ------------------------------------------------------------------------
 RNF-08: PORTABILIDAD Y DESPLIEGUE
 ------------------------------------------------------------------------
 RNF-08.1 [ALTA]   El sistema debe poder desplegarse completamente mediante
-         Docker Compose con un solo comando en desarrollo.
+         Docker Compose en producción.
 RNF-08.2 [MEDIA]  El frontend debe poder desplegarse en Vercel con
          configuración mínima (vercel.json incluido).
 RNF-08.3 [ALTA]   El backend debe servirse mediante Gunicorn como servidor
-         WSGI en producción.
+         WSGI en producción, detrás de un proxy inverso (Traefik) que termine
+         TLS.
 RNF-08.4 [MEDIA]  La colección de archivos estáticos de Django debe ejecutarse
          automáticamente en el proceso de despliegue.
 RNF-08.5 [ALTA]   Las migraciones de base de datos deben poder ejecutarse de
          forma automatizada como parte del proceso de despliegue.
+RNF-08.6 [MEDIA]  El entorno de desarrollo local no requiere Docker: el
+         backend debe poder ejecutarse con un entorno virtual de Python contra
+         una base de datos PostgreSQL accesible (local o remota).
 
 ------------------------------------------------------------------------
 RNF-09: VALIDACIÓN DE DATOS
@@ -408,9 +784,13 @@ RNF-09.2 [ALTA]   El sistema debe impedir el registro de órdenes de venta con
 RNF-09.3 [ALTA]   Los rangos de fechas en reportes deben validarse: fecha
          inicio ≤ fecha fin, y ambas fechas ≤ fecha actual.
 RNF-09.4 [ALTA]   El sistema debe validar que el stock no quede negativo al
-         procesar una venta o ajuste de inventario.
-RNF-09.5 [ALTA]   Los campos únicos (SKU, códigos) deben validarse contra
-         duplicados antes de confirmar la creación o edición.
+         procesar una venta, un servicio de taller o un ajuste de inventario.
+RNF-09.5 [ALTA]   Los campos únicos (SKU, códigos, placas) deben validarse
+         contra duplicados antes de confirmar la creación o edición.
+RNF-09.6 [ALTA]   Las transiciones de estado de entidades con ciclo de vida
+         (orden de trabajo, cotización, sesión de caja, garantía,
+         reclamación) deben validarse contra una máquina de estados explícita
+         en el backend, no solo en el frontend.
 
 ------------------------------------------------------------------------
 RNF-10: EXPORTACIÓN Y FORMATOS
@@ -423,6 +803,9 @@ RNF-10.2 [MEDIA]  Las exportaciones a Excel deben usar ExcelJS para generar
          tipadas.
 RNF-10.3 [MEDIA]  Las exportaciones deben incluir los mismos filtros aplicados
          en la vista actual del listado.
+RNF-10.4 [MEDIA]  La importación masiva de productos debe soportar archivos
+         CSV y reportar errores fila por fila sin abortar el resto de la
+         importación.
 
 ------------------------------------------------------------------------
 RNF-11: INTERNACIONALIZACIÓN Y LOCALIZACIÓN
@@ -434,22 +817,28 @@ RNF-11.2 [MEDIA]  Los formatos de fecha deben ser DD/MM/YYYY o adaptados a la
 RNF-11.3 [MEDIA]  La validación de teléfono debe reconocer y manejar el
          prefijo de país de Nicaragua (+505).
 RNF-11.4 [MEDIA]  Los valores monetarios deben mostrarse con el símbolo de
-         moneda local y separadores de miles apropiados.
+         moneda local (C$) y separadores de miles apropiados.
+RNF-11.5 [MEDIA]  Los cálculos de fechas contra zona horaria (por ejemplo,
+         días de entrega de un proveedor) deben hacerse en la zona horaria del
+         negocio, no en UTC, para no desplazar el día calculado.
 
 ------------------------------------------------------------------------
 RNF-12: TRAZABILIDAD Y AUDITORÍA
 ------------------------------------------------------------------------
 RNF-12.1 [ALTA]   El sistema debe mantener un registro inmutable de todos los
          cambios realizados a los productos mediante triggers de base de datos
-         (PostgreSQL).
+         (PostgreSQL), asociado al usuario real de la aplicación (no al rol de
+         conexión de la base de datos).
 RNF-12.2 [ALTA]   Cada movimiento de inventario debe tener una referencia que
          identifique el origen del cambio (orden de compra, orden de venta,
-         ajuste manual).
+         servicio de taller, ajuste manual).
 RNF-12.3 [MEDIA]  Los registros de auditoría deben almacenar snapshots
-         completos en formato JSON del estado anterior y posterior del registro
-         modificado.
+         completos en formato JSON del estado anterior y posterior del
+         registro modificado.
 RNF-12.4 [BAJA]   El sistema debe registrar opcionalmente la dirección IP del
          usuario en los logs de auditoría.
+RNF-12.5 [MEDIA]  Cada movimiento de efectivo dentro de una sesión de caja
+         debe quedar asociado al usuario que lo registró.
 
 
 ================================================================================
@@ -457,8 +846,8 @@ RNF-12.4 [BAJA]   El sistema debe registrar opcionalmente la dirección IP del
 ================================================================================
 
 RT-01  [ALTA]   Se requiere PostgreSQL 16+ en producción. No se soporta SQLite
-       en producción debido al uso de JSONB, triggers y funciones específicas
-       de PostgreSQL.
+       en producción debido al uso de JSONB, triggers, constraints
+       condicionales y funciones específicas de PostgreSQL.
 
 RT-02  [ALTA]   El almacenamiento de imágenes requiere acceso a Cloudflare R2
        o un servicio compatible con la API de Amazon S3 (bucket_name,
@@ -474,41 +863,93 @@ RT-05  [ALTA]   El despliegue en producción requiere HTTPS para garantizar la
 RT-06  [ALTA]   Las migraciones de base de datos deben ejecutarse en orden
        estricto para mantener la integridad referencial del esquema.
 
+RT-07  [ALTA]   En producción son obligatorias las variables de entorno
+       SECRET_KEY y FIELD_ENCRYPTION_KEY; el arranque debe fallar de forma
+       explícita si faltan, en vez de operar sin cifrado.
+
+RT-08  [MEDIA]  El uso de IA para el pronóstico de demanda requiere una clave
+       de API válida de al menos uno de los proveedores soportados (OpenAI,
+       Google Gemini, DeepSeek, Anthropic); sin ella, el pronóstico numérico
+       sigue funcionando sin la interpretación en lenguaje natural.
+
+RT-09  [MEDIA]  Las actualizaciones de la app de escritorio requieren un token
+       de GitHub con acceso de lectura al repositorio privado del instalador
+       (GITHUB_DESKTOP_TOKEN, GITHUB_DESKTOP_REPO).
+
+RT-10  [ALTA]   El sistema debe operar detrás de exactamente el número de
+       proxies de confianza configurado (NUM_PROXIES), para que el
+       limitador de tasa identifique correctamente al cliente real.
+
 
 ================================================================================
 5. ENTIDADES Y RELACIONES PRINCIPALES
 ================================================================================
 
-  Producto         --> Categoria (N:1)
-  Producto         --> Marca (N:1)
-  Producto         --> Proveedor (N:1, opcional)
-  Proveedor        --> OrdenCompra (1:N)
-  OrdenCompra      --> DetalleOrdenCompra (1:N) --> Producto (N:1)
-  Cliente          --> OrdenVenta (1:N)
-  OrdenVenta       --> DetalleOrdenVenta (1:N) --> Producto (N:1)
-  Cliente          --> Moto (1:N)
-  Moto             --> ServicioMoto (1:N)
-  ServicioMoto     --> BitacoraServicio (1:1)
-  Producto         --> MovimientoInventario (1:N)
-  Producto         --> AuditoriaProducto (1:N) [via trigger]
+  Producto           --> Categoria (N:1)
+  Producto           --> Marca (N:1)
+  Producto           --> Proveedor (N:1, opcional)
+  Producto           --> Ubicacion (N:1, opcional)
+  Proveedor          --> OrdenCompra (1:N)
+  OrdenCompra        --> DetalleOrdenCompra (1:N) --> Producto (N:1)
+  OrdenCompra        --> PagoCompra (1:N)
+  OrdenCompra        --> DevolucionCompra (1:N) --> ProductoDevolucionCompra (1:N)
+  Cliente            --> OrdenVenta (1:N)
+  OrdenVenta         --> DetalleOrdenVenta (1:N) --> Producto (N:1)
+  OrdenVenta         --> PagoVenta (1:N)
+  OrdenVenta         --> Devolucion (1:N)
+  OrdenVenta         --> Garantia (1:N) --> ReclamacionGarantia (1:N)
+  Cliente            --> Moto (1:N)
+  Moto               --> ServicioMoto (1:N)
+  ServicioMoto       --> BitacoraServicio (1:N, una por módulo)
+  ServicioMoto       --> ServicioRepuesto (1:N) --> Producto (N:1)
+  ServicioMoto       --> Cotizacion (1:N, tipo=reparacion)
+  ServicioMoto       --> OrdenVenta (N:1, al entregar)
+  Cotizacion         --> ServicioCotizacion (1:N) --> Servicio (N:1)
+  Cliente            --> Cotizacion (1:N)
+  Usuario            --> SesionCaja (1:N)
+  SesionCaja         --> MovimientoCaja (1:N)
+  SesionCaja         --> PagoVenta / PagoCompra / Gasto / DevolucionCompra (1:N)
+  CategoriaGasto     --> Gasto (1:N)
+  Producto           --> MovimientoInventario (1:N)
+  Producto           --> AuditoriaProducto (1:N) [via trigger]
 
 
 ================================================================================
 6. MÓDULOS Y PÁGINAS DEL SISTEMA
 ================================================================================
 
-  Módulo                 Ruta               Descripción
-  ──────────────────────────────────────────────────────────────────────
-  Dashboard              /                  Métricas, alertas, accesos rápidos
-  Productos              /productos         Catálogo e inventario
-  Proveedores            /proveedores       Gestión de proveedores
-  Clientes               /clientes          CRM básico con motos y servicios
-  Órdenes de Compra      /ordenes-compra    Compras y recepción de mercadería
-  Órdenes de Venta       /ventas            Registro de ventas
-  Movimientos            /movimientos       Historial de stock
-  Reportes               /reportes          Análisis y exportaciones
-  Categorías             /categorias        Clasificación de productos
-  Logs de Auditoría      /logs-auditoria    Trazabilidad de cambios
+  Módulo                     Ruta                    Descripción
+  ────────────────────────────────────────────────────────────────────────────
+  Dashboard                  /                       Métricas, alertas, accesos rápidos
+  Productos                  /productos              Catálogo e inventario
+  Categorías                 /categorias             Clasificación de productos
+  Ubicaciones                /ubicaciones            Lugares físicos de almacenamiento
+  Proveedores                /proveedores            Gestión de proveedores
+  Clientes                   /clientes               CRM básico con motos y servicios
+  Órdenes de Compra          /ordenes-compra         Compras y recepción de mercadería
+  Cuentas por Pagar          /cuentas-pagar          Saldos y abonos a proveedores
+  Órdenes de Venta           /ventas                 Registro de ventas
+  Cuentas por Cobrar         /cuentas-cobrar         Saldos y abonos de clientes
+  Punto de Venta             /pos                    Venta rápida con escáner de códigos
+  Cotizaciones               /cotizaciones           Proformas y presupuestos de reparación
+  Devoluciones               /devoluciones           Devoluciones de clientes y proveedores
+  Garantías                  /garantias              Garantías y reclamaciones
+  Taller                     /taller                 Órdenes de trabajo y bitácora de servicio
+  Mantenimiento Preventivo   /preventivo             Motos próximas a revisión
+  Movimientos                /movimientos            Historial de stock
+  Conteo Físico              /conteo-fisico          Hoja de conteo por ubicación
+  Caja                       /caja                   Apertura, cierre y arqueo de caja
+  Gastos                     /gastos                 Gastos operativos
+  Reportes                   /reportes               Análisis y exportaciones
+  Rentabilidad               /rentabilidad           Márgenes por producto
+  Análisis de Proveedores    /analisis-proveedores   Desempeño y comparación de precios
+  Pronóstico de Demanda      /pronostico-demanda     Recompra sugerida, con análisis IA opcional
+  Etiquetas                  /etiquetas              Generación de etiquetas con código de barras
+  Logs de Auditoría          /logs-auditoria         Trazabilidad de cambios en productos
+  Usuarios                   /usuarios               Gestión de usuarios y roles
+  Respaldos                  /respaldos              Descarga de respaldo de base de datos
+  Configuración               /configuracion         Proveedores de IA y ajustes generales
+  Login                      /login                  Autenticación
 
 
 ================================================================================
@@ -518,23 +959,48 @@ RT-06  [ALTA]   Las migraciones de base de datos deben ejecutarse en orden
 HU-01  Como administrador, quiero ver el estado del inventario en tiempo real
        para tomar decisiones de reabastecimiento oportunas.
 
-HU-02  Como vendedor, quiero registrar una venta rápidamente seleccionando
-       cliente y productos, para que el stock se actualice automáticamente.
+HU-02  Como vendedor, quiero registrar una venta rápidamente desde el punto de
+       venta, escaneando el código de barras del producto, para que el stock
+       se actualice automáticamente.
 
 HU-03  Como comprador, quiero crear una orden de compra a un proveedor y
-       registrar su recepción para actualizar el inventario sin errores manuales.
+       registrar su recepción para actualizar el inventario sin errores
+       manuales, y llevar el saldo que le debo.
 
-HU-04  Como técnico, quiero documentar cada etapa del servicio a una moto con
-       fotos y notas, para mantener un registro profesional del trabajo realizado.
+HU-04  Como mecánico, quiero documentar cada etapa de una orden de trabajo con
+       fotos y notas, y registrar los repuestos que consumo, para mantener un
+       registro profesional y que el costo se calcule solo.
 
-HU-05  Como gerente, quiero generar reportes de ventas por período en Excel o
-       PDF para presentar resultados a la dirección.
+HU-05  Como gerente, quiero generar reportes de ventas, rentabilidad y estado
+       de resultados por período en Excel o PDF para presentar resultados a la
+       dirección.
 
-HU-06  Como auditor, quiero ver el historial completo de cambios en el inventario
-       con usuario y fecha para garantizar la trazabilidad de los datos.
+HU-06  Como auditor, quiero ver el historial completo de cambios en el
+       inventario con usuario y fecha para garantizar la trazabilidad de los
+       datos.
 
 HU-07  Como usuario, quiero buscar cualquier producto, cliente o proveedor
-       desde cualquier pantalla con un atajo de teclado para trabajar más rápido.
+       desde cualquier pantalla con un atajo de teclado para trabajar más
+       rápido.
+
+HU-08  Como cajero, quiero abrir mi turno de caja con un fondo inicial y
+       cerrarlo cuadrando el efectivo contado contra lo que el sistema
+       calculó, para detectar faltantes o sobrantes al momento.
+
+HU-09  Como cliente del taller, quiero recibir un presupuesto de reparación
+       antes de que empiecen a trabajar en mi moto, para aprobarlo o
+       rechazarlo con el costo por delante.
+
+HU-10  Como administrador, quiero configurar un proveedor de IA para que el
+       pronóstico de demanda me explique en lenguaje simple qué me conviene
+       comprar, sin que mi clave de API quede expuesta.
+
+HU-11  Como dueño del negocio sin equipo de IT, quiero descargar un respaldo
+       completo de mis datos con un clic, para tener mi propia copia de
+       seguridad.
+
+HU-12  Como técnico en el taller, quiero usar la app de escritorio y que me
+       avise sola cuando haya una versión nueva, sin tener que ir a buscarla.
 
 
 ================================================================================
