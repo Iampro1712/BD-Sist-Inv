@@ -17,6 +17,21 @@ LEYENDA DE PRIORIDADES
   [BAJA]   - Mejora la calidad o usabilidad, pero puede posponerse a una
              versión posterior sin impacto crítico.
 
+LEYENDA DE FUENTE/ACTOR (requerimientos funcionales)
+  Cada requerimiento funcional indica quién lo origina o ejecuta:
+  Administrador       - Usuario con rol administrador (is_staff): acceso total.
+  Usuario (vendedor)  - Usuario estándar que opera ventas, cotizaciones y POS.
+  Cajero              - Usuario estándar que opera su turno de caja y cobros.
+  Comprador           - Usuario que gestiona órdenes de compra y proveedores.
+  Mecánico            - Técnico del taller (órdenes de trabajo y bitácora).
+  Gerente             - Rol de análisis: consulta reportes y decisiones.
+  Auditor             - Consulta de trazabilidad y logs de auditoría.
+  Cliente             - Cliente externo del negocio (p. ej. aprueba presupuestos).
+  Sistema             - Comportamiento automático (triggers, cálculos, jobs).
+  App de escritorio   - Cliente nativo que consume los endpoints públicos.
+  Nota: "Usuario" corresponde al rol estándar del sistema; los perfiles
+  vendedor/cajero/comprador/mecánico son funciones operativas de ese rol.
+
 CAMBIOS RESPECTO A LA VERSIÓN 1.1 (2026-05-27)
   Esta versión incorpora todo lo agregado entre mayo y septiembre de 2026:
   autenticación JWT con roles, taller con ciclo de vida completo de órdenes de
@@ -73,47 +88,65 @@ RF-01: GESTIÓN DE PRODUCTOS
 ------------------------------------------------------------------------
 RF-01.1  [ALTA]   El sistema debe permitir crear, editar, visualizar y eliminar
          productos.
+         Fuente/Actor: Administrador
 RF-01.2  [ALTA]   Cada producto debe tener: SKU único, nombre, descripción,
          precio de costo, precio de venta, stock actual, stock mínimo, stock
          total, categoría, marca, proveedor, ubicación física e imagen.
+         Fuente/Actor: Administrador
 RF-01.3  [ALTA]   El sistema debe generar alertas visuales cuando el stock de
          un producto caiga por debajo del stock mínimo definido.
+         Fuente/Actor: Sistema
 RF-01.4  [ALTA]   El sistema debe permitir buscar productos por SKU, nombre u
          otros campos.
+         Fuente/Actor: Usuario (cualquier rol)
 RF-01.5  [MEDIA]  El sistema debe permitir filtrar productos por categoría,
          marca, proveedor y estado de stock.
+         Fuente/Actor: Usuario (cualquier rol)
 RF-01.6  [MEDIA]  El sistema debe calcular y mostrar el margen de ganancia de
          cada producto.
+         Fuente/Actor: Gerente, Administrador
 RF-01.7  [MEDIA]  El sistema debe permitir exportar el listado de productos en
          formato PDF y Excel.
+         Fuente/Actor: Gerente, Administrador
 RF-01.8  [ALTA]   El sistema debe registrar automáticamente todos los cambios
          realizados a un producto en un log de auditoría mediante triggers de
          base de datos.
+         Fuente/Actor: Sistema (trigger de BD), Auditor
 RF-01.9  [MEDIA]  El sistema debe soportar carga y almacenamiento de imágenes
          de productos en Cloudflare R2.
+         Fuente/Actor: Administrador
 RF-01.10 [ALTA]   El sistema debe exponer un filtro de productos con bajo stock
          en la API.
+         Fuente/Actor: Sistema
 RF-01.11 [MEDIA]  El sistema debe permitir importar productos de forma masiva
          (por ejemplo, desde CSV).
+         Fuente/Actor: Administrador
 RF-01.12 [MEDIA]  El sistema debe permitir generar e imprimir etiquetas con
          código de barras para los productos.
+         Fuente/Actor: Usuario (vendedor), Administrador
 RF-01.13 [MEDIA]  El sistema debe permitir asociar cada producto a una
          ubicación física (bodega, pasillo, estante, gaveta).
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-02: GESTIÓN DE CATEGORÍAS
 ------------------------------------------------------------------------
 RF-02.1  [ALTA]   El sistema debe permitir crear, editar y eliminar categorías
          de productos.
+         Fuente/Actor: Administrador
 RF-02.2  [ALTA]   Cada producto debe poder pertenecer a una categoría.
+         Fuente/Actor: Administrador
 RF-02.3  [MEDIA]  El sistema debe mostrar el listado completo de categorías
          disponibles.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-03: GESTIÓN DE MARCAS
 ------------------------------------------------------------------------
 RF-03.1  [MEDIA]  El sistema debe permitir crear, editar y eliminar marcas.
+         Fuente/Actor: Administrador
 RF-03.2  [MEDIA]  Cada producto debe poder estar asociado a una marca.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-04: GESTIÓN DE UBICACIONES DE ALMACÉN
@@ -121,70 +154,94 @@ RF-04: GESTIÓN DE UBICACIONES DE ALMACÉN
 RF-04.1  [MEDIA]  El sistema debe permitir crear, editar y desactivar
          ubicaciones físicas de almacenamiento (bodega, pasillo, estante,
          gaveta).
+         Fuente/Actor: Administrador
 RF-04.2  [MEDIA]  El sistema debe impedir la creación de ubicaciones
          duplicadas (mismos niveles de bodega/pasillo/estante/gaveta).
+         Fuente/Actor: Sistema
 RF-04.3  [MEDIA]  El sistema debe permitir generar una hoja de conteo físico
          de inventario agrupada y ordenada por ubicación.
+         Fuente/Actor: Administrador, Usuario (inventario)
 
 ------------------------------------------------------------------------
 RF-05: GESTIÓN DE PROVEEDORES
 ------------------------------------------------------------------------
 RF-05.1  [ALTA]   El sistema debe permitir crear, editar, visualizar y eliminar
          proveedores.
+         Fuente/Actor: Administrador, Comprador
 RF-05.2  [ALTA]   Cada proveedor debe tener: nombre de empresa, persona de
          contacto, teléfono, correo electrónico, dirección y días de entrega
          estimados.
+         Fuente/Actor: Administrador, Comprador
 RF-05.3  [MEDIA]  El sistema debe mostrar el historial de órdenes de compra
          asociadas a cada proveedor.
+         Fuente/Actor: Comprador, Administrador
 RF-05.4  [MEDIA]  El sistema debe mostrar análisis de desempeño por proveedor:
          velocidad y puntualidad de entrega, monto comprado y comparación de
          precios entre proveedores para un mismo producto.
+         Fuente/Actor: Gerente, Administrador
 RF-05.5  [ALTA]   El sistema debe permitir asociar múltiples productos a un
          proveedor.
+         Fuente/Actor: Administrador, Comprador
 RF-05.6  [ALTA]   Los datos de contacto del proveedor (teléfono, email) deben
          almacenarse cifrados en la base de datos.
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-06: GESTIÓN DE CLIENTES
 ------------------------------------------------------------------------
 RF-06.1  [ALTA]   El sistema debe permitir crear, editar, visualizar y eliminar
          clientes.
+         Fuente/Actor: Usuario (vendedor), Administrador
 RF-06.2  [ALTA]   Cada cliente debe tener: nombre, teléfono, correo electrónico
          y dirección.
+         Fuente/Actor: Usuario (vendedor), Administrador
 RF-06.3  [MEDIA]  El sistema debe mostrar el historial de órdenes de venta por
          cliente.
+         Fuente/Actor: Usuario (vendedor)
 RF-06.4  [ALTA]   El sistema debe permitir registrar motos asociadas a cada
          cliente.
+         Fuente/Actor: Usuario (vendedor), Administrador
 RF-06.5  [MEDIA]  El sistema debe mostrar el historial de servicios realizados
          a las motos de cada cliente.
+         Fuente/Actor: Usuario (vendedor), Administrador
 RF-06.6  [MEDIA]  El teléfono debe validarse con un mínimo de 8 dígitos y
          formatearse automáticamente en formato XXXX-XXXX, detectando y
          eliminando el prefijo de país (+505).
+         Fuente/Actor: Sistema
 RF-06.7  [ALTA]   Los datos de contacto del cliente (teléfono, email) deben
          almacenarse cifrados en la base de datos.
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-07: GESTIÓN DE MOTOS
 ------------------------------------------------------------------------
 RF-07.1  [ALTA]   El sistema debe permitir registrar motos con: marca, modelo,
          año y placa de circulación.
+         Fuente/Actor: Usuario (vendedor), Mecánico
 RF-07.2  [ALTA]   Cada moto debe estar asociada a un cliente propietario.
+         Fuente/Actor: Usuario (vendedor), Mecánico
 RF-07.3  [MEDIA]  El sistema debe mostrar el historial completo de servicios
          por moto.
+         Fuente/Actor: Usuario (vendedor), Mecánico
 RF-07.4  [MEDIA]  El sistema debe permitir filtrar motos por cliente.
+         Fuente/Actor: Usuario (vendedor), Mecánico
 RF-07.5  [MEDIA]  El sistema debe registrar el kilometraje actual de la moto y
          sugerir la fecha o kilometraje del próximo mantenimiento preventivo.
+         Fuente/Actor: Mecánico
 
 ------------------------------------------------------------------------
 RF-08: CATÁLOGO DE SERVICIOS (MANO DE OBRA)
 ------------------------------------------------------------------------
 RF-08.1  [MEDIA]  El sistema debe mantener un catálogo de servicios estándar
          (plantillas) con nombre y precio de mano de obra predefinido.
+         Fuente/Actor: Administrador
 RF-08.2  [MEDIA]  El catálogo debe estar disponible como referencia al agendar
          órdenes de trabajo y al construir presupuestos de reparación.
+         Fuente/Actor: Mecánico, Usuario
 RF-08.3  [BAJA]   El sistema debe conservar como registro histórico intocable
          las filas de servicios realizados antes de existir el catálogo de
          plantillas.
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-09: TALLER - ÓRDENES DE TRABAJO (SERVICIOS DE MOTO)
@@ -193,30 +250,40 @@ RF-09.1  [ALTA]   El sistema debe gestionar el ciclo de vida completo de una
          orden de trabajo con los estados: Agendada, Recibida, En diagnóstico,
          En reparación, Esperando repuesto, Lista para entrega, Entregada y
          Cancelada.
+         Fuente/Actor: Mecánico, Usuario (vendedor) (recepción)
 RF-09.2  [ALTA]   El sistema debe validar las transiciones de estado
          permitidas y rechazar cambios de estado inválidos (por ejemplo, no
          se puede pasar de "Agendada" directo a "Entregada").
+         Fuente/Actor: Sistema
 RF-09.3  [ALTA]   Cada orden de trabajo debe poder asociarse a un mecánico
          responsable.
+         Fuente/Actor: Administrador, Usuario (recepción)
 RF-09.4  [ALTA]   El sistema debe permitir registrar los repuestos consumidos
          en una orden de trabajo, descontando automáticamente el stock del
          inventario.
+         Fuente/Actor: Mecánico, Sistema
 RF-09.5  [ALTA]   El costo total de la orden de trabajo debe calcularse
          automáticamente como la suma de la mano de obra (precio congelado al
          agendar) más el valor de los repuestos consumidos.
+         Fuente/Actor: Sistema
 RF-09.6  [MEDIA]  El sistema debe permitir agendar una cita (fecha y hora) para
          la orden de trabajo.
+         Fuente/Actor: Usuario (recepción)
 RF-09.7  [ALTA]   Al entregar una orden de trabajo, el sistema debe generar
          automáticamente la venta correspondiente (productos + mano de obra).
+         Fuente/Actor: Sistema
 RF-09.8  [MEDIA]  Si la orden de trabajo tiene un presupuesto de reparación
          asociado, el sistema debe exigir que esté aprobado antes de permitir
          iniciar la reparación.
+         Fuente/Actor: Sistema, Cliente (aprobación)
 RF-09.9  [MEDIA]  El sistema debe generar un reporte de agenda del taller con
          la carga de trabajo por mecánico y la antigüedad de las órdenes por
          estado.
+         Fuente/Actor: Gerente, Administrador
 RF-09.10 [MEDIA]  El sistema debe generar un reporte de mantenimiento
          preventivo con las motos que ya deben revisarse según lo sugerido en
          su última entrega.
+         Fuente/Actor: Gerente, Administrador
 
 ------------------------------------------------------------------------
 RF-10: BITÁCORA DE SERVICIOS (4 MÓDULOS)
@@ -224,20 +291,28 @@ RF-10: BITÁCORA DE SERVICIOS (4 MÓDULOS)
 RF-10.1  [ALTA]   El sistema debe gestionar una bitácora de servicio con 4
          etapas: Recepción, Diagnóstico, Reparación y Entrega, vinculadas a
          los estados de la orden de trabajo.
+         Fuente/Actor: Sistema
 RF-10.2  [ALTA]   Cada etapa debe permitir: notas detalladas, nombre del
          técnico responsable y carga de múltiples fotografías.
+         Fuente/Actor: Mecánico
 RF-10.3  [ALTA]   Las fotografías deben almacenarse en Cloudflare R2 y
          referenciarse mediante URLs en un array JSONB en la base de datos.
+         Fuente/Actor: Mecánico
 RF-10.4  [MEDIA]  La etapa de Recepción debe documentar: nivel de combustible
          y daños/rayones preexistentes.
+         Fuente/Actor: Mecánico
 RF-10.5  [MEDIA]  La etapa de Diagnóstico debe documentar: fallas encontradas
          con evidencia fotográfica.
+         Fuente/Actor: Mecánico
 RF-10.6  [ALTA]   La etapa de Reparación debe documentar: trabajo realizado,
          técnico responsable y fotos de progreso.
+         Fuente/Actor: Mecánico
 RF-10.7  [MEDIA]  La etapa de Entrega debe incluir: checklist de finalización
          y firma/confirmación de entrega al cliente.
+         Fuente/Actor: Mecánico
 RF-10.8  [MEDIA]  El sistema debe exponer una vista combinada de orden de
          trabajo + bitácora.
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-11: COTIZACIONES Y PRESUPUESTOS
@@ -245,97 +320,132 @@ RF-11: COTIZACIONES Y PRESUPUESTOS
 RF-11.1  [ALTA]   El sistema debe permitir crear cotizaciones de dos tipos:
          proforma de productos (para clientes que solo compran mercadería) y
          presupuesto de reparación (ligado a una orden de trabajo del taller).
+         Fuente/Actor: Usuario (vendedor), Mecánico
 RF-11.2  [ALTA]   Cada cotización debe gestionar su estado: Pendiente,
          Aprobada, Rechazada o Convertida en venta.
+         Fuente/Actor: Sistema
 RF-11.3  [ALTA]   El sistema debe calcular el total de la cotización como la
          suma de líneas de producto y líneas de mano de obra.
+         Fuente/Actor: Sistema
 RF-11.4  [MEDIA]  El sistema debe calcular la fecha de vencimiento de la
          cotización a partir de su fecha de emisión y los días de validez
          configurados.
+         Fuente/Actor: Sistema
 RF-11.5  [ALTA]   Al aprobar un presupuesto de reparación, el sistema debe
          cargar sus repuestos a la orden de trabajo y descontar el stock una
          única vez (protegido contra doble aprobación).
+         Fuente/Actor: Cliente (aprobación), Sistema
 RF-11.6  [MEDIA]  El sistema debe permitir convertir una cotización aprobada en
          una orden de venta.
+         Fuente/Actor: Usuario (vendedor)
 RF-11.7  [MEDIA]  El sistema debe permitir generar el documento de la
          cotización/presupuesto en PDF.
+         Fuente/Actor: Usuario (cualquier rol)
 
 ------------------------------------------------------------------------
 RF-12: ÓRDENES DE COMPRA
 ------------------------------------------------------------------------
 RF-12.1  [ALTA]   El sistema debe permitir crear órdenes de compra con
          múltiples productos, asociadas a un proveedor.
+         Fuente/Actor: Comprador, Administrador
 RF-12.2  [ALTA]   Cada orden debe gestionar su estado: Pendiente, Recibida o
          Cancelada.
+         Fuente/Actor: Comprador, Administrador
 RF-12.3  [ALTA]   Al marcar una orden como Recibida, el sistema debe
          incrementar automáticamente el stock de los productos involucrados,
          de forma idempotente (recibir dos veces no debe duplicar el stock).
+         Fuente/Actor: Sistema
 RF-12.4  [ALTA]   El sistema debe calcular automáticamente subtotales,
          impuestos y totales de cada orden.
+         Fuente/Actor: Sistema
 RF-12.5  [MEDIA]  El sistema debe permitir exportar órdenes de compra en PDF y
          Excel.
+         Fuente/Actor: Comprador, Administrador
 RF-12.6  [ALTA]   El sistema debe permitir agregar múltiples ítems (líneas de
          detalle) a cada orden, con cantidad y precio unitario por ítem.
+         Fuente/Actor: Comprador, Administrador
 RF-12.7  [ALTA]   El sistema debe registrar la fecha esperada y la fecha real
          de recepción de cada orden, para medir el desempeño del proveedor
          (velocidad y puntualidad de entrega).
+         Fuente/Actor: Comprador, Sistema
 RF-12.8  [ALTA]   El sistema debe gestionar cuentas por pagar por orden de
          compra: monto pagado, saldo pendiente y estado de pago (Pendiente,
          Pago Parcial, Pagado), permitiendo registrar pagos parciales (abonos)
          a proveedores.
+         Fuente/Actor: Comprador, Administrador
 
 ------------------------------------------------------------------------
 RF-13: ÓRDENES DE VENTA
 ------------------------------------------------------------------------
 RF-13.1  [ALTA]   El sistema debe permitir crear órdenes de venta con múltiples
          productos y/o servicios de taller, asociadas a un cliente.
+         Fuente/Actor: Usuario (vendedor), Cajero
 RF-13.2  [ALTA]   Al registrar una venta, el sistema debe decrementar
          automáticamente el stock de los productos vendidos.
+         Fuente/Actor: Sistema
 RF-13.3  [ALTA]   El sistema debe calcular automáticamente subtotales y
          totales, soportando descuentos.
+         Fuente/Actor: Sistema
 RF-13.4  [ALTA]   El sistema debe validar que la fecha de venta no sea una
          fecha futura.
+         Fuente/Actor: Sistema
 RF-13.5  [MEDIA]  El sistema debe mantener el historial de ventas por cliente.
+         Fuente/Actor: Usuario (vendedor), Cajero
 RF-13.6  [ALTA]   El sistema debe prevenir ventas cuando el stock disponible
          sea insuficiente para cubrir la cantidad solicitada.
+         Fuente/Actor: Usuario (vendedor), Cajero
 RF-13.7  [ALTA]   El sistema debe permitir pagos por adelantado (abonos)
          sobre una venta, gestionando monto pagado, saldo pendiente y estado
          de pago (Pendiente, Pago Parcial, Pagado).
+         Fuente/Actor: Usuario (vendedor), Cajero
 RF-13.8  [ALTA]   El sistema debe generar automáticamente una garantía por
          cada producto vendido que tenga garantía configurada.
+         Fuente/Actor: Sistema
 RF-13.9  [MEDIA]  El sistema debe permitir generar e imprimir un recibo en PDF
          de la venta.
+         Fuente/Actor: Usuario (vendedor), Cajero
 RF-13.10 [MEDIA]  El sistema debe generar un reporte de cuentas por cobrar,
          mostrando la antigüedad (aging) del saldo pendiente por cliente.
+         Fuente/Actor: Gerente, Administrador
 
 ------------------------------------------------------------------------
 RF-14: DEVOLUCIONES DE CLIENTES
 ------------------------------------------------------------------------
 RF-14.1  [ALTA]   El sistema debe permitir registrar devoluciones de mercadería
          vendida, asociadas a una venta y un cliente.
+         Fuente/Actor: Usuario (vendedor)
 RF-14.2  [ALTA]   El importe de la devolución debe derivarse de las líneas
          reales de la venta, no de un monto ingresado libremente.
+         Fuente/Actor: Sistema
 RF-14.3  [ALTA]   Una devolución procesada debe reingresar el stock devuelto
          al inventario.
+         Fuente/Actor: Sistema
 RF-14.4  [ALTA]   El saldo pendiente de cobro de la venta debe recalcularse
          restando el valor de las devoluciones procesadas.
+         Fuente/Actor: Sistema
 RF-14.5  [MEDIA]  El sistema debe permitir anular una devolución, revirtiendo
          su efecto sobre el saldo.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-15: DEVOLUCIONES A PROVEEDORES
 ------------------------------------------------------------------------
 RF-15.1  [ALTA]   El sistema debe permitir registrar devoluciones de mercadería
          a un proveedor, asociadas a una orden de compra recibida.
+         Fuente/Actor: Comprador, Administrador
 RF-15.2  [ALTA]   Una devolución a proveedor debe descontar el stock devuelto
          del inventario.
+         Fuente/Actor: Sistema
 RF-15.3  [ALTA]   El sistema debe permitir registrar si el proveedor reembolsó
          el dinero (efectivo, transferencia, depósito, cheque o nota de
          crédito) y con qué monto.
+         Fuente/Actor: Comprador, Administrador
 RF-15.4  [ALTA]   El saldo pendiente de pago de la orden de compra debe
          recalcularse considerando lo devuelto y lo reembolsado.
+         Fuente/Actor: Sistema
 RF-15.5  [MEDIA]  El sistema debe generar un reporte de devoluciones a
          proveedores, con motivo y monto por proveedor.
+         Fuente/Actor: Gerente
 
 ------------------------------------------------------------------------
 RF-16: GARANTÍAS Y RECLAMACIONES
@@ -343,28 +453,37 @@ RF-16: GARANTÍAS Y RECLAMACIONES
 RF-16.1  [ALTA]   El sistema debe generar automáticamente una garantía al
          vender un producto que tenga garantía configurada (meses, tipo y
          descripción).
+         Fuente/Actor: Sistema
 RF-16.2  [ALTA]   Cada garantía debe gestionar su estado: Activa, Vencida o
          Reclamada, con fecha de inicio y fecha de fin calculadas.
+         Fuente/Actor: Sistema
 RF-16.3  [ALTA]   El sistema debe permitir registrar reclamaciones sobre una
          garantía activa, con descripción del problema.
+         Fuente/Actor: Usuario (vendedor), Cliente
 RF-16.4  [ALTA]   Cada reclamación debe gestionar su estado: Pendiente, En
          proceso, Resuelto o Rechazado, con fecha y descripción de la
          resolución.
+         Fuente/Actor: Usuario, Administrador
 
 ------------------------------------------------------------------------
 RF-17: MOVIMIENTOS DE INVENTARIO
 ------------------------------------------------------------------------
 RF-17.1  [ALTA]   El sistema debe registrar automáticamente un movimiento de
          inventario ante cada cambio de stock: entrada, salida o ajuste.
+         Fuente/Actor: Sistema
 RF-17.2  [ALTA]   Cada movimiento debe registrar: producto, tipo, cantidad,
          referencia (orden de compra, orden de venta, servicio de taller,
          ajuste manual) y notas.
+         Fuente/Actor: Sistema
 RF-17.3  [MEDIA]  El sistema debe permitir realizar ajustes manuales de
          inventario mediante un endpoint dedicado.
+         Fuente/Actor: Administrador
 RF-17.4  [MEDIA]  El sistema debe permitir búsqueda y filtrado de movimientos
          por producto, tipo y rango de fecha.
+         Fuente/Actor: Administrador, Auditor
 RF-17.5  [ALTA]   El historial de movimientos debe ser de solo consulta (no
          editable una vez registrado).
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-18: CAJA (SESIONES DE CAJA)
@@ -372,25 +491,33 @@ RF-18: CAJA (SESIONES DE CAJA)
 RF-18.1  [ALTA]   El sistema debe permitir abrir una sesión de caja con un
          monto de apertura (fondo inicial), registrando el usuario que la
          abre.
+         Fuente/Actor: Cajero
 RF-18.2  [ALTA]   El sistema debe garantizar que solo exista una sesión de
          caja abierta a la vez en todo el sistema.
+         Fuente/Actor: Sistema
 RF-18.3  [ALTA]   El sistema debe permitir registrar movimientos manuales de
          efectivo (ingresos y retiros) dentro de una sesión abierta.
+         Fuente/Actor: Cajero
 RF-18.4  [ALTA]   El sistema debe calcular el efectivo esperado en caja a
          partir del fondo inicial, los pagos en efectivo recibidos (ventas,
          abonos), los reembolsos de proveedores en efectivo, los ingresos y
          retiros manuales, los gastos operativos en efectivo y los pagos a
          proveedores en efectivo.
+         Fuente/Actor: Sistema
 RF-18.5  [ALTA]   Al cerrar una sesión de caja, el sistema debe registrar el
          efectivo contado físicamente y calcular la diferencia (faltante o
          sobrante) contra el efectivo esperado.
+         Fuente/Actor: Cajero
 RF-18.6  [ALTA]   Solo el usuario dueño de una sesión de caja abierta (o un
          administrador) puede cerrarla o registrar/consultar sus movimientos
          y su arqueo en vivo.
+         Fuente/Actor: Sistema, Administrador
 RF-18.7  [MEDIA]  Cualquier usuario autenticado debe poder consultar si hay una
          sesión de caja abierta y su titular, para saber si puede cobrar.
+         Fuente/Actor: Usuario (cualquier rol)
 RF-18.8  [ALTA]   El listado histórico de sesiones de caja debe estar
          restringido a administradores.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-19: GASTOS OPERATIVOS
@@ -398,26 +525,34 @@ RF-19: GASTOS OPERATIVOS
 RF-19.1  [ALTA]   El sistema debe permitir un catálogo de categorías de gasto
          (alquiler, servicios, salarios, etc.), administrable solo por
          administradores.
+         Fuente/Actor: Administrador
 RF-19.2  [ALTA]   Cualquier usuario autenticado debe poder registrar un gasto
          operativo (fecha, categoría, monto, método de pago, descripción).
+         Fuente/Actor: Usuario (cajero)
 RF-19.3  [ALTA]   Un gasto en efectivo debe descontarse del efectivo esperado
          de la sesión de caja abierta.
+         Fuente/Actor: Sistema
 RF-19.4  [MEDIA]  Consultar el listado completo, editar o eliminar gastos debe
          estar restringido a administradores.
+         Fuente/Actor: Administrador
 RF-19.5  [MEDIA]  El sistema debe permitir filtrar gastos por categoría y rango
          de fechas.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-20: AUDITORÍA DE PRODUCTOS
 ------------------------------------------------------------------------
 RF-20.1  [ALTA]   El sistema debe registrar automáticamente, mediante triggers
          de base de datos, cada modificación realizada a un producto.
+         Fuente/Actor: Sistema
 RF-20.2  [ALTA]   Cada registro de auditoría debe capturar: campo modificado,
          valor anterior (JSON), valor nuevo (JSON), usuario responsable real
          (no el rol de conexión de la base de datos) y timestamp.
+         Fuente/Actor: Sistema
 RF-20.3  [MEDIA]  El sistema debe exponer una página de "Logs de Auditoría"
          donde se pueda visualizar el historial completo de cambios a
          productos, de solo lectura.
+         Fuente/Actor: Auditor, Administrador
 
 ------------------------------------------------------------------------
 RF-21: AUTENTICACIÓN Y GESTIÓN DE USUARIOS
@@ -426,32 +561,41 @@ RF-21.1  [ALTA]   El sistema debe requerir autenticación (JWT) para acceder a
          prácticamente todos los endpoints de la API, con las únicas
          excepciones públicas de los endpoints de actualización de la app de
          escritorio.
+         Fuente/Actor: Sistema
 RF-21.2  [ALTA]   El sistema debe emitir un token de acceso y uno de
          actualización (refresh) al iniciar sesión, con rotación y lista
          negra del refresh token al renovarlo o cerrar sesión.
+         Fuente/Actor: Sistema
 RF-21.3  [ALTA]   El sistema debe soportar dos roles: Administrador (acceso
          total) y Usuario (operación del día a día: ventas, pagos, POS,
          cotizaciones, devoluciones, alta de clientes/proveedores), sin
          permiso para acciones destructivas sobre catálogo/inventario
          (eliminar productos/clientes/proveedores, importar productos, ajustar
          stock, gestionar órdenes de compra).
+         Fuente/Actor: Administrador
 RF-21.4  [ALTA]   El intento de inicio de sesión debe estar limitado en tasa
          (rate limiting) para mitigar ataques de fuerza bruta.
+         Fuente/Actor: Sistema
 RF-21.5  [MEDIA]  El sistema debe exponer el perfil del usuario autenticado
          (nombre de usuario, email, rol) y permitir cerrar sesión invalidando
          el token en el servidor.
+         Fuente/Actor: Usuario (cualquier rol)
 RF-21.6  [MEDIA]  El sistema debe permitir a un administrador crear, editar y
          desactivar usuarios del sistema.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-22: PUNTO DE VENTA (POS)
 ------------------------------------------------------------------------
 RF-22.1  [ALTA]   El sistema debe ofrecer una pantalla de punto de venta
          optimizada para registrar ventas rápidamente.
+         Fuente/Actor: Usuario (vendedor), Cajero
 RF-22.2  [MEDIA]  El POS debe permitir escanear códigos de barras de productos
          mediante la cámara del dispositivo para agregarlos a la venta.
+         Fuente/Actor: Usuario (vendedor), Cajero
 RF-22.3  [MEDIA]  El POS debe reflejar en tiempo real si hay una sesión de
          caja abierta antes de permitir cobrar.
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-23: PRONÓSTICO DE DEMANDA E INTEGRACIÓN CON IA
@@ -460,22 +604,29 @@ RF-23.1  [MEDIA]  El sistema debe generar un reporte de pronóstico de demanda
          que recomiende qué, cuándo y cuánto recomprar por producto, con un
          indicador de confianza basado en los meses de historial de venta
          disponibles.
+         Fuente/Actor: Gerente, Administrador
 RF-23.2  [MEDIA]  El pronóstico debe usar el plazo de entrega medido de cada
          proveedor cuando exista histórico suficiente, y el estimado manual
          como respaldo.
+         Fuente/Actor: Sistema
 RF-23.3  [BAJA]   El sistema debe permitir interpretar el pronóstico de
          demanda mediante un proveedor de IA configurado (análisis en lenguaje
          natural), de forma opcional y desacoplada del cálculo numérico (si la
          IA falla, el pronóstico igual responde).
+         Fuente/Actor: Administrador
 RF-23.4  [MEDIA]  El sistema debe permitir configurar, por proveedor de IA
          (OpenAI, Google Gemini, DeepSeek, Anthropic), la clave de API y el
          modelo a usar, y probar la conexión antes de activarlo.
+         Fuente/Actor: Administrador
 RF-23.5  [ALTA]   Solo un proveedor de IA puede estar activo a la vez.
+         Fuente/Actor: Sistema
 RF-23.6  [ALTA]   La clave de API de cada proveedor de IA debe almacenarse
          cifrada, no debe salir nunca del backend, y la API debe exponer
          únicamente una versión enmascarada.
+         Fuente/Actor: Sistema
 RF-23.7  [ALTA]   La configuración de proveedores de IA debe estar restringida
          a administradores y debe excluirse de los respaldos exportables.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-24: RESPALDOS DE BASE DE DATOS
@@ -483,12 +634,16 @@ RF-24: RESPALDOS DE BASE DE DATOS
 RF-24.1  [ALTA]   El sistema debe permitir a un administrador descargar un
          respaldo lógico (JSON) de todas las tablas de negocio con un solo
          clic.
+         Fuente/Actor: Administrador
 RF-24.2  [ALTA]   El respaldo debe excluir tablas internas de Django/auth,
          credenciales de sesión (tokens JWT) y claves de proveedores de IA.
+         Fuente/Actor: Sistema
 RF-24.3  [MEDIA]  El sistema debe soportar además un respaldo automatizado
          (job programado) restaurable mediante `pg_dump`.
+         Fuente/Actor: Sistema (job programado)
 RF-24.4  [ALTA]   La descarga de respaldos debe estar restringida a
          administradores.
+         Fuente/Actor: Administrador
 
 ------------------------------------------------------------------------
 RF-25: ACTUALIZACIONES DE LA APLICACIÓN DE ESCRITORIO
@@ -496,17 +651,22 @@ RF-25: ACTUALIZACIONES DE LA APLICACIÓN DE ESCRITORIO
 RF-25.1  [MEDIA]  El sistema debe exponer un endpoint público que informe la
          última versión publicada de la app de escritorio (versión, notas,
          tamaño, checksum SHA-256, fecha de publicación).
+         Fuente/Actor: App de escritorio (cliente)
 RF-25.2  [MEDIA]  El sistema debe exponer un endpoint público que redirija a
          la descarga del instalador vigente, sin exponer el token de acceso al
          repositorio privado de GitHub.
+         Fuente/Actor: App de escritorio (cliente)
 RF-25.3  [ALTA]   Las notas de la nueva versión mostradas al cliente deben
          filtrar automáticamente cualquier contenido relacionado con
          seguridad, vulnerabilidades o credenciales antes de publicarse.
+         Fuente/Actor: Sistema
 RF-25.4  [MEDIA]  Ambos endpoints deben tener limitación de tasa (rate
          limiting) propia y cachear la respuesta de GitHub para no agotar su
          cuota de API ni bloquear workers del servidor.
+         Fuente/Actor: Sistema
 RF-25.5  [ALTA]   La descarga del instalador debe validarse contra una lista
          de hosts de confianza (GitHub) antes de redirigir al cliente.
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-26: REPORTES
@@ -514,39 +674,53 @@ RF-26: REPORTES
 RF-26.1  [ALTA]   El sistema debe generar un reporte de inventario con: estado
          actual, valorización total, distribución por categoría/ubicación y
          alertas de bajo stock.
+         Fuente/Actor: Gerente, Administrador
 RF-26.2  [ALTA]   El sistema debe generar un reporte de ventas filtrable por
          rango de fechas, incluyendo: ventas por cliente, productos y
          servicios vendidos, ticket promedio y tendencias.
+         Fuente/Actor: Gerente, Administrador
 RF-26.3  [ALTA]   El sistema debe generar un reporte de compras filtrable por
          rango de fechas, incluyendo: compras por proveedor y análisis de
          costos.
+         Fuente/Actor: Gerente, Administrador
 RF-26.4  [MEDIA]  El sistema debe generar un reporte de productos más vendidos
          (top products) filtrable por período.
+         Fuente/Actor: Gerente, Administrador
 RF-26.5  [ALTA]   El sistema debe generar un reporte de cuentas por cobrar
          (ventas con saldo pendiente y su antigüedad) y uno de cuentas por
          pagar (compras con saldo pendiente y su antigüedad), sin cachear
          (datos financieros en vivo).
+         Fuente/Actor: Gerente, Administrador
 RF-26.6  [MEDIA]  El sistema debe generar un reporte de rentabilidad por
          producto: margen unitario y utilidad realizada en ventas.
+         Fuente/Actor: Gerente, Administrador
 RF-26.7  [MEDIA]  El sistema debe generar un reporte de stock muerto:
          productos con stock que no se han vendido en los últimos N días
          (por defecto 90).
+         Fuente/Actor: Gerente, Administrador
 RF-26.8  [MEDIA]  El sistema debe generar un estado de resultados (P&L) del
          período: ingresos, costo de ventas y gastos operativos.
+         Fuente/Actor: Gerente, Administrador
 RF-26.9  [MEDIA]  El sistema debe generar un reporte de agenda del taller y uno
          de mantenimiento preventivo (ver RF-09.9 y RF-09.10).
+         Fuente/Actor: Gerente, Administrador
 RF-26.10 [MEDIA]  El sistema debe generar una hoja de conteo físico de
          inventario agrupada por ubicación (ver RF-04.3).
+         Fuente/Actor: Gerente, Administrador
 RF-26.11 [MEDIA]  El sistema debe generar un reporte de desempeño de
          proveedores (velocidad y puntualidad de entrega, monto comprado) y
          uno de comparación de precios entre proveedores por producto.
+         Fuente/Actor: Gerente, Administrador
 RF-26.12 [MEDIA]  El sistema debe generar un reporte de devoluciones a
          proveedores (ver RF-15.5) y el pronóstico de demanda (ver RF-23.1).
+         Fuente/Actor: Gerente, Administrador
 RF-26.13 [ALTA]   El sistema debe validar rangos de fechas en reportes: la
          fecha de inicio debe ser menor o igual a la fecha de fin, y ninguna
          fecha puede ser futura.
+         Fuente/Actor: Sistema
 RF-26.14 [MEDIA]  El sistema debe permitir exportar los reportes aplicables en
          PDF y Excel con formato profesional.
+         Fuente/Actor: Gerente, Administrador
 
 ------------------------------------------------------------------------
 RF-27: BÚSQUEDA GLOBAL
@@ -554,36 +728,47 @@ RF-27: BÚSQUEDA GLOBAL
 RF-27.1  [MEDIA]  El sistema debe ofrecer un buscador global que permita
          encontrar productos, clientes y proveedores en tiempo real desde
          cualquier página de la aplicación.
+         Fuente/Actor: Usuario (cualquier rol)
 RF-27.2  [BAJA]   La búsqueda global debe activarse con el atajo de teclado
          Ctrl+/ o Cmd+/ y debe permitir navegar directamente a la página del
          resultado.
+         Fuente/Actor: Usuario (cualquier rol)
 RF-27.3  [MEDIA]  La búsqueda debe implementar debounce para optimizar las
          solicitudes al servidor.
+         Fuente/Actor: Sistema
 RF-27.4  [BAJA]   Los campos cifrados (teléfono/email) no pueden incluirse en
          la búsqueda por coincidencia parcial, dado que el texto cifrado no
          preserva subcadenas del original.
+         Fuente/Actor: Sistema
 
 ------------------------------------------------------------------------
 RF-28: DASHBOARD
 ------------------------------------------------------------------------
 RF-28.1  [ALTA]   El dashboard debe mostrar métricas en tiempo real: total de
          productos, clientes, proveedores y órdenes activas.
+         Fuente/Actor: Sistema
 RF-28.2  [ALTA]   El dashboard debe listar los productos con stock bajo.
+         Fuente/Actor: Sistema
 RF-28.3  [MEDIA]  El dashboard debe incluir accesos rápidos, agrupados por área
          de negocio, a las operaciones más frecuentes del sistema.
+         Fuente/Actor: Usuario (cualquier rol)
 RF-28.4  [BAJA]   El dashboard debe mostrar un saludo personalizado con fecha y
          hora actuales.
+         Fuente/Actor: Usuario (cualquier rol)
 
 ------------------------------------------------------------------------
 RF-29: PAGINACIÓN, FILTRADO Y ORDENAMIENTO
 ------------------------------------------------------------------------
 RF-29.1  [ALTA]   Todos los listados de recursos deben soportar paginación
          configurable (por defecto 20 ítems por página).
+         Fuente/Actor: Sistema
 RF-29.2  [MEDIA]  Los listados deben soportar filtrado por los campos
          relevantes de cada entidad (categoría, marca, proveedor, estado,
          etc.).
+         Fuente/Actor: Usuario (cualquier rol), Sistema
 RF-29.3  [MEDIA]  Los listados deben soportar ordenamiento por nombre, fecha,
          precio y cantidad mediante parámetros en la API.
+         Fuente/Actor: Usuario (cualquier rol), Sistema
 
 
 ================================================================================
