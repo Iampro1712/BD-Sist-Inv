@@ -238,6 +238,20 @@ Django) como esperado/aceptado en este entorno.
 
 ---
 
+## 🔎 Pentest interno 2026-09-24 — remediación
+
+Hallazgos de `AUDITORIA_PENTEST_2026-09-24.md` (versión 1.15.1):
+
+| # | Hallazgo | Estado |
+|---|----------|--------|
+| 1 | `/admin/login/` sin límite de intentos | ✅ Hecho — apagado fuera de `DEBUG` (`DJANGO_ADMIN_ENABLED`), y con el mismo límite de 5/min que la API cuando está encendido (`api/admin_throttle.py`) |
+| 2 | JWT (access + refresh) en `localStorage` | ⏳ Pendiente — historia aparte: mover el refresh token a cookie `HttpOnly` cambia el flujo de auth del frontend, del backend y de la app de escritorio |
+| 3 | Dependencias del frontend con CVE | ✅ Hecho — `pnpm audit --prod` sin vulnerabilidades; nuevo workflow `frontend-audit`. Cierra también la moderada de `uuid` aceptada en US-10 |
+| 4 | `requirements.txt` sin versiones fijadas | ✅ Hecho — versiones exactas, incluidas las transitivas; Docker y CI pasan a Python 3.14 para usar el mismo Django (6.1) que desarrollo |
+| 5 | `CORS_ALLOWED_ORIGINS` malformado en `.env` | ✅ Hecho en el `.env` local (no versionado) |
+
+---
+
 ## 📅 Cadencia de ceremonias
 | Ceremonia | Cuándo | Propósito |
 |-----------|--------|-----------|

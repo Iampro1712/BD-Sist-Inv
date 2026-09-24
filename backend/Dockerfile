@@ -1,5 +1,9 @@
 # Dockerfile optimizado para backend de Inventrix
-FROM python:3.11-slim
+#
+# Python 3.14: Django 6.x exige 3.12+. Con 3.11, pip resolvía en silencio a
+# Django 5.2 y producción corría una versión distinta a la del desarrollo local.
+# Esta imagen es Debian 13 (trixie).
+FROM python:3.14-slim
 
 # Variables de entorno para optimización
 ENV PYTHONUNBUFFERED=1 \
@@ -27,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     postgresql-client \
     libjpeg62-turbo \
-    libpng16-16 \
+    libpng16-16t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements primero para aprovechar cache de Docker

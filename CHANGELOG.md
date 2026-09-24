@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.15.0-4F46E5?style=flat-square)](#1150---2026-09-24)
+[![Version](https://img.shields.io/badge/version-1.15.1-4F46E5?style=flat-square)](#1151---2026-09-24)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,38 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.15.1] - 2026-09-24
+
+Correcciones del pentest interno del 2026-09-24
+(`AUDITORIA_PENTEST_2026-09-24.md`).
+
+### Security
+
+- **El panel `/admin/` de Django ya no es una segunda puerta de fuerza bruta.**
+  Antes aceptaba intentos de contraseña sin límite, mientras que
+  `/api/auth/login/` corta al sexto. Ahora queda apagado fuera de `DEBUG` (se
+  puede encender a propósito con `DJANGO_ADMIN_ENABLED=True`), y cuando está
+  encendido su login tiene el mismo límite de 5 intentos por minuto y por IP.
+- **Dependencias del frontend sin vulnerabilidades conocidas.** `pnpm audit`
+  pasó de 5 altas y 2 moderadas a ninguna: `react-router-dom` sube a 7.18.4, y
+  se fuerzan versiones parchadas de `brace-expansion`, `dompurify` y `uuid`
+  (esta última cierra también la moderada que estaba aceptada desde julio).
+- **Nuevo workflow `frontend-audit`** que corre `pnpm audit` en cada cambio de
+  dependencias y una vez por semana, para que no vuelvan a acumularse avisos
+  sin que nadie los vea.
+
+### Changed
+
+- **El backend corre sobre Python 3.14 y Django 6.1.** La imagen Docker y el
+  CI usaban Python 3.11, que no admite Django 6: pip instalaba en silencio
+  Django 5.2, así que producción corría una versión distinta a la del
+  desarrollo local. Ahora Docker, el CI y el desarrollo usan lo mismo.
+- **`requirements.txt` con todas las versiones fijadas**, incluidas las
+  transitivas. Antes cada build instalaba lo último disponible en ese momento,
+  sin control sobre qué entraba a producción.
 
 ---
 

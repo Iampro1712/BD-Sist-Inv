@@ -1,0 +1,43 @@
+name: Frontend audit
+
+# Detecta dependencias con vulnerabilidades conocidas. Sin este control, las
+# dependencias se desviaron en dos meses de 1 moderada a 5 altas sin que nadie
+# lo notara (pentest 2026-09-24).
+on:
+  push:
+    branches: [main, master, master-with-auth]
+    paths:
+      - 'frontend/package.json'
+      - 'frontend/pnpm-lock.yaml'
+      - 'frontend/pnpm-workspace.yaml'
+      - '.github/workflows/frontend-audit.yml'
+  pull_request:
+    paths:
+      - 'frontend/package.json'
+      - 'frontend/pnpm-lock.yaml'
+      - 'frontend/pnpm-workspace.yaml'
+      - '.github/workflows/frontend-audit.yml'
+  # Semanal: aparecen avisos nuevos aunque no cambie ninguna dependencia.
+  schedule:
+    - cron: '0 12 * * 1'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Falla con altas o críticas; las moderadas se revisan a mano.
+      - name: pnpm audit (producción)
+        run: pnpm audit --prod --audit-level high

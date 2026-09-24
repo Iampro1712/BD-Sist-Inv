@@ -19,10 +19,15 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from api.admin_throttle import con_limite_de_intentos
+
 urlpatterns = [
-    path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
 ]
+
+if settings.DJANGO_ADMIN_ENABLED:
+    admin.site.login = con_limite_de_intentos(admin.site.login)
+    urlpatterns.insert(0, path('admin/', admin.site.urls))
 
 # Serve media files in development
 if settings.DEBUG:

@@ -16,8 +16,8 @@ Construido para un taller de motos real en Managua, Nicaragua.
 
 <br/>
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Django](https://img.shields.io/badge/Django-6.1-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![DRF](https://img.shields.io/badge/DRF-REST_API-A30000?style=for-the-badge&logo=django&logoColor=white)](https://www.django-rest-framework.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
@@ -141,7 +141,7 @@ graph TB
     end
 
     subgraph Servidor
-        API["Django 5.2 + DRF<br/>JWT · Throttling · Auditoría"]
+        API["Django 6.1 + DRF<br/>JWT · Throttling · Auditoría"]
     end
 
     subgraph Datos
@@ -163,7 +163,7 @@ graph TB
 
 ### Backend
 
-[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=flat-square&logo=django&logoColor=white)](#)
+[![Django](https://img.shields.io/badge/Django-6.1-092E20?style=flat-square&logo=django&logoColor=white)](#)
 [![DRF](https://img.shields.io/badge/DRF-REST-A30000?style=flat-square)](#)
 [![JWT](https://img.shields.io/badge/JWT-SimpleJWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)](#)
 [![Gunicorn](https://img.shields.io/badge/Gunicorn-WSGI-499848?style=flat-square&logo=gunicorn&logoColor=white)](#)
@@ -226,7 +226,7 @@ comprobarlo**.
 ### Requisitos
 
 [![Docker](https://img.shields.io/badge/Docker-requerido-2496ED?style=flat-square&logo=docker&logoColor=white)](#)
-[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](#)
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](#)
 [![Node](https://img.shields.io/badge/Node-20+-339933?style=flat-square&logo=nodedotjs&logoColor=white)](#)
 [![pnpm](https://img.shields.io/badge/pnpm-gestor-F69220?style=flat-square&logo=pnpm&logoColor=white)](#)
 
@@ -249,7 +249,7 @@ docker compose exec backend python manage.py createsuperuser
 |---|---|
 | Frontend | `http://localhost:5173` |
 | API | `http://localhost:8000/api` |
-| Admin de Django | `http://localhost:8000/admin` |
+| Admin de Django | `http://localhost:8000/admin` (solo con `DEBUG=True` o `DJANGO_ADMIN_ENABLED=True`) |
 
 <details>
 <summary><b>Instalación manual, sin Docker</b></summary>
@@ -408,6 +408,6 @@ análisis de proveedores, respaldos restaurables y auditoría por trigger.
 
 </sub>
 
-<sub>Última actualización: septiembre de 2026 · v1.15.0</sub>
+<sub>Última actualización: septiembre de 2026 · v1.15.1</sub>
 
 </div>

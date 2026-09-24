@@ -9,3 +9,12 @@ overrides:
   lodash: ">=4.17.23"
   tmp: ">=0.2.6"
   form-data: ">=4.0.6"
+  # Pentest 2026-09-24. brace-expansion se parcha por rama mayor: minimatch 3
+  # usa la 1.x y glob/minimatch nuevos la 2.x; forzar todo a 2.x rompería la 1.x.
+  "brace-expansion@<1.1.18": "^1.1.18"
+  "brace-expansion@>=2.0.0 <2.1.4": "^2.1.4"
+  # jspdf/jspdf-autotable (XSS en hook IN_PLACE).
+  dompurify: "^3.4.13"
+  # exceljs pide uuid 8, sin parche en esa rama. Solo usa v4() vía
+  # require('uuid'), que la 11 conserva.
+  "uuid@<11.1.1": "^11.1.1"

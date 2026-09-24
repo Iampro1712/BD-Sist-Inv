@@ -6,7 +6,7 @@ Versión: 2.0
 Fecha: 2026-09-23
 Proyecto: Inventrix
 Repositorio: inventrix-db
-Versión de la aplicación al momento de este documento: 1.15.0
+Versión de la aplicación al momento de este documento: 1.15.1
 ================================================================================
 
 LEYENDA DE PRIORIDADES
@@ -60,7 +60,7 @@ pronóstico de demanda asistido por IA) y una aplicación de escritorio
 complementaria para el punto de venta.
 
 Tecnologías principales:
-  - Backend:  Django 6.x + Django REST Framework + PostgreSQL 16
+  - Backend:  Django 6.1 + Django REST Framework + PostgreSQL 16
   - Auth:     JWT (djangorestframework-simplejwt) con roles administrador/
               usuario, rotación de refresh tokens y throttling de login
   - Cifrado:  Fernet (paquete `cryptography`) para datos de contacto sensibles
@@ -859,6 +859,13 @@ RNF-02.12 [ALTA]  Los respaldos de base de datos exportables deben excluir
 RNF-02.13 [MEDIA] En producción, el sistema debe habilitar cabeceras de
          seguridad HTTP adicionales (HSTS, X-Content-Type-Options) y operar
          detrás de HTTPS terminado por el proxy inverso.
+RNF-02.14 [ALTA]  Todo punto de inicio de sesión debe tener límite de
+         intentos. El panel /admin/ de Django debe estar deshabilitado en
+         producción salvo activación explícita, y cuando esté activo debe
+         aplicar el mismo límite que el login de la API.
+RNF-02.15 [ALTA]  Las dependencias del frontend deben auditarse de forma
+         automática (en cada cambio y semanalmente) y no deben tener
+         vulnerabilidades conocidas de severidad alta o crítica.
 
 ------------------------------------------------------------------------
 RNF-03: DISPONIBILIDAD Y CONFIABILIDAD
@@ -1060,7 +1067,9 @@ RT-02  [ALTA]   El almacenamiento de imágenes requiere acceso a Cloudflare R2
        o un servicio compatible con la API de Amazon S3 (bucket_name,
        access_key, secret_key, endpoint_url).
 
-RT-03  [ALTA]   El backend requiere Python 3.12 o superior.
+RT-03  [ALTA]   El backend requiere Python 3.14 (Django 6 exige 3.12+). La
+       imagen Docker, el CI y el entorno de desarrollo deben usar la misma
+       versión, y las dependencias de Python deben estar fijadas.
 
 RT-04  [ALTA]   El frontend requiere Node.js 18+ para construcción con Vite 7.
 

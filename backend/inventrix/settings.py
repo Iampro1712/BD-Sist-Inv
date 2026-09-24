@@ -179,6 +179,11 @@ else:
 # Token recomendado: fine-grained, permiso Contents de sólo lectura, limitado a
 # ese único repositorio. Si falta, los endpoints responden 503 con un mensaje
 # claro en vez de fallar de forma opaca.
+# Panel /admin/ de Django. La operación diaria va por el panel React + API, así
+# que en producción queda apagado salvo que se pida a propósito: es un segundo
+# login para el superusuario que no pasa por los controles de UsuarioViewSet.
+DJANGO_ADMIN_ENABLED = DEBUG or os.getenv('DJANGO_ADMIN_ENABLED', 'False') == 'True'
+
 GITHUB_DESKTOP_REPO = os.getenv('GITHUB_DESKTOP_REPO', '')
 GITHUB_DESKTOP_TOKEN = os.getenv('GITHUB_DESKTOP_TOKEN', '')
 
