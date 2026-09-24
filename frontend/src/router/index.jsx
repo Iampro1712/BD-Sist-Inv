@@ -295,14 +295,13 @@ const router = createBrowserRouter([
         ),
       },
       {
-        // Guarda claves de API de proveedores de IA: solo administradores.
+        // Apariencia: todos los usuarios. La sección de claves de IA se
+        // muestra solo a administradores dentro de la propia página.
         path: 'configuracion',
         element: (
-          <AdminRoute>
-            <Suspense fallback={<PageLoader />}>
-              <Configuracion />
-            </Suspense>
-          </AdminRoute>
+          <Suspense fallback={<PageLoader />}>
+            <Configuracion />
+          </Suspense>
         ),
       },
         ],

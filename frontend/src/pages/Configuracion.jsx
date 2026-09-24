@@ -10,6 +10,7 @@ import {
 } from '../hooks/useConfiguracionIA'
 import ProveedorIAForm from '../components/forms/ProveedorIAForm'
 import { extraerMensajeError } from '../utils/errores'
+import useNavLayout from '../hooks/useNavLayout'
 
 const lista = (data) => (Array.isArray(data) ? data : data?.results || [])
 
@@ -17,13 +18,81 @@ const lista = (data) => (Array.isArray(data) ? data : data?.results || [])
 const formatFecha = (iso) =>
   iso ? new Date(iso).toLocaleString('es-NI', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
 
-const Configuracion = () => {
+const OPCIONES_MENU = [
+  {
+    id: 'top',
+    titulo: 'Menú superior',
+    descripcion: 'Barra horizontal arriba con desplegables por área.',
+  },
+  {
+    id: 'sidebar',
+    titulo: 'Barra lateral',
+    descripcion: 'Menú fijo a la izquierda con grupos que se expanden.',
+  },
+]
+
+const Apariencia = () => {
+  const layout = useNavLayout((s) => s.layout)
+  const setLayout = useNavLayout((s) => s.setLayout)
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Apariencia</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Cómo quieres navegar por el sistema. Se guarda en este navegador y se
+        mantiene la próxima vez que entres. En pantallas pequeñas siempre se
+        usa el menú deslizable.
+      </p>
+      <div role="radiogroup" aria-label="Tipo de menú" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+        {OPCIONES_MENU.map((o) => {
+          const activo = layout === o.id
+          return (
+            <button
+              key={o.id}
+              type="button"
+              role="radio"
+              aria-checked={activo}
+              onClick={() => setLayout(o.id)}
+              className={`text-left rounded-xl border p-4 transition-colors ${
+                activo
+                  ? 'border-primary-500 ring-2 ring-primary-500 dark:border-primary-400 dark:ring-primary-400 bg-primary-50/50 dark:bg-primary-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40'
+              }`}
+            >
+              <div className="h-14 mb-3 rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 overflow-hidden flex" aria-hidden="true">
+                {o.id === 'sidebar' ? (
+                  <>
+                    <div className="w-1/4 bg-primary-200 dark:bg-primary-800" />
+                    <div className="flex-1 p-1.5 space-y-1"><div className="h-2 rounded bg-gray-200 dark:bg-gray-700" /><div className="h-2 w-2/3 rounded bg-gray-200 dark:bg-gray-700" /></div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col">
+                    <div className="h-3 bg-primary-200 dark:bg-primary-800" />
+                    <div className="flex-1 p-1.5 space-y-1"><div className="h-2 rounded bg-gray-200 dark:bg-gray-700" /><div className="h-2 w-2/3 rounded bg-gray-200 dark:bg-gray-700" /></div>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-gray-900 dark:text-white">{o.titulo}</span>
+                {activo && <span className="text-xs text-primary-600 dark:text-primary-300">Activo</span>}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{o.descripcion}</p>
+            </button>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
+// Sección de IA: llama a endpoints de administrador, por eso solo se monta
+// para admins (si no, un usuario normal dispararía 403 al abrir Configuración).
+const SeccionIA = () => {
   const [modal, setModal] = useState(null)        // 'nuevo' | 'editar'
   const [editando, setEditando] = useState(null)
   const [borrar, setBorrar] = useState(null)
 
   const toast = useToast()
-  const esAdmin = useAuthStore((s) => s.user?.is_staff)
 
   const { data, isLoading, error } = useConfiguracionesIA()
   const { data: catalogo } = useCatalogoIA()
@@ -39,19 +108,6 @@ const Configuracion = () => {
   // para cambiarle la clave a uno existente está el botón Editar.
   const disponibles = proveedores.filter(
     (p) => !configuraciones.some((c) => c.proveedor === p.id))
-
-  if (!esAdmin) {
-    return (
-      <Card className="p-12 text-center">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Solo administradores
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Esta sección guarda claves de API. Pedile acceso a un administrador.
-        </p>
-      </Card>
-    )
-  }
 
   const handleGuardar = (datos) => {
     const eraAlta = !editando
@@ -103,9 +159,9 @@ const Configuracion = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Configuración</h1>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Inteligencia artificial</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Proveedores de inteligencia artificial: clave, modelo y cuál se usa
+            Proveedores: clave, modelo y cuál se usa
           </p>
         </div>
         {disponibles.length > 0 && (
@@ -283,6 +339,18 @@ const Configuracion = () => {
         // en vez de desaparecer con el diálogo en el mismo instante.
         closeOnConfirm={false}
       />
+    </div>
+  )
+}
+
+const Configuracion = () => {
+  const esAdmin = useAuthStore((s) => s.user?.is_staff)
+
+  return (
+    <div className="space-y-8">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Configuración</h1>
+      <Apariencia />
+      {esAdmin && <SeccionIA />}
     </div>
   )
 }
