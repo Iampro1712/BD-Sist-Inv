@@ -187,6 +187,7 @@ graph TB
 - 29 pantallas con carga diferida y división de código
 - Caché de servidor con TanStack Query, estado de cliente con Zustand
 - Modo oscuro completo y diseño adaptable a móvil
+- Menú a elección (barra superior o lateral) desde Configuración, guardado como preferencia
 - Exportación a PDF (jsPDF) y Excel (ExcelJS) desde el navegador
 - Lectura de código de barras por cámara o lector físico
 
@@ -407,6 +408,6 @@ análisis de proveedores, respaldos restaurables y auditoría por trigger.
 
 </sub>
 
-<sub>Última actualización: septiembre de 2026 · v1.14.0</sub>
+<sub>Última actualización: septiembre de 2026 · v1.15.0</sub>
 
 </div>

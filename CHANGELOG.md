@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-1.14.0-4F46E5?style=flat-square)](#1140---2026-09-07)
+[![Version](https://img.shields.io/badge/version-1.15.0-4F46E5?style=flat-square)](#1150---2026-09-24)
 [![Keep a Changelog](https://img.shields.io/badge/Keep%20a%20Changelog-1.1.0-orange?style=flat-square)](https://keepachangelog.com/es-ES/1.1.0/)
 [![Semantic Versioning](https://img.shields.io/badge/semver-2.0.0-blue?style=flat-square)](https://semver.org/lang/es/)
 
@@ -12,6 +12,35 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
+
+---
+
+## [1.15.0] - 2026-09-24
+
+Preferencia de menú: barra superior o barra lateral.
+
+### Added
+
+- **Elección de menú en Configuración → Apariencia.** Cada persona puede
+  elegir entre el menú superior con desplegables (el de siempre) y una barra
+  lateral fija a la izquierda, como en otros sistemas. La preferencia se guarda
+  en el `localStorage` del navegador y se mantiene al volver a entrar; por
+  defecto sigue siendo el menú superior. La barra lateral solo se dibuja en
+  pantallas grandes (xl+): en pantallas menores rige el menú deslizable de
+  siempre.
+- **Barra lateral con todas las opciones siempre visibles.** Los grupos
+  (Operación, Inventario, Dinero, Análisis, Administración) son títulos fijos,
+  no acordeones: llegar a cualquier página cuesta un solo clic.
+
+### Changed
+
+- **Configuración ya no es solo para administradores.** La página aloja la
+  preferencia de menú, así que la ve cualquier usuario (un usuario normal la
+  encuentra en un grupo "Ajustes"). La sección de proveedores de IA, que maneja
+  claves de API, sigue visible solo para administradores y ya no se consulta
+  para el resto.
+- La definición de la navegación pasó a un módulo compartido
+  (`components/layout/navConfig.js`) usado por la barra superior y la lateral.
 
 ---
 

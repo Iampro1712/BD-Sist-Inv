@@ -6,7 +6,7 @@ Versión: 2.0
 Fecha: 2026-09-23
 Proyecto: Inventrix
 Repositorio: inventrix-db
-Versión de la aplicación al momento de este documento: 1.14.0
+Versión de la aplicación al momento de este documento: 1.15.0
 ================================================================================
 
 LEYENDA DE PRIORIDADES
@@ -770,6 +770,25 @@ RF-29.3  [MEDIA]  Los listados deben soportar ordenamiento por nombre, fecha,
          precio y cantidad mediante parámetros en la API.
          Fuente/Actor: Usuario (cualquier rol), Sistema
 
+------------------------------------------------------------------------
+RF-30: PREFERENCIAS DE INTERFAZ
+------------------------------------------------------------------------
+RF-30.1  [MEDIA]  El sistema debe permitir a cada usuario elegir en
+         Configuración → Apariencia entre un menú superior con desplegables y
+         una barra lateral de navegación.
+         Fuente/Actor: Usuario (cualquier rol)
+RF-30.2  [MEDIA]  La preferencia de menú debe persistir en el navegador y
+         aplicarse automáticamente en los siguientes inicios de sesión; por
+         defecto se usa el menú superior.
+         Fuente/Actor: Sistema
+RF-30.3  [MEDIA]  La barra lateral debe mostrar todas las opciones de
+         navegación siempre visibles, sin grupos plegables, de modo que
+         cualquier página sea accesible con un solo clic.
+         Fuente/Actor: Usuario (cualquier rol)
+RF-30.4  [BAJA]   En pantallas pequeñas debe seguir usándose el menú
+         deslizable, independientemente de la preferencia elegida.
+         Fuente/Actor: Sistema
+
 
 ================================================================================
 3. REQUERIMIENTOS NO FUNCIONALES
@@ -922,6 +941,9 @@ RNF-06.6 [MEDIA]  El sistema debe mostrar indicadores de estado visual para
 RNF-06.7 [MEDIA]  La navegación debe ser intuitiva, con el inicio organizado
          por áreas de negocio y accesos directos a las secciones más
          utilizadas.
+RNF-06.8 [MEDIA]  El usuario debe poder elegir el estilo de navegación (menú
+         superior o barra lateral) y la elección debe recordarse entre
+         sesiones.
 
 ------------------------------------------------------------------------
 RNF-07: COMPATIBILIDAD
@@ -1133,7 +1155,7 @@ RT-10  [ALTA]   El sistema debe operar detrás de exactamente el número de
   Logs de Auditoría          /logs-auditoria         Trazabilidad de cambios en productos
   Usuarios                   /usuarios               Gestión de usuarios y roles
   Respaldos                  /respaldos              Descarga de respaldo de base de datos
-  Configuración               /configuracion         Proveedores de IA y ajustes generales
+  Configuración               /configuracion         Apariencia (menú) y proveedores de IA (solo admin)
   Login                      /login                  Autenticación
 
 
